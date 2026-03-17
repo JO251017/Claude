@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>미리 알림</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🔔 미리 알림</h1>
+    </header>
+
+    <section class="add-reminder">
+      <h2>알림 추가</h2>
+      <form id="reminder-form">
+        <div class="form-group">
+          <label for="title">제목</label>
+          <input type="text" id="title" placeholder="알림 제목을 입력하세요" required />
+        </div>
+        <div class="form-group">
+          <label for="datetime">날짜 및 시간</label>
+          <input type="datetime-local" id="datetime" required />
+        </div>
+        <div class="form-group">
+          <label for="note">메모 (선택)</label>
+          <textarea id="note" placeholder="추가 내용을 입력하세요" rows="2"></textarea>
+        </div>
+        <button type="submit">추가하기</button>
+      </form>
+    </section>
+
+    <section class="reminder-list">
+      <h2>알림 목록</h2>
+      <div id="reminders-container">
+        <p class="empty-msg" id="empty-msg">등록된 알림이 없습니다.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="notification-banner" class="notification-banner hidden">
+    <span id="notification-text"></span>
+    <button onclick="dismissNotification()">닫기</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

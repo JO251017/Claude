@@ -1,0 +1,251 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f0f4f8;
+  color: #2d3748;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.app {
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 2rem;
+  color: #4a5568;
+}
+
+section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+  color: #4a5568;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #4a5568;
+}
+
+input[type="text"],
+input[type="datetime-local"],
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+  background: #f7fafc;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #fff;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button[type="submit"] {
+  width: 100%;
+  padding: 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: 4px;
+}
+
+button[type="submit"]:hover {
+  background: #5a67d8;
+}
+
+.empty-msg {
+  color: #a0aec0;
+  text-align: center;
+  padding: 20px 0;
+  font-size: 0.95rem;
+}
+
+.reminder-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  transition: box-shadow 0.2s;
+  background: #fafafa;
+}
+
+.reminder-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.reminder-card.overdue {
+  border-left: 4px solid #fc8181;
+  background: #fff5f5;
+}
+
+.reminder-card.upcoming {
+  border-left: 4px solid #68d391;
+  background: #f0fff4;
+}
+
+.reminder-card.done {
+  opacity: 0.5;
+  border-left: 4px solid #a0aec0;
+}
+
+.reminder-info .title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.reminder-info .time {
+  font-size: 0.8rem;
+  color: #718096;
+  margin-bottom: 4px;
+}
+
+.reminder-info .note {
+  font-size: 0.85rem;
+  color: #4a5568;
+}
+
+.reminder-info .badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.badge.overdue {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.badge.upcoming {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.badge.done {
+  background: #e2e8f0;
+  color: #718096;
+}
+
+.reminder-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.btn-done,
+.btn-delete {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-done {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.btn-done:hover {
+  background: #9ae6b4;
+}
+
+.btn-delete {
+  background: #fed7d7;
+  color: #c53030;
+}
+
+.btn-delete:hover {
+  background: #feb2b2;
+}
+
+/* Notification banner */
+.notification-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d3748;
+  color: white;
+  padding: 14px 24px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 1000;
+  font-size: 0.95rem;
+  max-width: 90%;
+}
+
+.notification-banner button {
+  background: #667eea;
+  border: none;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.notification-banner button:hover {
+  background: #5a67d8;
+}
+
+.hidden {
+  display: none !important;
+}
