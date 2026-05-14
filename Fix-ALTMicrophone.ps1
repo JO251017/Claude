@@ -1,4 +1,8 @@
-#Requires -RunAsAdministrator
+# 관리자 권한 자동 요청
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
 
 <#
 .SYNOPSIS
@@ -181,3 +185,4 @@ if ($removedAny) {
 }
 Write-Log "  로그 위치: $logPath" Gray
 Write-Host ""
+Read-Host "엔터를 누르면 창이 닫힙니다"
