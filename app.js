@@ -65,11 +65,15 @@ function renderReminders() {
 
   container.querySelectorAll('.reminder-card').forEach((el) => el.remove());
 
-  // Update stats
-  const now = new Date();
-  const upcoming = reminders.filter(r => !r.done && new Date(r.datetime) >= now).length;
-  const overdue  = reminders.filter(r => !r.done && new Date(r.datetime) < now).length;
-  const done     = reminders.filter(r => r.done).length;
+  // Capture now once — used for both stats and per-card status
+  const nowMs = Date.now();
+
+  let upcoming = 0, overdue = 0, done = 0;
+  reminders.forEach(r => {
+    if (r.done) done++;
+    else if (new Date(r.datetime).getTime() < nowMs) overdue++;
+    else upcoming++;
+  });
   document.getElementById('stat-upcoming').textContent = upcoming;
   document.getElementById('stat-overdue').textContent  = overdue;
   document.getElementById('stat-done').textContent     = done;
@@ -84,7 +88,7 @@ function renderReminders() {
 
   sorted.forEach((r) => {
     const card = document.createElement('div');
-    const isOverdue = !r.done && new Date(r.datetime) < new Date();
+    const isOverdue = !r.done && new Date(r.datetime).getTime() < nowMs;
     const status = r.done ? 'done' : isOverdue ? 'overdue' : 'upcoming';
 
     card.className = `reminder-card ${status}`;
@@ -97,10 +101,13 @@ function renderReminders() {
         ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
       </div>
       <div class="reminder-actions">
-        <button class="btn-done" onclick="toggleDone('${r.id}')">${r.done ? '취소' : '완료'}</button>
-        <button class="btn-delete" onclick="deleteReminder('${r.id}')">삭제</button>
+        <button class="btn-done" data-id="${escapeHtml(r.id)}">${r.done ? '취소' : '완료'}</button>
+        <button class="btn-delete" data-id="${escapeHtml(r.id)}">삭제</button>
       </div>
     `;
+
+    card.querySelector('.btn-done').addEventListener('click', () => toggleDone(r.id));
+    card.querySelector('.btn-delete').addEventListener('click', () => deleteReminder(r.id));
 
     container.appendChild(card);
   });
