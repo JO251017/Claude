@@ -9,11 +9,33 @@
 <body>
   <div class="app">
     <header>
-      <h1>🔔 미리 알림</h1>
+      <span class="header-icon">🔔</span>
+      <h1>미리 알림</h1>
+      <p>중요한 순간을 놓치지 마세요</p>
     </header>
 
-    <section class="add-reminder">
-      <h2>알림 추가</h2>
+    <!-- Stats -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-chip upcoming">
+        <div class="stat-num" id="stat-upcoming">0</div>
+        <div class="stat-label">예정</div>
+      </div>
+      <div class="stat-chip overdue">
+        <div class="stat-num" id="stat-overdue">0</div>
+        <div class="stat-label">기한 초과</div>
+      </div>
+      <div class="stat-chip done">
+        <div class="stat-num" id="stat-done">0</div>
+        <div class="stat-label">완료</div>
+      </div>
+    </div>
+
+    <!-- Add Reminder -->
+    <section class="glass-card">
+      <div class="section-title">
+        <span class="section-title-icon">✦</span>
+        알림 추가
+      </div>
       <form id="reminder-form">
         <div class="form-group">
           <label for="title">제목</label>
@@ -27,21 +49,34 @@
           <label for="note">메모 (선택)</label>
           <textarea id="note" placeholder="추가 내용을 입력하세요" rows="2"></textarea>
         </div>
-        <button type="submit">추가하기</button>
+        <button type="submit" class="btn-submit">추가하기</button>
       </form>
     </section>
 
-    <section class="reminder-list">
-      <h2>알림 목록</h2>
+    <!-- Reminder List -->
+    <section class="glass-card">
+      <div class="section-title">
+        <span class="section-title-icon">◈</span>
+        알림 목록
+      </div>
+      <div class="list-divider"></div>
       <div id="reminders-container">
-        <p class="empty-msg" id="empty-msg">등록된 알림이 없습니다.</p>
+        <div class="empty-state hidden" id="empty-msg">
+          <span class="empty-state-icon">🗓</span>
+          <p>등록된 알림이 없습니다</p>
+        </div>
       </div>
     </section>
   </div>
 
+  <!-- Notification Banner -->
   <div id="notification-banner" class="notification-banner hidden">
-    <span id="notification-text"></span>
-    <button onclick="dismissNotification()">닫기</button>
+    <span class="notif-icon">🔔</span>
+    <div class="notif-content">
+      <div class="notif-label">알림</div>
+      <span id="notification-text"></span>
+    </div>
+    <button class="btn-dismiss" onclick="dismissNotification()">닫기</button>
   </div>
 
   <script src="app.js"></script>

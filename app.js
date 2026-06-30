@@ -58,14 +58,25 @@ function renderReminders() {
   const container = document.getElementById('reminders-container');
   const emptyMsg = document.getElementById('empty-msg');
 
-  // Sort: upcoming first, then done
   const sorted = [...reminders].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     return new Date(a.datetime) - new Date(b.datetime);
   });
 
-  // Remove existing cards
   container.querySelectorAll('.reminder-card').forEach((el) => el.remove());
+
+  // Capture now once — used for both stats and per-card status
+  const nowMs = Date.now();
+
+  let upcoming = 0, overdue = 0, done = 0;
+  reminders.forEach(r => {
+    if (r.done) done++;
+    else if (new Date(r.datetime).getTime() < nowMs) overdue++;
+    else upcoming++;
+  });
+  document.getElementById('stat-upcoming').textContent = upcoming;
+  document.getElementById('stat-overdue').textContent  = overdue;
+  document.getElementById('stat-done').textContent     = done;
 
   if (sorted.length === 0) {
     emptyMsg.classList.remove('hidden');
@@ -73,27 +84,30 @@ function renderReminders() {
   }
   emptyMsg.classList.add('hidden');
 
+  const badgeLabels = { done: '✓ 완료', overdue: '⚠ 기한 초과', upcoming: '● 예정' };
+
   sorted.forEach((r) => {
     const card = document.createElement('div');
-    const isOverdue = !r.done && new Date(r.datetime) < new Date();
+    const isOverdue = !r.done && new Date(r.datetime).getTime() < nowMs;
     const status = r.done ? 'done' : isOverdue ? 'overdue' : 'upcoming';
 
     card.className = `reminder-card ${status}`;
-
-    const badgeLabels = { done: '완료', overdue: '기한 초과', upcoming: '예정' };
 
     card.innerHTML = `
       <div class="reminder-info">
         <span class="badge ${status}">${badgeLabels[status]}</span>
         <div class="title">${escapeHtml(r.title)}</div>
-        <div class="time">${formatDatetime(r.datetime)}</div>
+        <div class="time">🕐 ${formatDatetime(r.datetime)}</div>
         ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
       </div>
       <div class="reminder-actions">
-        <button class="btn-done" onclick="toggleDone('${r.id}')">${r.done ? '취소' : '완료'}</button>
-        <button class="btn-delete" onclick="deleteReminder('${r.id}')">삭제</button>
+        <button class="btn-done" data-id="${escapeHtml(r.id)}">${r.done ? '취소' : '완료'}</button>
+        <button class="btn-delete" data-id="${escapeHtml(r.id)}">삭제</button>
       </div>
     `;
+
+    card.querySelector('.btn-done').addEventListener('click', () => toggleDone(r.id));
+    card.querySelector('.btn-delete').addEventListener('click', () => deleteReminder(r.id));
 
     container.appendChild(card);
   });
