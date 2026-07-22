@@ -6,7 +6,7 @@
 
 ## 파일 구조
 - `template/card-template.html` — 카드 포맷 기준 템플릿 (예시 주제: 자동차 열선시트의 역사). 구조·디자인 토큰·인터랙션의 원본. 새 주제 작업 시 이 파일을 복사해서 `DATA` 배열만 교체한다. 그 외 CSS/JS는 그대로 유지.
-- `archive.html` — 완성작을 카드형 DB로 관리하는 화면. 제작은 여기서 하지 않는다 — 완성되면 링크만 등록.
+- `archive.html` — 완성작을 카드형 DB로 관리하는 화면. 제작은 여기서 하지 않는다. 파일 안 `SEED` 배열(스크립트 최상단)이 완성작의 진짜 목록이며, 새 스토리가 끝날 때마다 Claude가 여기에 항목을 추가한다. 상태 변경·메모 등 사용자의 로컬 수정은 이 배열을 건드리지 않고 브라우저 localStorage에 오버레이로만 쌓인다.
 - `stories/` — 완성된 주제별 카드 HTML을 저장하는 폴더. 파일명은 `stories/<슬러그>.html` (예: `stories/ice-cream-cone.html`).
 
 ## 카드 포맷 규격
@@ -38,4 +38,4 @@
 6. 카드 조립 — `template/card-template.html`을 복사해 `stories/<슬러그>.html`로, `DATA`만 교체
 7. 검증 — Playwright로 라이트/다크 모드 렌더 확인
 8. 배포 — Artifact로 게시 + `stories/`에 커밋
-9. 아카이브 등록 — `archive.html`에 제목/카테고리·시대/한줄설명/링크 추가 여부를 사용자에게 확인
+9. 아카이브 등록 — 사용자 확인 없이 자동으로 진행한다: `archive.html`의 `SEED` 배열에 `{id, num, title, era, status: "완성", summary, url, ts}` 항목을 추가하고, 커밋 + Artifact 재배포까지 마친다

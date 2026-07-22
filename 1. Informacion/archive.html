@@ -252,7 +252,7 @@
     <div class="masthead-left">
       <p class="eyebrow">Informacion · 아카이브</p>
       <h1 class="title">지금까지 만든 이야기</h1>
-      <p>완성·제작 중인 카드 스토리를 한눈에 관리합니다. 실제 조사·제작은 Claude 대화에서 진행하고, 여기엔 결과만 기록합니다.</p>
+      <p>완성·제작 중인 카드 스토리를 한눈에 관리합니다. 실제 조사·제작은 Claude 대화에서 진행하며, 완성되는 대로 이 목록에 자동으로 채워집니다. 상태·메모는 이 브라우저에서 직접 조정할 수 있습니다.</p>
     </div>
     <button class="addbtn" id="toggleAdd">+ 새 항목</button>
   </header>
@@ -301,7 +301,16 @@
 
 <script>
   (function () {
-    var STORAGE_KEY = 'hoe_archive_v1';
+    // SEED is the repo-tracked list of stories — Claude appends an entry here
+    // each time a card story is finished, then commits + republishes this file.
+    // { id, num, title, era, status, summary, url, ts }
+    var SEED = [];
+
+    // Local-only layer, kept in this browser: status/edits on top of SEED items,
+    // hidden SEED ids, and any extra entries the user adds by hand here.
+    var OVERRIDES_KEY = 'hoe_archive_overrides_v1';
+    var HIDDEN_KEY = 'hoe_archive_hidden_v1';
+    var EXTRA_KEY = 'hoe_archive_extra_v1';
     var COUNTER_KEY = 'hoe_archive_counter_v1';
 
     var panel = document.getElementById('panel');
@@ -318,20 +327,60 @@
     var statsEl = document.getElementById('stats');
     var gridEl = document.getElementById('grid');
 
-    function load() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-      catch (e) { return []; }
+    function loadJSON(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+      catch (e) { return fallback; }
     }
-    function save(entries) { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
-    function nextNum() {
-      var n = parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10) + 1;
+    function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+
+    var overrides = loadJSON(OVERRIDES_KEY, {});
+    var hidden = loadJSON(HIDDEN_KEY, []);
+    var extra = loadJSON(EXTRA_KEY, []);
+
+    function nextLocalNum() {
+      var n = parseInt(localStorage.getItem(COUNTER_KEY) || String(SEED.length), 10) + 1;
       localStorage.setItem(COUNTER_KEY, String(n));
       return n;
     }
 
-    var entries = load();
+    // Builds the working list: SEED items (minus hidden, plus local overrides)
+    // followed by purely local extra entries. `seeded: true` marks items whose
+    // canonical copy lives in SEED, so edits/deletes route to overrides/hidden
+    // instead of mutating `extra`.
+    function buildEntries() {
+      var seedEntries = SEED
+        .filter(function (s) { return hidden.indexOf(s.id) === -1; })
+        .map(function (s) { return Object.assign({}, s, overrides[s.id] || {}, { seeded: true }); });
+      return seedEntries.concat(extra);
+    }
+
+    var entries = buildEntries();
     var filter = '전체';
     var editingId = null;
+
+    function findEntry(id) { return entries.filter(function (e) { return e.id === id; })[0]; }
+
+    function persistEntry(entry, patch) {
+      if (entry.seeded) {
+        overrides[entry.id] = Object.assign({}, overrides[entry.id] || {}, patch);
+        saveJSON(OVERRIDES_KEY, overrides);
+      } else {
+        extra = extra.map(function (e) { return e.id === entry.id ? Object.assign({}, e, patch) : e; });
+        saveJSON(EXTRA_KEY, extra);
+      }
+      entries = buildEntries();
+    }
+
+    function removeEntry(entry) {
+      if (entry.seeded) {
+        hidden.push(entry.id);
+        saveJSON(HIDDEN_KEY, hidden);
+      } else {
+        extra = extra.filter(function (e) { return e.id !== entry.id; });
+        saveJSON(EXTRA_KEY, extra);
+      }
+      entries = buildEntries();
+    }
 
     function fmtDate(ts) {
       var d = new Date(ts);
@@ -366,24 +415,22 @@
       if (!title) { panelErr.classList.add('show'); fTitle.focus(); return; }
       panelErr.classList.remove('show');
 
+      var patch = {
+        title: title, era: fEra.value.trim(), status: fStatus.value,
+        summary: fSummary.value.trim(), url: fUrl.value.trim()
+      };
+
       if (editingId) {
-        entries = entries.map(function (e) {
-          if (e.id !== editingId) return e;
-          return Object.assign({}, e, {
-            title: title, era: fEra.value.trim(), status: fStatus.value,
-            summary: fSummary.value.trim(), url: fUrl.value.trim()
-          });
-        });
+        persistEntry(findEntry(editingId), patch);
       } else {
-        entries.push({
+        extra.push(Object.assign({
           id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-          num: nextNum(),
-          title: title, era: fEra.value.trim(), status: fStatus.value,
-          summary: fSummary.value.trim(), url: fUrl.value.trim(),
+          num: nextLocalNum(),
           ts: Date.now()
-        });
+        }, patch));
+        saveJSON(EXTRA_KEY, extra);
+        entries = buildEntries();
       }
-      save(entries);
       closePanel();
       render();
     });
@@ -434,8 +481,8 @@
         chip.setAttribute('aria-label', '상태: ' + item.status + ' — 클릭하면 다음 상태로 변경');
         chip.addEventListener('click', function () {
           var order = ['대기', '제작중', '완성'];
-          item.status = order[(order.indexOf(item.status) + 1) % order.length];
-          save(entries);
+          var nextStatus = order[(order.indexOf(item.status) + 1) % order.length];
+          persistEntry(item, { status: nextStatus });
           render();
         });
         top.appendChild(chip);
@@ -493,8 +540,7 @@
         delBtn.textContent = '삭제';
         delBtn.addEventListener('click', function () {
           if (!confirm('"' + item.title + '" 항목을 삭제할까요?')) return;
-          entries = entries.filter(function (e) { return e.id !== item.id; });
-          save(entries);
+          removeEntry(item);
           render();
         });
         actions.appendChild(delBtn);
