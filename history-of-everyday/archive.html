@@ -1,0 +1,511 @@
+<title>HISTORY OF EVERYDAY · 아카이브</title>
+<style>
+  :root {
+    --paper: #efe6d1;
+    --paper-2: #f8f1e0;
+    --paper-edge: #e2d6b8;
+    --ink: #23283b;
+    --ink-soft: #565c72;
+    --ink-faint: #8b8d7e;
+    --accent: #3f7468;
+    --accent-strong: #2c554c;
+    --accent-2: #a9822f;
+    --wait: #8b8d7e;
+    --line: rgba(35, 40, 59, 0.22);
+    --line-strong: rgba(35, 40, 59, 0.4);
+    --shadow: 0 1px 0 rgba(35,40,59,0.06), 0 10px 24px -14px rgba(35,40,59,0.35);
+    --shadow-lift: 0 2px 0 rgba(35,40,59,0.08), 0 16px 28px -14px rgba(35,40,59,0.4);
+
+    --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Noto Serif KR", serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1c33; --paper-2: #142543; --paper-edge: #1c3156;
+      --ink: #e9edea; --ink-soft: #aab8c9; --ink-faint: #7b899e;
+      --accent: #5fbfae; --accent-strong: #86d7c7; --accent-2: #e0b155;
+      --wait: #7b899e;
+      --line: rgba(233, 237, 234, 0.16); --line-strong: rgba(233, 237, 234, 0.32);
+      --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 16px 32px -16px rgba(0,0,0,0.6);
+      --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 22px 36px -16px rgba(0,0,0,0.65);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f1c33; --paper-2: #142543; --paper-edge: #1c3156;
+    --ink: #e9edea; --ink-soft: #aab8c9; --ink-faint: #7b899e;
+    --accent: #5fbfae; --accent-strong: #86d7c7; --accent-2: #e0b155;
+    --wait: #7b899e;
+    --line: rgba(233, 237, 234, 0.16); --line-strong: rgba(233, 237, 234, 0.32);
+    --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 16px 32px -16px rgba(0,0,0,0.6);
+    --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 22px 36px -16px rgba(0,0,0,0.65);
+  }
+  :root[data-theme="light"] {
+    --paper: #efe6d1; --paper-2: #f8f1e0; --paper-edge: #e2d6b8;
+    --ink: #23283b; --ink-soft: #565c72; --ink-faint: #8b8d7e;
+    --accent: #3f7468; --accent-strong: #2c554c; --accent-2: #a9822f;
+    --wait: #8b8d7e;
+    --line: rgba(35, 40, 59, 0.22); --line-strong: rgba(35, 40, 59, 0.4);
+    --shadow: 0 1px 0 rgba(35,40,59,0.06), 0 10px 24px -14px rgba(35,40,59,0.35);
+    --shadow-lift: 0 2px 0 rgba(35,40,59,0.08), 0 16px 28px -14px rgba(35,40,59,0.4);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 72px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; gap: 16px 32px;
+    justify-content: space-between; align-items: flex-end;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line-strong);
+    margin-bottom: 28px;
+  }
+  .masthead-left { max-width: 560px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1.title {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(24px, 4vw, 32px);
+    line-height: 1.25;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .masthead-left p { margin: 0; color: var(--ink-soft); font-size: 14px; max-width: 54ch; }
+
+  .addbtn {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--paper-2);
+    background: var(--accent);
+    border: none;
+    border-radius: 5px;
+    padding: 10px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .addbtn:hover { background: var(--accent-strong); }
+
+  .stats {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .stat-tab {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+  }
+  .stat-tab .n { font-variant-numeric: tabular-nums; color: var(--ink); margin-left: 3px; }
+  .stat-tab.active { border-color: var(--accent); color: var(--accent); background: var(--paper); }
+  .stat-tab.active .n { color: var(--accent); }
+
+  .panel {
+    display: none;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 20px 20px 18px;
+    margin-bottom: 26px;
+  }
+  .panel.show { display: block; }
+  .panel h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 17px;
+    margin: 0 0 16px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field { margin-bottom: 14px; }
+  .field.full { grid-column: 1 / -1; }
+  label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="url"], textarea, select {
+    width: 100%;
+    background: var(--paper);
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    padding: 9px 11px;
+    font-family: var(--font-body);
+    font-size: 14.5px;
+    color: var(--ink);
+  }
+  textarea { min-height: 56px; font-size: 13.5px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .panel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+  .err { font-size: 12px; color: var(--accent-2); margin: 0; visibility: hidden; }
+  .err.show { visibility: visible; }
+  .panel-actions { display: flex; gap: 10px; }
+  .btn-primary {
+    font-family: var(--font-mono); font-size: 13px; color: var(--paper-2);
+    background: var(--accent); border: none; border-radius: 5px;
+    padding: 9px 16px; cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--accent-strong); }
+  .btn-ghost {
+    font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
+    background: none; border: 1px solid var(--line-strong); border-radius: 5px;
+    padding: 9px 16px; cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--ink); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    position: relative;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 16px 16px 14px;
+    display: flex; flex-direction: column;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .card-num { font-family: var(--font-mono); font-size: 11px; color: var(--accent-2); }
+  .status-chip {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.02em;
+    padding: 3px 9px; border-radius: 999px; border: 1px solid transparent;
+    cursor: pointer; white-space: nowrap; flex: none;
+  }
+  .status-chip[data-status="대기"] { color: var(--wait); border-color: var(--line-strong); }
+  .status-chip[data-status="제작중"] { color: var(--accent-2); border-color: var(--accent-2); }
+  .status-chip[data-status="완성"] { color: var(--paper-2); border-color: var(--accent); background: var(--accent); }
+
+  .card h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 17.5px;
+    line-height: 1.32;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .card .era { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); margin-bottom: 8px; }
+  .card .summary { font-size: 13px; color: var(--ink-soft); line-height: 1.55; flex: 1; margin: 0 0 12px; }
+  .card-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 10px; border-top: 1px solid var(--line);
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .card-foot .date { color: var(--ink-faint); }
+  .card-foot a.open { color: var(--accent); text-decoration: none; }
+  .card-foot a.open:hover { text-decoration: underline; }
+  .card-foot .nolink { color: var(--ink-faint); }
+  .card-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    background: none; border: none; cursor: pointer; padding: 0;
+  }
+  .icon-btn:hover { color: var(--accent-2); }
+
+  .empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    padding: 48px 0;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+  }
+
+  @media (max-width: 560px) {
+    .page { padding: 32px 16px 56px; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="masthead-left">
+      <p class="eyebrow">HISTORY OF EVERYDAY · 아카이브</p>
+      <h1 class="title">지금까지 만든 이야기</h1>
+      <p>완성·제작 중인 카드 스토리를 한눈에 관리합니다. 실제 조사·제작은 Claude 대화에서 진행하고, 여기엔 결과만 기록합니다.</p>
+    </div>
+    <button class="addbtn" id="toggleAdd">+ 새 항목</button>
+  </header>
+
+  <div class="panel" id="panel">
+    <h2 id="panelTitle">새 항목 추가</h2>
+    <div class="grid2">
+      <div class="field full">
+        <label for="fTitle">제목</label>
+        <input type="text" id="fTitle" placeholder="예: 자동차 열선시트의 역사" maxlength="80">
+      </div>
+      <div class="field">
+        <label for="fEra">카테고리 / 시대</label>
+        <input type="text" id="fEra" placeholder="예: 자동차 · 1950s~현재" maxlength="60">
+      </div>
+      <div class="field">
+        <label for="fStatus">상태</label>
+        <select id="fStatus">
+          <option value="대기">대기</option>
+          <option value="제작중">제작중</option>
+          <option value="완성">완성</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="fSummary">한 줄 설명</label>
+        <textarea id="fSummary" placeholder="이 카드 스토리를 한 문장으로 요약"></textarea>
+      </div>
+      <div class="field full">
+        <label for="fUrl">링크 (완성된 카드 아티팩트 주소, 선택)</label>
+        <input type="url" id="fUrl" placeholder="https://claude.ai/code/artifact/...">
+      </div>
+    </div>
+    <div class="panel-row">
+      <p class="err" id="panelErr">제목을 입력해주세요.</p>
+      <div class="panel-actions">
+        <button class="btn-ghost" id="cancelBtn">취소</button>
+        <button class="btn-primary" id="saveBtn">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+  (function () {
+    var STORAGE_KEY = 'hoe_archive_v1';
+    var COUNTER_KEY = 'hoe_archive_counter_v1';
+
+    var panel = document.getElementById('panel');
+    var panelTitle = document.getElementById('panelTitle');
+    var toggleAdd = document.getElementById('toggleAdd');
+    var cancelBtn = document.getElementById('cancelBtn');
+    var saveBtn = document.getElementById('saveBtn');
+    var panelErr = document.getElementById('panelErr');
+    var fTitle = document.getElementById('fTitle');
+    var fEra = document.getElementById('fEra');
+    var fStatus = document.getElementById('fStatus');
+    var fSummary = document.getElementById('fSummary');
+    var fUrl = document.getElementById('fUrl');
+    var statsEl = document.getElementById('stats');
+    var gridEl = document.getElementById('grid');
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch (e) { return []; }
+    }
+    function save(entries) { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
+    function nextNum() {
+      var n = parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10) + 1;
+      localStorage.setItem(COUNTER_KEY, String(n));
+      return n;
+    }
+
+    var entries = load();
+    var filter = '전체';
+    var editingId = null;
+
+    function fmtDate(ts) {
+      var d = new Date(ts);
+      return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function openPanel(entry) {
+      editingId = entry ? entry.id : null;
+      panelTitle.textContent = entry ? '항목 수정' : '새 항목 추가';
+      fTitle.value = entry ? entry.title : '';
+      fEra.value = entry ? entry.era : '';
+      fStatus.value = entry ? entry.status : '대기';
+      fSummary.value = entry ? entry.summary : '';
+      fUrl.value = entry ? entry.url : '';
+      panelErr.classList.remove('show');
+      panel.classList.add('show');
+      fTitle.focus();
+    }
+    function closePanel() {
+      panel.classList.remove('show');
+      editingId = null;
+    }
+
+    toggleAdd.addEventListener('click', function () {
+      if (panel.classList.contains('show') && !editingId) { closePanel(); }
+      else { openPanel(null); }
+    });
+    cancelBtn.addEventListener('click', closePanel);
+
+    saveBtn.addEventListener('click', function () {
+      var title = fTitle.value.trim();
+      if (!title) { panelErr.classList.add('show'); fTitle.focus(); return; }
+      panelErr.classList.remove('show');
+
+      if (editingId) {
+        entries = entries.map(function (e) {
+          if (e.id !== editingId) return e;
+          return Object.assign({}, e, {
+            title: title, era: fEra.value.trim(), status: fStatus.value,
+            summary: fSummary.value.trim(), url: fUrl.value.trim()
+          });
+        });
+      } else {
+        entries.push({
+          id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+          num: nextNum(),
+          title: title, era: fEra.value.trim(), status: fStatus.value,
+          summary: fSummary.value.trim(), url: fUrl.value.trim(),
+          ts: Date.now()
+        });
+      }
+      save(entries);
+      closePanel();
+      render();
+    });
+
+    function renderStats() {
+      var counts = { '전체': entries.length, '대기': 0, '제작중': 0, '완성': 0 };
+      entries.forEach(function (e) { counts[e.status] = (counts[e.status] || 0) + 1; });
+      statsEl.innerHTML = '';
+      ['전체', '대기', '제작중', '완성'].forEach(function (key) {
+        var tab = document.createElement('button');
+        tab.className = 'stat-tab' + (filter === key ? ' active' : '');
+        tab.innerHTML = key + '<span class="n">' + counts[key] + '</span>';
+        tab.addEventListener('click', function () { filter = key; render(); });
+        statsEl.appendChild(tab);
+      });
+    }
+
+    function renderGrid() {
+      gridEl.innerHTML = '';
+      var list = entries.slice().sort(function (a, b) { return b.ts - a.ts; });
+      if (filter !== '전체') list = list.filter(function (e) { return e.status === filter; });
+
+      if (list.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = entries.length === 0
+          ? '아직 등록된 이야기가 없습니다. "+ 새 항목"으로 추가해보세요.'
+          : '이 상태에 해당하는 항목이 없습니다.';
+        gridEl.appendChild(empty);
+        return;
+      }
+
+      list.forEach(function (item) {
+        var card = document.createElement('div');
+        card.className = 'card';
+
+        var top = document.createElement('div');
+        top.className = 'card-top';
+        var num = document.createElement('span');
+        num.className = 'card-num';
+        num.textContent = '#' + String(item.num).padStart(3, '0');
+        top.appendChild(num);
+
+        var chip = document.createElement('button');
+        chip.className = 'status-chip';
+        chip.dataset.status = item.status;
+        chip.textContent = item.status;
+        chip.setAttribute('aria-label', '상태: ' + item.status + ' — 클릭하면 다음 상태로 변경');
+        chip.addEventListener('click', function () {
+          var order = ['대기', '제작중', '완성'];
+          item.status = order[(order.indexOf(item.status) + 1) % order.length];
+          save(entries);
+          render();
+        });
+        top.appendChild(chip);
+        card.appendChild(top);
+
+        var h3 = document.createElement('h3');
+        h3.textContent = item.title;
+        card.appendChild(h3);
+
+        if (item.era) {
+          var era = document.createElement('div');
+          era.className = 'era';
+          era.textContent = item.era;
+          card.appendChild(era);
+        }
+
+        var summary = document.createElement('p');
+        summary.className = 'summary';
+        summary.textContent = item.summary || '설명이 아직 없습니다.';
+        card.appendChild(summary);
+
+        var foot = document.createElement('div');
+        foot.className = 'card-foot';
+        var date = document.createElement('span');
+        date.className = 'date';
+        date.textContent = fmtDate(item.ts);
+        foot.appendChild(date);
+
+        var actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        if (item.url) {
+          var a = document.createElement('a');
+          a.className = 'open';
+          a.href = item.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = '보기 →';
+          actions.appendChild(a);
+        } else {
+          var nolink = document.createElement('span');
+          nolink.className = 'nolink';
+          nolink.textContent = '링크 없음';
+          actions.appendChild(nolink);
+        }
+
+        var editBtn = document.createElement('button');
+        editBtn.className = 'icon-btn';
+        editBtn.textContent = '수정';
+        editBtn.addEventListener('click', function () { openPanel(item); });
+        actions.appendChild(editBtn);
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn';
+        delBtn.textContent = '삭제';
+        delBtn.addEventListener('click', function () {
+          if (!confirm('"' + item.title + '" 항목을 삭제할까요?')) return;
+          entries = entries.filter(function (e) { return e.id !== item.id; });
+          save(entries);
+          render();
+        });
+        actions.appendChild(delBtn);
+
+        foot.appendChild(actions);
+        card.appendChild(foot);
+        gridEl.appendChild(card);
+      });
+    }
+
+    function render() { renderStats(); renderGrid(); }
+    render();
+  })();
+</script>
