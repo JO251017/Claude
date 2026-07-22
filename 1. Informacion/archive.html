@@ -304,7 +304,15 @@
     // SEED is the repo-tracked list of stories — Claude appends an entry here
     // each time a card story is finished, then commits + republishes this file.
     // { id, num, title, era, status, summary, url, ts }
-    var SEED = [];
+    var SEED = [
+      {
+        id: 'gold', num: 1, title: '금, 인류가 가장 오래 사랑한 금속', era: '역사 · 신석기시대~현재',
+        status: '완성',
+        summary: '신석기시대 발견부터 화폐, 금본위제, 미래의 채굴까지 금의 역사를 10장의 카드로 본다.',
+        url: 'https://claude.ai/code/artifact/7f1c27c4-ae77-442e-896b-0e3c26ce28e0',
+        ts: 1784678400000
+      }
+    ];
 
     // Local-only layer, kept in this browser: status/edits on top of SEED items,
     // hidden SEED ids, and any extra entries the user adds by hand here.
