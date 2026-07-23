@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -21,8 +22,8 @@ class Offer(Base, TimestampMixin):
     base_price: Mapped[float | None] = mapped_column(Numeric(12, 2))
     store_discount: Mapped[float | None] = mapped_column(Numeric(12, 2))
 
-    valid_from: Mapped[datetime | None] = mapped_column()
-    expires_at: Mapped[datetime | None] = mapped_column()
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ttl_sec: Mapped[int | None] = mapped_column(Integer)
 
     place = relationship("Place", back_populates="offers")

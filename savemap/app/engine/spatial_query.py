@@ -1,6 +1,7 @@
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.spatial import WGS84_SRID
 from app.domain.offer import Offer
@@ -17,6 +18,7 @@ async def query_within_radius(
     stmt = (
         select(Offer, Place, distance)
         .join(Place, Offer.place_id == Place.id)
+        .options(selectinload(Offer.payment_benefits))
         .where(func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0))
         .order_by(distance)
     )
