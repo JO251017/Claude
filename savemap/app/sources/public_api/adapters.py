@@ -73,13 +73,17 @@ class LocalCurrencyMerchantAdapter(PublicApiAdapter):
 
 
 class TourApiAdapter(PublicApiAdapter):
+    """data.go.kr: 한국관광공사_국문 관광정보 서비스 (TourAPI) — 승인됨"""
+
     async def fetch_raw(self) -> list[dict]:
-        raise NotImplementedError("TourAPI 엔드포인트/필드 확인 후 구현 (미확인)")
+        raise NotImplementedError("TourAPI 요청 URL/응답 필드 확인 후 구현 (미확인)")
 
 
 class OpinetAdapter(PublicApiAdapter):
+    """오피넷(한국석유공사) Open API — 승인됨, 별도 인증키 발급"""
+
     async def fetch_raw(self) -> list[dict]:
-        raise NotImplementedError("오피넷 API 엔드포인트/필드 확인 후 구현 (미확인)")
+        raise NotImplementedError("오피넷 API 요청 URL/응답 필드 확인 후 구현 (미확인)")
 
 
 ADAPTERS: list[type[PublicApiAdapter]] = [
