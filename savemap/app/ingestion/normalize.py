@@ -57,4 +57,5 @@ def normalize(raw: dict, source: SourceType, layer: Layer) -> NormalizedOffer:
         expires_at=raw.get("expires_at"),
         ttl_sec=raw.get("ttl_sec"),
         external_ref=raw.get("external_ref"),
+        extra=raw.get("extra") or {},
     )
