@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SaveMap</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>💰 SaveMap</h1>
+      <p class="subtitle">내 주변 절약 정보 지도 (프로토타입)</p>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="search">🔍 검색</button>
+      <button class="tab-btn" data-tab="report">📸 제보</button>
+      <button class="tab-btn" data-tab="merchant">🏪 사업자</button>
+    </nav>
+
+    <section id="tab-search" class="tab-panel active">
+      <h2>내 주변 절약 검색</h2>
+      <form id="search-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="s-lat">위도</label>
+            <input type="text" id="s-lat" value="36.9925" required />
+          </div>
+          <div class="form-group">
+            <label for="s-lng">경도</label>
+            <input type="text" id="s-lng" value="127.1130" required />
+          </div>
+        </div>
+        <button type="button" id="use-location-btn" class="btn-secondary">📍 내 위치 사용</button>
+        <div class="form-group">
+          <label for="s-radius">반경 (km)</label>
+          <input type="text" id="s-radius" value="3" />
+        </div>
+        <div class="form-group">
+          <label for="s-category">카테고리</label>
+          <select id="s-category">
+            <option value="">전체</option>
+            <option value="free">무료</option>
+            <option value="discount">할인</option>
+            <option value="closing_soon">마감임박</option>
+            <option value="free_parking">무료주차</option>
+            <option value="local_benefit">지역혜택</option>
+          </select>
+        </div>
+        <button type="submit">검색</button>
+      </form>
+      <div id="search-results"></div>
+    </section>
+
+    <section id="tab-report" class="tab-panel">
+      <h2>절약 정보 제보</h2>
+      <form id="report-form">
+        <div class="form-group">
+          <label for="r-image-url">사진 URL</label>
+          <input type="text" id="r-image-url" placeholder="https://... (영수증/전단지 사진 주소)" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="r-lat">위도 (선택)</label>
+            <input type="text" id="r-lat" placeholder="비워두면 AI가 사진에서 추정" />
+          </div>
+          <div class="form-group">
+            <label for="r-lng">경도 (선택)</label>
+            <input type="text" id="r-lng" placeholder="" />
+          </div>
+        </div>
+        <button type="submit">제보하기</button>
+      </form>
+      <div id="report-result"></div>
+    </section>
+
+    <section id="tab-merchant" class="tab-panel">
+      <h2>사업자 콘솔</h2>
+
+      <h3>매장 등록</h3>
+      <form id="place-form">
+        <div class="form-group">
+          <label for="p-name">매장명</label>
+          <input type="text" id="p-name" required />
+        </div>
+        <div class="form-group">
+          <label for="p-address">주소</label>
+          <input type="text" id="p-address" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="p-lat">위도</label>
+            <input type="text" id="p-lat" value="36.9925" required />
+          </div>
+          <div class="form-group">
+            <label for="p-lng">경도</label>
+            <input type="text" id="p-lng" value="127.1130" required />
+          </div>
+        </div>
+        <button type="submit">매장 등록</button>
+      </form>
+
+      <h3>혜택 등록</h3>
+      <form id="offer-form">
+        <div class="form-group">
+          <label for="o-place-id">매장 ID</label>
+          <input type="text" id="o-place-id" required />
+        </div>
+        <div class="form-group">
+          <label for="o-title">혜택 제목</label>
+          <input type="text" id="o-title" required />
+        </div>
+        <div class="form-group">
+          <label for="o-category">카테고리</label>
+          <select id="o-category">
+            <option value="discount">할인</option>
+            <option value="free">무료</option>
+            <option value="closing_soon">마감임박</option>
+            <option value="free_parking">무료주차</option>
+            <option value="local_benefit">지역혜택</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="o-base-price">원가</label>
+            <input type="text" id="o-base-price" />
+          </div>
+          <div class="form-group">
+            <label for="o-discount">할인액</label>
+            <input type="text" id="o-discount" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="o-ttl">타임세일 (초, 비우면 상시할인)</label>
+          <input type="text" id="o-ttl" placeholder="예: 3600" />
+        </div>
+        <button type="submit">혜택 등록</button>
+      </form>
+
+      <h3>내 매장 목록</h3>
+      <button type="button" id="load-places-btn" class="btn-secondary">새로고침</button>
+      <div id="places-list"></div>
+
+      <h3>내 혜택 목록</h3>
+      <button type="button" id="load-offers-btn" class="btn-secondary">새로고침</button>
+      <div id="offers-list"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
