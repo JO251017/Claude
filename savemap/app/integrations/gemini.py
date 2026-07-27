@@ -17,7 +17,8 @@ _EXTRACTION_PROMPT = (
     "이 이미지(영수증, 전단지, 매장 사진 등)에서 절약 정보를 추출해줘. "
     "반드시 아래 JSON 형식으로만 응답하고 다른 텍스트는 포함하지 마:\n"
     '{"title": "혜택/상품명", "price": 숫자 또는 null, '
-    f'"category": {sorted(_VALID_CATEGORIES)} 중 하나}}'
+    f'"category": {sorted(_VALID_CATEGORIES)} 중 하나, '
+    '"location_text": "이미지에서 보이는 가게 이름이나 주소가 있으면 그 텍스트, 없으면 null"}'
 )
 
 
@@ -32,6 +33,7 @@ class OcrResult:
     price: float | None
     title: str | None
     category: Category | None
+    location_text: str | None = None
 
 
 class GeminiVisionClient:
@@ -86,4 +88,5 @@ class GeminiVisionClient:
             price=parsed.get("price"),
             title=parsed.get("title"),
             category=category,
+            location_text=parsed.get("location_text"),
         )
