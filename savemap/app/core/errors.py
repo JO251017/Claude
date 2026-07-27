@@ -25,7 +25,7 @@ class RadiusOutOfRangeError(SaveMapError):
 
 class MissingReportImageError(SaveMapError):
     code = "SM4221"
-    http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
     message = "제보는 이미지가 반드시 있어야 합니다"
 
 
@@ -39,3 +39,15 @@ class PartnerCircuitOpenError(SaveMapError):
     code = "SM5031"
     http_status = status.HTTP_503_SERVICE_UNAVAILABLE
     message = "파트너 API 일시 차단 중입니다 (캐시 응답으로 폴백)"
+
+
+class PlaceNotFoundError(SaveMapError):
+    code = "SM4041"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "매장을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class OfferNotFoundError(SaveMapError):
+    code = "SM4042"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "혜택을 찾을 수 없거나 소유하고 있지 않습니다"

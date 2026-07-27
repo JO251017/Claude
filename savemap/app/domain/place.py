@@ -13,6 +13,7 @@ class Place(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255))
     address: Mapped[str | None] = mapped_column(String(500))
     kakao_place_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(64))
     geom: Mapped[object] = mapped_column(
         Geometry(geometry_type="POINT", srid=WGS84_SRID, spatial_index=False)
     )
@@ -23,4 +24,5 @@ class Place(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_place_geom_gist", "geom", postgresql_using="gist"),
         Index("ix_place_h3_r9", "h3_r9"),
+        Index("ix_place_owner_user_id", "owner_user_id"),
     )
