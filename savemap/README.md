@@ -17,6 +17,22 @@ uvicorn app.main:app --reload
 - API 문서: http://localhost:8000/docs
 - 헬스체크: http://localhost:8000/health
 
+## 배포 (Render)
+
+리포 루트의 `render.yaml`(Blueprint)로 웹 서비스 + Redis를 한 번에 배포합니다.
+
+1. https://render.com 가입 (GitHub 계정으로 로그인 권장)
+2. 대시보드 → "New" → "Blueprint" → 이 GitHub 저장소 선택
+3. `render.yaml`을 자동으로 인식 → "Apply" 클릭
+4. `savemap-api` 서비스의 **Environment** 탭에서 `sync: false`로 표시된 값들을 직접 입력:
+   - `SUPABASE_DB_URL`, `SUPABASE_JWT_SECRET`
+   - `KAKAO_REST_API_KEY`, `DATA_GO_KR_KEY`, `TOUR_API_KEY`, `OPINET_API_KEY`
+   - `GEMINI_API_KEY`
+   - (선택) `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+5. 배포 완료되면 제공되는 `https://savemap-api-xxxx.onrender.com` 주소로 접속
+
+무료 플랜은 트래픽이 없으면 슬립 상태로 전환되어, 첫 요청 시 기동에 몇십 초 걸릴 수 있습니다.
+
 ## 테스트
 
 ```bash
