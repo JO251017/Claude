@@ -12,6 +12,8 @@ def _candidate(**kw) -> OfferCandidate:
         layer=Layer.REGULAR,
         distance_m=100.0,
         base_price=10000.0,
+        lat=36.99,
+        lng=127.11,
     )
     base.update(kw)
     return OfferCandidate(**base)

@@ -12,6 +12,8 @@ def _c(offer_id: int, base: float, discount: float, trust: float) -> OfferCandid
         layer=Layer.REGULAR,
         distance_m=100.0,
         base_price=base,
+        lat=36.99,
+        lng=127.11,
         store_discount=discount,
         trust_score=trust,
     )

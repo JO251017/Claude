@@ -8,6 +8,8 @@ class SearchResultItem(BaseModel):
     place_name: str
     category: Category
     distance_m: float
+    lat: float
+    lng: float
     base_price: float
     final_price: float
     total_savings: float

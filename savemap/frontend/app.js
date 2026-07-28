@@ -54,6 +54,71 @@ document.getElementById('use-location-btn').addEventListener('click', () => {
   );
 });
 
+// --- 카카오 지도 ---
+let kakaoMap = null;
+let mapMarkers = [];
+let originMarker = null;
+
+function initMap(lat, lng) {
+  if (typeof kakao === 'undefined' || !kakao.maps) {
+    document.getElementById('map').innerHTML =
+      '<p class="empty-msg">지도를 불러올 수 없습니다 (카카오맵 SDK 로드 실패)</p>';
+    return;
+  }
+  kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
+    center: new kakao.maps.LatLng(lat, lng),
+    level: 5,
+  });
+}
+
+function clearMarkers() {
+  mapMarkers.forEach((m) => m.setMap(null));
+  mapMarkers = [];
+  if (originMarker) {
+    originMarker.setMap(null);
+    originMarker = null;
+  }
+}
+
+function renderMapMarkers(originLat, originLng, results) {
+  if (!kakaoMap) return;
+  clearMarkers();
+
+  const bounds = new kakao.maps.LatLngBounds();
+  const originPos = new kakao.maps.LatLng(originLat, originLng);
+  bounds.extend(originPos);
+
+  originMarker = new kakao.maps.Marker({
+    map: kakaoMap,
+    position: originPos,
+    image: new kakao.maps.MarkerImage(
+      'data:image/svg+xml;base64,' +
+        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="8" fill="#e53e3e" stroke="white" stroke-width="2"/></svg>'),
+      new kakao.maps.Size(24, 24)
+    ),
+  });
+
+  const infoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+
+  results.forEach((r) => {
+    const pos = new kakao.maps.LatLng(r.lat, r.lng);
+    bounds.extend(pos);
+    const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos });
+    kakao.maps.event.addListener(marker, 'click', () => {
+      infoWindow.setContent(
+        `<div style="padding:8px 10px;font-size:12px;min-width:140px;">
+          <strong>${escapeHtml(r.place_name)}</strong><br/>
+          ${r.final_price.toLocaleString()}원 ${r.savings_rate > 0 ? `(${r.savings_rate}% 절약)` : ''}
+        </div>`
+      );
+      infoWindow.open(kakaoMap, marker);
+    });
+    mapMarkers.push(marker);
+  });
+
+  kakaoMap.setBounds(bounds);
+}
+
 document.getElementById('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const lat = document.getElementById('s-lat').value;
@@ -69,6 +134,8 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
 
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
+    renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results);
+
     if (data.results.length === 0) {
       resultsEl.innerHTML = '<p class="empty-msg">주변에 절약 정보가 없습니다.</p>';
       return;
@@ -95,6 +162,8 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
     resultsEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   }
 });
+
+initMap(36.9925, 127.113);
 
 // --- 제보 ---
 document.getElementById('report-form').addEventListener('submit', async (e) => {

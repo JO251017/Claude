@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query
+from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
@@ -16,6 +17,7 @@ router = APIRouter(tags=["search"])
 
 
 def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
+    point = to_shape(place.geom)
     return OfferCandidate(
         offer_id=offer.id,
         place_id=place.id,
@@ -24,6 +26,8 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         layer=offer.layer,
         distance_m=distance_m,
         base_price=float(offer.base_price or 0.0),
+        lat=point.y,
+        lng=point.x,
         store_discount=float(offer.store_discount or 0.0),
         payment_benefits=[
             PaymentBenefit(
@@ -62,6 +66,8 @@ async def search(
             place_name=r.candidate.place_name,
             category=r.candidate.category,
             distance_m=round(r.candidate.distance_m, 1),
+            lat=r.candidate.lat,
+            lng=r.candidate.lng,
             base_price=r.breakdown.base_price,
             final_price=r.breakdown.final_price,
             total_savings=r.breakdown.total_savings,

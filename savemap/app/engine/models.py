@@ -19,6 +19,8 @@ class OfferCandidate:
     layer: Layer
     distance_m: float
     base_price: float
+    lat: float
+    lng: float
     store_discount: float = 0.0
     payment_benefits: list[PaymentBenefit] = field(default_factory=list)
     trust_score: float = 0.5
