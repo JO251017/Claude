@@ -31,6 +31,31 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
+// --- RPG 희귀도 등급 (절약률 기준) ---
+function getRarityTier(savingsRate) {
+  if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '✨ 레전더리' };
+  if (savingsRate >= 30) return { cls: 'rarity-epic', label: '💜 에픽' };
+  if (savingsRate >= 10) return { cls: 'rarity-rare', label: '💎 레어' };
+  if (savingsRate > 0) return { cls: 'rarity-uncommon', label: '🍀 언커먼' };
+  return { cls: 'rarity-common', label: '일반' };
+}
+
+// --- XP / 레벨 뱃지 ---
+async function loadXpBadge() {
+  try {
+    const xp = await apiFetch('/users/me/xp');
+    const pct = Math.round((xp.xp_into_level / xp.xp_per_level) * 100);
+    document.getElementById('xp-ring').style.setProperty('--xp-pct', `${pct}%`);
+    document.getElementById('xp-level').textContent = `Lv.${xp.level}`;
+    document.getElementById('xp-title').textContent = xp.title;
+    document.getElementById('xp-sub').textContent = `${xp.xp_into_level}/${xp.xp_per_level} XP`;
+  } catch (err) {
+    // XP 뱃지는 부가 정보라 실패해도 나머지 화면에 영향 없음
+    console.warn('XP 정보를 불러오지 못했습니다:', err.message);
+  }
+}
+loadXpBadge();
+
 // --- 하단 네비게이션 (화면 전환) ---
 document.querySelectorAll('.nav-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -181,11 +206,15 @@ async function runSearch() {
 
     countEl.textContent = `주변 절약 정보 ${data.results.length}개`;
     resultsEl.innerHTML = data.results
-      .map(
-        (r) => `
-      <div class="result-card">
+      .map((r) => {
+        const tier = getRarityTier(r.savings_rate);
+        return `
+      <div class="result-card ${tier.cls}">
         <div class="result-header">
-          <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
+          <div class="badge-group">
+            <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
+            <span class="tier-tag">${tier.label}</span>
+          </div>
           <span class="distance">${r.distance_m.toFixed(0)}m</span>
         </div>
         <div class="place-name">${escapeHtml(r.place_name)}</div>
@@ -195,8 +224,8 @@ async function runSearch() {
           ${r.savings_rate > 0 ? `<span class="savings-rate">${r.savings_rate}% 절약</span>` : ''}
         </div>
         <div class="meta-line">신뢰도 ${(r.trust_score * 100).toFixed(0)}% · 점수 ${r.score}</div>
-      </div>`
-      )
+      </div>`;
+      })
       .join('');
   } catch (err) {
     countEl.textContent = '검색 실패';
