@@ -8,15 +8,7 @@ const CATEGORY_LABELS = {
   local_benefit: '지역혜택',
 };
 
-// --- Tabs ---
-document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-  });
-});
+let currentCategory = '';
 
 function escapeHtml(str) {
   return String(str)
@@ -39,7 +31,33 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// --- 검색 ---
+// --- 하단 네비게이션 (화면 전환) ---
+document.querySelectorAll('.nav-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`screen-${btn.dataset.screen}`).classList.add('active');
+  });
+});
+
+// --- 바텀시트 펼치기/접기 ---
+const bottomSheet = document.getElementById('bottom-sheet');
+document.getElementById('sheet-toggle').addEventListener('click', () => {
+  bottomSheet.classList.toggle('expanded');
+});
+
+// --- 카테고리 칩 ---
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentCategory = chip.dataset.category;
+    runSearch();
+  });
+});
+
+// --- 내 위치 사용 ---
 document.getElementById('use-location-btn').addEventListener('click', () => {
   if (!navigator.geolocation) {
     alert('이 브라우저는 위치 정보를 지원하지 않습니다.');
@@ -47,29 +65,48 @@ document.getElementById('use-location-btn').addEventListener('click', () => {
   }
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      document.getElementById('s-lat').value = pos.coords.latitude.toFixed(6);
-      document.getElementById('s-lng').value = pos.coords.longitude.toFixed(6);
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      document.getElementById('s-lat').value = lat.toFixed(6);
+      document.getElementById('s-lng').value = lng.toFixed(6);
+      if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+      runSearch();
     },
     () => alert('위치를 가져올 수 없습니다.')
   );
 });
 
+document.getElementById('s-radius').addEventListener('change', runSearch);
+
 // --- 카카오 지도 ---
 let kakaoMap = null;
 let mapMarkers = [];
 let originMarker = null;
+const researchBtn = document.getElementById('research-btn');
 
 function initMap(lat, lng) {
   if (typeof kakao === 'undefined' || !kakao.maps) {
     document.getElementById('map').innerHTML =
-      '<p class="empty-msg">지도를 불러올 수 없습니다 (카카오맵 SDK 로드 실패)</p>';
+      '<p class="empty-msg" style="padding-top:180px;">지도를 불러올 수 없습니다 (카카오맵 SDK 로드 실패)</p>';
     return;
   }
   kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
     center: new kakao.maps.LatLng(lat, lng),
     level: 5,
   });
+
+  kakao.maps.event.addListener(kakaoMap, 'dragend', () => researchBtn.classList.remove('hidden'));
+  kakao.maps.event.addListener(kakaoMap, 'zoom_changed', () => researchBtn.classList.remove('hidden'));
 }
+
+researchBtn.addEventListener('click', () => {
+  if (!kakaoMap) return;
+  const center = kakaoMap.getCenter();
+  document.getElementById('s-lat').value = center.getLat().toFixed(6);
+  document.getElementById('s-lng').value = center.getLng().toFixed(6);
+  researchBtn.classList.add('hidden');
+  runSearch();
+});
 
 function clearMarkers() {
   mapMarkers.forEach((m) => m.setMap(null));
@@ -93,8 +130,8 @@ function renderMapMarkers(originLat, originLng, results) {
     position: originPos,
     image: new kakao.maps.MarkerImage(
       'data:image/svg+xml;base64,' +
-        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="8" fill="#e53e3e" stroke="white" stroke-width="2"/></svg>'),
-      new kakao.maps.Size(24, 24)
+        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="#0d9488" stroke="white" stroke-width="3"/></svg>'),
+      new kakao.maps.Size(22, 22)
     ),
   });
 
@@ -119,17 +156,17 @@ function renderMapMarkers(originLat, originLng, results) {
   kakaoMap.setBounds(bounds);
 }
 
-document.getElementById('search-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+// --- 검색 실행 ---
+async function runSearch() {
   const lat = document.getElementById('s-lat').value;
   const lng = document.getElementById('s-lng').value;
   const radius = document.getElementById('s-radius').value;
-  const category = document.getElementById('s-category').value;
 
   const params = new URLSearchParams({ lat, lng, radius_km: radius });
-  if (category) params.set('category', category);
+  if (currentCategory) params.set('category', currentCategory);
 
   const resultsEl = document.getElementById('search-results');
+  const countEl = document.getElementById('sheet-count');
   resultsEl.innerHTML = '<p class="empty-msg">검색 중...</p>';
 
   try {
@@ -137,9 +174,12 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results);
 
     if (data.results.length === 0) {
-      resultsEl.innerHTML = '<p class="empty-msg">주변에 절약 정보가 없습니다.</p>';
+      countEl.textContent = '주변에 절약 정보가 없어요';
+      resultsEl.innerHTML = '<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>';
       return;
     }
+
+    countEl.textContent = `주변 절약 정보 ${data.results.length}개`;
     resultsEl.innerHTML = data.results
       .map(
         (r) => `
@@ -159,11 +199,13 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
       )
       .join('');
   } catch (err) {
+    countEl.textContent = '검색 실패';
     resultsEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   }
-});
+}
 
 initMap(36.9925, 127.113);
+runSearch();
 
 // --- 제보 ---
 document.getElementById('report-form').addEventListener('submit', async (e) => {
