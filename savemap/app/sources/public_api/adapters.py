@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
+import httpx
+
+from app.core.config import settings
 from app.domain.enums import Layer, SourceType
 from app.ingestion.normalize import NormalizedOffer, normalize
 from app.integrations.gov_data import GovDataClient
+from app.integrations.kakao import KakaoClient
 
 
 class PublicApiAdapter(ABC):
@@ -217,23 +221,74 @@ class MarketAreaInfoAdapter(PublicApiAdapter):
 
 
 ONNURI_BASE_URL = "https://api.odcloud.kr"
-# odcloud 파일데이터형 API는 데이터셋마다 실제 호출 경로에 고유 UDDI 값이 필요한데
-# (예: /api/3060079/v1/uddi:xxxxxxxx-....), 그 값은 아직 확인하지 못했다. 지어내지 않는다.
-ONNURI_PATH = None
+# 2025-07-31 최신본 (사용자가 제공한 Swagger 문서로 경로·필드 모두 확인됨)
+ONNURI_PATH = "/api/3060079/v1/uddi:7ffa42f8-01d1-4329-aa94-aefb67c53cf1"
+
+
+def _map_onnuri_row(row: dict) -> dict | None:
+    """odcloud data[] 항목 하나를 파싱한다 (필드명은 사용자 제공 Swagger로 확인됨).
+    이 API 자체엔 위도/경도가 없어(소재지 주소 텍스트만 제공) 좌표는 채우지 않는다 —
+    어댑터가 이 결과에 카카오 지오코딩으로 좌표를 별도로 채워 넣는다."""
+    name = row.get("가맹점명")
+    address = row.get("소재지")
+    if not name or not address:
+        return None
+    market_name = row.get("소속 시장명(또는 상점가)")
+    return {
+        "place_name": name,
+        "title": f"온누리상품권 가맹점{f' ({market_name})' if market_name else ''}",
+        "category": "지역혜택",
+        "address": address,
+        "extra": {
+            "items": row.get("취급품목"),
+            "paper_voucher": row.get("지류형 가맹 여부"),
+            "digital_voucher": row.get("디지털형 가맹 여부"),
+            "registered_year": row.get("등록년도"),
+        },
+    }
 
 
 class OnnuriMerchantAdapter(PublicApiAdapter):
-    """data.go.kr: 소상공인시장진흥공단_전국 온누리상품권 가맹점 현황 — 승인됨
+    """data.go.kr(odcloud): 소상공인시장진흥공단_전국 온누리상품권 가맹점 현황 — 승인됨,
+    응답 필드 확인됨 (사용자 제공 Swagger 문서 기준, 2025-07-31 최신본).
 
-    End Point: api.odcloud.kr/api (사용자 제공) — odcloud는 파일데이터형 API라 실제 호출 경로가
-    데이터셋별 UDDI 값을 포함하는데, 이 값은 아직 확인하지 못했다 (Swagger 문서:
-    infuser.odcloud.kr/oas/docs?namespace=3060079/v1). 정확한 경로를 알려주시면 이어서 구현.
+    End Point: https://api.odcloud.kr/api/3060079/v1/uddi:7ffa42f8-01d1-4329-aa94-aefb67c53cf1
+    원본 데이터에 좌표가 없어 매장마다 카카오 주소 검색(geocode)으로 좌표를 채운다 —
+    전국 단위라 항목이 매우 많을 수 있어 한 번에 가져오는 개수를 max_items로 제한한다.
+    주소 지오코딩에 실패한 항목은 (좌표 없이 지도에 표시할 수 없으므로) 건너뛴다.
+    "지역혜택 상시 정보"라 만료일이 없는 CORE_BASE 레이어로 분류한다.
     """
 
-    layer = Layer.REGULAR
+    layer = Layer.CORE_BASE
+
+    def __init__(self, kakao: KakaoClient | None = None, max_items: int = 50):
+        self.kakao = kakao or KakaoClient()
+        self.max_items = max_items
 
     async def fetch_raw(self) -> list[dict]:
-        raise NotImplementedError("odcloud 데이터셋 경로(UDDI) 미확인 — namespace 3060079")
+        async with httpx.AsyncClient(base_url=ONNURI_BASE_URL, timeout=30) as client:
+            resp = await client.get(
+                ONNURI_PATH,
+                params={"page": 1, "perPage": self.max_items, "serviceKey": settings.data_go_kr_key},
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+
+        results: list[dict] = []
+        for row in payload.get("data", []):
+            mapped = _map_onnuri_row(row)
+            if mapped is None:
+                continue
+            try:
+                geo = await self.kakao.geocode(mapped["address"])
+            except Exception:
+                geo = None
+            if geo is None:
+                continue
+            mapped["lat"] = geo.lat
+            mapped["lng"] = geo.lng
+            results.append(mapped)
+        return results
 
 
 LOCAL_CURRENCY_BASE_URL = "https://apis.data.go.kr"
