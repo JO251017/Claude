@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -39,6 +40,15 @@ def create_app() -> FastAPI:
         except Exception as exc:
             result["redis"] = f"error: {exc}"
         return result
+
+    @app.get("/config.js", tags=["meta"])
+    async def frontend_config() -> Response:
+        config = {
+            "supabaseUrl": settings.supabase_url,
+            "supabaseAnonKey": settings.supabase_anon_key,
+        }
+        body = f"window.SAVEMAP_CONFIG = {json.dumps(config)};"
+        return Response(content=body, media_type="application/javascript")
 
     if FRONTEND_DIR.is_dir():
         app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

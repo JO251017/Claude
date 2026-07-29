@@ -534,6 +534,30 @@ select:focus {
   filter: brightness(1.05);
 }
 
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  color: var(--primary-dark);
+  border: 1px solid rgba(13, 148, 136, 0.35);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
 .btn-text {
   background: none;
   border: none;

@@ -41,6 +41,12 @@ class OcrServiceError(SaveMapError):
     message = "사진 분석 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요"
 
 
+class AuthenticationRequiredError(SaveMapError):
+    code = "SM4011"
+    http_status = status.HTTP_401_UNAUTHORIZED
+    message = "로그인이 필요한 기능입니다"
+
+
 class UnverifiedPaymentMethodError(SaveMapError):
     code = "SM4031"
     http_status = status.HTTP_403_FORBIDDEN

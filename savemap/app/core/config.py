@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     supabase_url: str = ""
+    supabase_anon_key: str = ""
     supabase_service_key: str = ""
     supabase_storage_bucket: str = "reports"
 

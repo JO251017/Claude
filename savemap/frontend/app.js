@@ -19,8 +19,12 @@ function escapeHtml(str) {
 }
 
 async function apiFetch(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = await getAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const resp = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   });
   const data = await resp.json().catch(() => null);
@@ -29,6 +33,77 @@ async function apiFetch(path, options = {}) {
     throw new Error(message);
   }
   return data;
+}
+
+// --- Supabase Auth (사업자 콘솔 로그인) ---
+const supabaseClient =
+  window.supabase && window.SAVEMAP_CONFIG?.supabaseUrl && window.SAVEMAP_CONFIG?.supabaseAnonKey
+    ? window.supabase.createClient(window.SAVEMAP_CONFIG.supabaseUrl, window.SAVEMAP_CONFIG.supabaseAnonKey)
+    : null;
+
+async function getAccessToken() {
+  if (!supabaseClient) return null;
+  const { data } = await supabaseClient.auth.getSession();
+  return data?.session?.access_token || null;
+}
+
+function renderAuthState(session) {
+  const loginEl = document.getElementById('merchant-login');
+  const authedEl = document.getElementById('merchant-authed');
+  const emailEl = document.getElementById('auth-user-email');
+  if (session) {
+    loginEl.classList.add('hidden');
+    authedEl.classList.remove('hidden');
+    emailEl.textContent = session.user.email;
+    loadPlaces();
+    loadOffers();
+  } else {
+    loginEl.classList.remove('hidden');
+    authedEl.classList.add('hidden');
+  }
+}
+
+if (supabaseClient) {
+  supabaseClient.auth.getSession().then(({ data }) => renderAuthState(data.session));
+  supabaseClient.auth.onAuthStateChange((_event, session) => renderAuthState(session));
+
+  document.getElementById('auth-login-btn').addEventListener('click', async () => {
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const msgEl = document.getElementById('auth-msg');
+    if (!email || !password) {
+      msgEl.innerHTML = '<p class="error-msg">이메일과 비밀번호를 입력해주세요.</p>';
+      return;
+    }
+    msgEl.innerHTML = '<p class="empty-msg">로그인 중...</p>';
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    msgEl.innerHTML = error ? `<p class="error-msg">${escapeHtml(error.message)}</p>` : '';
+  });
+
+  document.getElementById('auth-signup-btn').addEventListener('click', async () => {
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const msgEl = document.getElementById('auth-msg');
+    if (!email || !password) {
+      msgEl.innerHTML = '<p class="error-msg">이메일과 비밀번호를 입력해주세요.</p>';
+      return;
+    }
+    if (password.length < 6) {
+      msgEl.innerHTML = '<p class="error-msg">비밀번호는 6자 이상이어야 합니다.</p>';
+      return;
+    }
+    msgEl.innerHTML = '<p class="empty-msg">가입 처리 중...</p>';
+    const { error } = await supabaseClient.auth.signUp({ email, password });
+    msgEl.innerHTML = error
+      ? `<p class="error-msg">${escapeHtml(error.message)}</p>`
+      : '<p class="empty-msg">가입 확인 이메일을 보냈습니다. 메일함을 확인해주세요.</p>';
+  });
+
+  document.getElementById('auth-logout-btn').addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+  });
+} else {
+  console.warn('Supabase 설정이 없어 사업자 로그인을 사용할 수 없습니다 (/config.js 확인 필요).');
 }
 
 // --- RPG 희귀도 등급 (절약률 기준) ---
@@ -428,6 +503,4 @@ async function loadOffers() {
 }
 document.getElementById('load-offers-btn').addEventListener('click', loadOffers);
 
-// initial load
-loadPlaces();
-loadOffers();
+// 매장/혜택 목록은 로그인 상태(renderAuthState)에서 로드됩니다.

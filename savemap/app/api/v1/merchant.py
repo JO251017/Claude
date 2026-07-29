@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import SessionDep, UserDep
+from app.api.deps import RequireUserDep, SessionDep
 from app.api.schemas.merchant import (
     OfferCreate,
     OfferResponse,
@@ -38,7 +38,7 @@ def _offer_response(offer: Offer) -> OfferResponse:
 @router.post("/places", response_model=PlaceResponse, status_code=201)
 async def create_place(
     payload: PlaceCreate,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> PlaceResponse:
     place = await service.create_place(
@@ -49,7 +49,7 @@ async def create_place(
 
 @router.get("/places", response_model=list[PlaceResponse])
 async def list_places(
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> list[PlaceResponse]:
     places = await service.list_places(session, user_id)
@@ -59,7 +59,7 @@ async def list_places(
 @router.post("/offers", response_model=OfferResponse, status_code=201)
 async def create_offer(
     payload: OfferCreate,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.create_offer(
@@ -79,7 +79,7 @@ async def create_offer(
 
 @router.get("/offers", response_model=list[OfferResponse])
 async def list_offers(
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> list[OfferResponse]:
     offers = await service.list_offers(session, user_id)
@@ -89,7 +89,7 @@ async def list_offers(
 @router.get("/offers/{offer_id}", response_model=OfferResponse)
 async def get_offer(
     offer_id: int,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.get_offer(session, user_id, offer_id)
@@ -100,7 +100,7 @@ async def get_offer(
 async def update_offer(
     offer_id: int,
     payload: OfferUpdate,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.update_offer(
@@ -119,7 +119,7 @@ async def update_offer(
 @router.delete("/offers/{offer_id}", status_code=204)
 async def delete_offer(
     offer_id: int,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> None:
     await service.delete_offer(session, user_id, offer_id)

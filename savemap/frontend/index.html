@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -96,6 +98,29 @@
         <p class="subtitle">매장과 혜택을 직접 등록·관리하세요</p>
       </header>
       <div class="screen-body">
+        <div id="merchant-login" class="card-form">
+          <p class="subtitle" id="auth-mode-label">사업자 콘솔은 로그인 후 이용할 수 있습니다.</p>
+          <div class="form-group">
+            <label for="auth-email">이메일</label>
+            <input type="email" id="auth-email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="auth-password">비밀번호</label>
+            <input type="password" id="auth-password" autocomplete="current-password" minlength="6" required />
+          </div>
+          <div class="form-row">
+            <button type="button" id="auth-login-btn" class="btn-primary">로그인</button>
+            <button type="button" id="auth-signup-btn" class="btn-secondary">회원가입</button>
+          </div>
+          <div id="auth-msg"></div>
+        </div>
+
+        <div id="merchant-authed" class="hidden">
+        <div class="list-section-header">
+          <span id="auth-user-email" class="subtitle"></span>
+          <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
+        </div>
+
         <h2>매장 등록</h2>
         <form id="place-form" class="card-form">
           <div class="form-group">
@@ -167,6 +192,7 @@
           <button type="button" id="load-offers-btn" class="btn-text">새로고침</button>
         </div>
         <div id="offers-list"></div>
+        </div>
       </div>
     </section>
 
