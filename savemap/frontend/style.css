@@ -227,6 +227,24 @@ body {
   cursor: pointer;
 }
 
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.icon-inline {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.icon-inline svg {
+  width: 15px;
+  height: 15px;
+}
+
 .pill-btn:hover,
 .pill-select:hover {
   background: rgba(255, 255, 255, 0.92);
@@ -283,6 +301,9 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* --- Bottom sheet --- */
@@ -353,6 +374,10 @@ body {
   font-weight: 800;
   color: var(--tier-color, #94a3b8);
   letter-spacing: 0.02em;
+}
+
+.tier-tag.tier-pending {
+  color: var(--gold);
 }
 
 /* --- Result / info cards --- */
@@ -643,9 +668,15 @@ select:focus {
 }
 
 .nav-icon {
-  font-size: 1.3rem;
+  display: block;
   opacity: 0.5;
   transition: transform 0.15s;
+}
+
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 .nav-label {
@@ -675,9 +706,21 @@ select:focus {
 }
 
 .character-avatar {
-  font-size: 3.2rem;
-  line-height: 1;
-  margin-bottom: 6px;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--primary), var(--primary-dark));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35);
+}
+
+.character-avatar svg {
+  width: 40px;
+  height: 40px;
 }
 
 .character-level {
@@ -798,9 +841,22 @@ select:focus {
   right: 14px;
   background: none;
   border: none;
-  font-size: 1.1rem;
   color: var(--ink-soft);
   cursor: pointer;
+  display: flex;
+}
+
+.detail-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.empty-msg svg,
+.error-msg svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 2px;
 }
 
 .expected-savings {

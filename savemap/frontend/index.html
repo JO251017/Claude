@@ -19,7 +19,7 @@
 
       <div class="floating-topbar">
         <div class="topbar-row">
-          <div class="brand-pill glass">💰 SaveMap</div>
+          <div class="brand-pill glass">SaveMap</div>
           <div class="xp-badge glass" id="savings-badge">
             <div class="xp-ring" id="savings-ring">
               <div class="xp-ring-inner" id="savings-level">Lv.1</div>
@@ -31,7 +31,10 @@
           </div>
         </div>
         <div class="search-row">
-          <button type="button" id="use-location-btn" class="pill-btn">📍 내 위치</button>
+          <button type="button" id="use-location-btn" class="pill-btn">
+            <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+            <span id="use-location-label">내 위치</span>
+          </button>
           <select id="s-radius" class="pill-select">
             <option value="1">1km</option>
             <option value="3" selected>3km</option>
@@ -49,7 +52,10 @@
         </div>
       </div>
 
-      <button type="button" id="research-btn" class="research-btn hidden">🔄 이 지역에서 재검색</button>
+      <button type="button" id="research-btn" class="research-btn hidden">
+        <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg></span>
+        이 지역에서 재검색
+      </button>
 
       <input type="hidden" id="s-lat" value="36.9925" />
       <input type="hidden" id="s-lng" value="127.1130" />
@@ -65,7 +71,7 @@
       <!-- 절약 정보 상세 (예상 절약 확인 + 절약 인증) -->
       <div id="offer-detail-overlay" class="detail-overlay hidden">
         <div class="detail-sheet glass">
-          <button type="button" id="detail-close-btn" class="detail-close">✕</button>
+          <button type="button" id="detail-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           <div id="detail-content"></div>
         </div>
       </div>
@@ -74,7 +80,7 @@
     <!-- EXCHANGE: 절약 자산 교환 -->
     <section id="screen-exchange" class="screen">
       <header class="screen-header">
-        <h1>🔄 절약 교환소</h1>
+        <h1>절약 교환소</h1>
         <p class="subtitle">내가 사용하지 않는 절약 기회를 다른 사람이 필요한 절약 기회로 바꿔보세요.</p>
       </header>
       <div class="screen-body">
@@ -94,12 +100,12 @@
             <div class="form-group">
               <label for="a-category">카테고리</label>
               <select id="a-category">
-                <option value="cafe">☕ 카페</option>
-                <option value="food">🍔 음식</option>
-                <option value="shopping">🛒 쇼핑</option>
-                <option value="transport">🚗 교통</option>
-                <option value="culture">🎬 문화</option>
-                <option value="etc">🎁 기타</option>
+                <option value="cafe">카페</option>
+                <option value="food">음식</option>
+                <option value="shopping">쇼핑</option>
+                <option value="transport">교통</option>
+                <option value="culture">문화</option>
+                <option value="etc">기타</option>
               </select>
             </div>
             <div class="form-group">
@@ -141,7 +147,7 @@
     <!-- MY: 나는 얼마나 아꼈는가 -->
     <section id="screen-my" class="screen">
       <header class="screen-header">
-        <h1>🧑 MY</h1>
+        <h1>MY</h1>
         <p class="subtitle">나만의 절약 탐험가</p>
       </header>
       <div class="screen-body">
@@ -169,11 +175,11 @@
           </div>
 
           <div class="character-card glass">
-            <div class="character-avatar" id="character-avatar">🧭</div>
+            <div class="character-avatar" id="character-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg></div>
             <div class="character-level" id="my-level-badge">Lv.1</div>
             <div class="character-title" id="my-title">절약 초보</div>
             <div class="saving-amount">
-              💰 누적 절약<br />
+              누적 절약<br />
               <span id="my-total-saved">₩0</span>
             </div>
             <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
@@ -188,8 +194,8 @@
           <div id="my-badges" class="badge-row"></div>
 
           <div class="list-section-header"><h2>바로가기</h2></div>
-          <button type="button" class="btn-secondary" data-goto="exchange">🔄 내 절약 자산 보기</button>
-          <button type="button" class="btn-secondary" data-goto="merchant">🏪 사업자 콘솔</button>
+          <button type="button" class="btn-secondary" data-goto="exchange">내 절약 자산 보기</button>
+          <button type="button" class="btn-secondary" data-goto="merchant">사업자 콘솔</button>
         </div>
       </div>
     </section>
@@ -197,11 +203,11 @@
     <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 -->
     <section id="screen-community" class="screen">
       <header class="screen-header">
-        <h1>👥 COMMUNITY</h1>
+        <h1>COMMUNITY</h1>
         <p class="subtitle">제보와 검증으로 우리 지역 절약 데이터를 함께 만들어요</p>
       </header>
       <div class="screen-body">
-        <h2>📸 절약 정보 제보</h2>
+        <h2>절약 정보 제보</h2>
         <p class="subtitle">사진을 올리면 AI가 가격·혜택을 자동으로 읽어드려요</p>
         <form id="report-form" class="card-form">
           <div class="form-group">
@@ -233,7 +239,7 @@
     <!-- 사업자 콘솔 (MY에서 진입, 하단 탭에는 노출하지 않음) -->
     <section id="screen-merchant" class="screen">
       <header class="screen-header">
-        <h1>🏪 사업자 콘솔</h1>
+        <h1>사업자 콘솔</h1>
         <p class="subtitle">매장과 혜택을 직접 등록·관리하세요</p>
       </header>
       <div class="screen-body">
@@ -320,16 +326,16 @@
 
     <nav class="bottom-nav">
       <button class="nav-btn active" data-screen="map">
-        <span class="nav-icon">🗺️</span><span class="nav-label">MAP</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg></span><span class="nav-label">MAP</span>
       </button>
       <button class="nav-btn" data-screen="exchange">
-        <span class="nav-icon">🔄</span><span class="nav-label">EXCHANGE</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg></span><span class="nav-label">EXCHANGE</span>
       </button>
       <button class="nav-btn" data-screen="my">
-        <span class="nav-icon">🧑</span><span class="nav-label">MY</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg></span><span class="nav-label">MY</span>
       </button>
       <button class="nav-btn" data-screen="community">
-        <span class="nav-icon">👥</span><span class="nav-label">COMMUNITY</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg></span><span class="nav-label">COMMUNITY</span>
       </button>
     </nav>
   </div>

@@ -9,31 +9,49 @@ const CATEGORY_LABELS = {
 };
 
 const ASSET_CATEGORY_LABELS = {
-  cafe: '☕ 카페',
-  food: '🍔 음식',
-  shopping: '🛒 쇼핑',
-  transport: '🚗 교통',
-  culture: '🎬 문화',
-  etc: '🎁 기타',
+  cafe: '카페',
+  food: '음식',
+  shopping: '쇼핑',
+  transport: '교통',
+  culture: '문화',
+  etc: '기타',
+};
+
+// 라인 아이콘 세트 (이모지 대체용, currentColor로 테마 색상 상속)
+const ICON_SVG_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+const ICONS = {
+  sprout: `<svg ${ICON_SVG_ATTRS}><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg>`,
+  compass: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5 13 13l-3.5 1.5L11 11z"/></svg>`,
+  backpack: `<svg ${ICON_SVG_ATTRS}><rect x="5" y="8" width="14" height="13" rx="3"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M9 13h6"/></svg>`,
+  map: `<svg ${ICON_SVG_ATTRS}><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg>`,
+  medal: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="15" r="6"/><path d="M9 3 12 9l3-6"/><path d="M12 12v6"/></svg>`,
+  shield: `<svg ${ICON_SVG_ATTRS}><path d="M12 3 5 6v6c0 5 3 8 7 9 4-1 7-4 7-9V6z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>`,
+  crown: `<svg ${ICON_SVG_ATTRS}><path d="m4 8 3 3 5-6 5 6 3-3-1.5 10h-13Z"/><path d="M6 20h12"/></svg>`,
+  swap: `<svg ${ICON_SVG_ATTRS}><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg>`,
+  user: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg>`,
+  people: `<svg ${ICON_SVG_ATTRS}><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg>`,
+  pin: `<svg ${ICON_SVG_ATTRS}><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
+  refresh: `<svg ${ICON_SVG_ATTRS}><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg>`,
+  check: `<svg ${ICON_SVG_ATTRS}><path d="m5 12 5 5 9-11"/></svg>`,
 };
 
 // (가정) 레벨 구간별 캐릭터 아바타. 실제 AI 3D 캐릭터 생성 전 단계의 임시(Mock) 표현.
 const CHARACTER_AVATARS = [
-  { minLevel: 1, emoji: '🧑‍🌾' },
-  { minLevel: 2, emoji: '🧭' },
-  { minLevel: 3, emoji: '🎒' },
-  { minLevel: 4, emoji: '🗺️' },
-  { minLevel: 5, emoji: '🏅' },
-  { minLevel: 6, emoji: '⚔️' },
-  { minLevel: 7, emoji: '👑' },
+  { minLevel: 1, icon: 'sprout' },
+  { minLevel: 2, icon: 'compass' },
+  { minLevel: 3, icon: 'backpack' },
+  { minLevel: 4, icon: 'map' },
+  { minLevel: 5, icon: 'medal' },
+  { minLevel: 6, icon: 'shield' },
+  { minLevel: 7, icon: 'crown' },
 ];
 
 function characterAvatarFor(level) {
-  let emoji = CHARACTER_AVATARS[0].emoji;
+  let icon = CHARACTER_AVATARS[0].icon;
   for (const tier of CHARACTER_AVATARS) {
-    if (level >= tier.minLevel) emoji = tier.emoji;
+    if (level >= tier.minLevel) icon = tier.icon;
   }
-  return emoji;
+  return ICONS[icon];
 }
 
 let currentCategory = '';
@@ -172,10 +190,10 @@ document.querySelectorAll('[data-goto]').forEach((btn) => {
 
 // --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
-  if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '✨ 레전더리' };
-  if (savingsRate >= 30) return { cls: 'rarity-epic', label: '💜 에픽' };
-  if (savingsRate >= 10) return { cls: 'rarity-rare', label: '💎 레어' };
-  if (savingsRate > 0) return { cls: 'rarity-uncommon', label: '🍀 언커먼' };
+  if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '레전더리' };
+  if (savingsRate >= 30) return { cls: 'rarity-epic', label: '에픽' };
+  if (savingsRate >= 10) return { cls: 'rarity-rare', label: '레어' };
+  if (savingsRate > 0) return { cls: 'rarity-uncommon', label: '언커먼' };
   return { cls: 'rarity-common', label: '일반' };
 }
 
@@ -210,7 +228,7 @@ async function loadSavingsBadge() {
 async function loadMyProfile() {
   try {
     const s = await apiFetch('/users/me/savings-summary');
-    document.getElementById('character-avatar').textContent = characterAvatarFor(s.level);
+    document.getElementById('character-avatar').innerHTML = characterAvatarFor(s.level);
     document.getElementById('my-level-badge').textContent = `Lv.${s.level}`;
     document.getElementById('my-title').textContent = s.title;
     document.getElementById('my-total-saved').textContent = formatWon(s.total_saved);
@@ -222,9 +240,9 @@ async function loadMyProfile() {
     document.getElementById('my-cert-count').textContent = s.certification_count;
 
     const badges = [];
-    if (s.certification_count >= 1) badges.push('💰 첫 절약 인증');
-    if (s.total_saved >= 100_000) badges.push('🏆 10만원 절약 달성');
-    if (s.total_saved >= 1_000_000) badges.push('👑 절약왕 달성');
+    if (s.certification_count >= 1) badges.push('첫 절약 인증');
+    if (s.total_saved >= 100_000) badges.push('10만원 절약 달성');
+    if (s.total_saved >= 1_000_000) badges.push('절약왕 달성');
     document.getElementById('my-badges').innerHTML = badges.length
       ? badges.map((b) => `<span class="badge-pill">${b}</span>`).join('')
       : '<span class="empty-msg">아직 획득한 배지가 없어요. 절약 인증을 시작해보세요!</span>';
@@ -258,14 +276,15 @@ document.querySelectorAll('.chip').forEach((chip) => {
 
 // --- 내 위치 사용 ---
 const useLocationBtn = document.getElementById('use-location-btn');
+const useLocationLabel = document.getElementById('use-location-label');
 useLocationBtn.addEventListener('click', () => {
   if (!navigator.geolocation) {
     alert('이 브라우저는 위치 정보를 지원하지 않습니다.');
     return;
   }
-  const originalLabel = useLocationBtn.textContent;
+  const originalLabel = useLocationLabel.textContent;
   useLocationBtn.disabled = true;
-  useLocationBtn.textContent = '📍 위치 확인 중...';
+  useLocationLabel.textContent = '위치 확인 중...';
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
@@ -275,12 +294,12 @@ useLocationBtn.addEventListener('click', () => {
       document.getElementById('s-lng').value = lng.toFixed(6);
       if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
       useLocationBtn.disabled = false;
-      useLocationBtn.textContent = originalLabel;
+      useLocationLabel.textContent = originalLabel;
       runSearch();
     },
     (err) => {
       useLocationBtn.disabled = false;
-      useLocationBtn.textContent = originalLabel;
+      useLocationLabel.textContent = originalLabel;
       const reasons = {
         1: '위치 접근 권한이 거부되었습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 위치 권한을 허용해주세요.',
         2: '위치 정보를 확인할 수 없습니다.',
@@ -392,11 +411,11 @@ function openOfferDetail(r) {
       <span class="final-price">${r.final_price.toLocaleString()}원</span>
       ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
     </div>
-    ${r.total_savings > 0 ? `<div class="expected-savings">💰 예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</div>` : ''}
-    <div class="meta-line">📍 현재 위치에서 ${r.distance_m.toFixed(0)}m · 신뢰도 ${(r.trust_score * 100).toFixed(0)}%</div>
+    ${r.total_savings > 0 ? `<div class="expected-savings">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</div>` : ''}
+    <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m · 신뢰도 ${(r.trust_score * 100).toFixed(0)}%</div>
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
-      <button type="button" class="btn-primary" id="detail-certify-btn">✅ 절약 인증하기</button>
+      <button type="button" class="btn-primary" id="detail-certify-btn">절약 인증하기</button>
     </div>
     <div id="detail-certify-msg"></div>
   `;
@@ -432,7 +451,7 @@ async function certifyOffer(r) {
       body: JSON.stringify({ method: 'simple', actual_price: actualPrice }),
     });
     msgEl.innerHTML = `
-      <p class="empty-msg">✅ 절약 인증 완료! 💰 +${Math.round(cert.amount).toLocaleString()}원
+      <p class="empty-msg">${ICONS.check} 절약 인증 완료! +${Math.round(cert.amount).toLocaleString()}원
       (누적 ${formatWon(cert.total_saved)}, Lv.${cert.level} ${escapeHtml(cert.title)})</p>`;
     loadSavingsBadge();
     loadMyProfile();
@@ -465,7 +484,7 @@ async function runSearch() {
       return;
     }
 
-    countEl.textContent = `🔥 지금 잡을 수 있는 절약 ${data.results.length}개`;
+    countEl.textContent = `지금 잡을 수 있는 절약 ${data.results.length}개`;
     resultsEl.innerHTML = data.results
       .map((r, i) => {
         const tier = getRarityTier(r.savings_rate);
@@ -482,7 +501,7 @@ async function runSearch() {
         <div class="price-line">
           <span class="final-price">${r.final_price.toLocaleString()}원</span>
           ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
-          ${r.total_savings > 0 ? `<span class="savings-rate">💰 예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</span>` : ''}
+          ${r.total_savings > 0 ? `<span class="savings-rate">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</span>` : ''}
         </div>
         <div class="meta-line">신뢰도 ${(r.trust_score * 100).toFixed(0)}% · 점수 ${r.score}</div>
       </div>`;
@@ -568,7 +587,7 @@ async function loadRecentReports() {
       <div class="list-row">
         [${CATEGORY_LABELS[r.ai_category] || r.ai_category || '분류중'}] ${escapeHtml(r.ocr_title || '(제목 인식 중)')}
         ${r.ocr_price != null ? ` - ${r.ocr_price.toLocaleString()}원` : ''}
-        <span class="tier-tag">${r.status === 'pending' ? '🟡 확인 필요' : r.status}</span>
+        <span class="tier-tag ${r.status === 'pending' ? 'tier-pending' : ''}">${r.status === 'pending' ? '확인 필요' : r.status}</span>
       </div>`
           )
           .join('')
