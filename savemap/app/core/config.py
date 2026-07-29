@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
     supabase_storage_bucket: str = "reports"
 
+    admin_sync_key: str = ""
+
     search_default_radius_km: float = 3.0
     search_max_radius_km: float = 10.0
     rank_savings_weight: float = 0.7

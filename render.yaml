@@ -32,6 +32,8 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
+      - key: ADMIN_SYNC_KEY
+        sync: false
       - key: REDIS_URL
         fromService:
           type: redis
