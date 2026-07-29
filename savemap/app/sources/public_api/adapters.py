@@ -1,3 +1,4 @@
+import asyncio
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -299,17 +300,29 @@ class OnnuriMerchantAdapter(PublicApiAdapter):
     응답 필드 확인됨 (사용자 제공 Swagger 문서 기준, 2025-07-31 최신본).
 
     End Point: https://api.odcloud.kr/api/3060079/v1/uddi:7ffa42f8-01d1-4329-aa94-aefb67c53cf1
-    원본 데이터에 좌표가 없어 매장마다 카카오 주소 검색(geocode)으로 좌표를 채운다 —
-    전국 단위라 항목이 매우 많을 수 있어 한 번에 가져오는 개수를 max_items로 제한한다.
+    원본 데이터에 좌표가 없어 매장마다 카카오 주소 검색(geocode)으로 좌표를 채운다
+    (동시 처리) — 전국 단위라 항목이 매우 많을 수 있어 한 번에 가져오는 개수를
+    max_items로 제한한다.
     주소 지오코딩에 실패한 항목은 (좌표 없이 지도에 표시할 수 없으므로) 건너뛴다.
     "지역혜택 상시 정보"라 만료일이 없는 CORE_BASE 레이어로 분류한다.
     """
 
     layer = Layer.CORE_BASE
 
-    def __init__(self, kakao: KakaoClient | None = None, max_items: int = 50):
+    def __init__(self, kakao: KakaoClient | None = None, max_items: int = 30):
         self.kakao = kakao or KakaoClient()
         self.max_items = max_items
+
+    async def _geocode(self, mapped: dict) -> dict | None:
+        try:
+            geo = await self.kakao.geocode(mapped["address"])
+        except Exception:
+            return None
+        if geo is None:
+            return None
+        mapped["lat"] = geo.lat
+        mapped["lng"] = geo.lng
+        return mapped
 
     async def fetch_raw(self) -> list[dict]:
         async with httpx.AsyncClient(base_url=ONNURI_BASE_URL, timeout=30) as client:
@@ -320,21 +333,11 @@ class OnnuriMerchantAdapter(PublicApiAdapter):
             resp.raise_for_status()
             payload = resp.json()
 
-        results: list[dict] = []
-        for row in payload.get("data", []):
-            mapped = _map_onnuri_row(row)
-            if mapped is None:
-                continue
-            try:
-                geo = await self.kakao.geocode(mapped["address"])
-            except Exception:
-                geo = None
-            if geo is None:
-                continue
-            mapped["lat"] = geo.lat
-            mapped["lng"] = geo.lng
-            results.append(mapped)
-        return results
+        candidates = [m for m in (_map_onnuri_row(row) for row in payload.get("data", [])) if m]
+        # 주소를 하나씩 순서대로 지오코딩하면 요청이 많을 때 응답이 느려져 Render 무료
+        # 플랜의 요청 타임아웃에 걸릴 수 있어, 동시에 처리한다.
+        geocoded = await asyncio.gather(*(self._geocode(m) for m in candidates))
+        return [m for m in geocoded if m is not None]
 
 
 LOCAL_CURRENCY_BASE_URL = "https://apis.data.go.kr"
