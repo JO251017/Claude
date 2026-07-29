@@ -1,3 +1,4 @@
+import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
@@ -120,15 +121,60 @@ SPORTS_BASE_URL = "https://apis.data.go.kr"
 SPORTS_PATH = "/B551014/SRVC_API_SFMS_FACI"
 
 
+def _map_sports_item(item: dict) -> dict | None:
+    """사용자가 제공한 실제 응답 예시(XML)로 필드명이 확인됨. 공공/민간 구분 없이 전부
+    포함한다(사용자 지시) — 다만 이 데이터셋엔 무료/할인 여부 필드가 없어(민간 사설
+    헬스장도 섞여 있음) 특정 혜택을 보장하는 카테고리(무료/할인) 대신 "지역혜택"(주변
+    체육시설 정보)으로 분류해 허위 할인 정보처럼 보이지 않게 한다. 폐업/휴업은 제외한다."""
+    if item.get("faci_stat_nm") != "정상운영":
+        return None
+    name = item.get("faci_nm")
+    lat = _to_float(item.get("faci_lat"))
+    lng = _to_float(item.get("faci_lot"))
+    if not name or lat is None or lng is None:
+        return None
+
+    ftype = item.get("ftype_nm")
+    return {
+        "place_name": name,
+        "title": f"{name}{f' ({ftype})' if ftype else ''}",
+        "category": "지역혜택",
+        "lat": lat,
+        "lng": lng,
+        "address": item.get("faci_road_addr") or item.get("faci_addr"),
+        "external_ref": item.get("faci_cd"),
+        "extra": {
+            "facility_type": ftype,
+            "business_type": item.get("fcob_nm"),
+            "phone": item.get("faci_tel_no"),
+            "region": item.get("cp_nm"),
+            "district": item.get("addr_cpb_nm") or item.get("cpb_nm"),
+        },
+    }
+
+
 class SportsFacilityAdapter(PublicApiAdapter):
-    """data.go.kr: 전국체육시설 정보 (서울올림픽기념국민체육진흥공단) — 승인됨
+    """data.go.kr: 전국체육시설 정보 (서울올림픽기념국민체육진흥공단) — 승인됨,
+    응답 필드 확인됨 (사용자 제공 실제 응답 예시 기준). XML 응답이라 JSON 계열
+    GovDataClient 대신 직접 XML을 파싱한다.
 
     End Point: https://apis.data.go.kr/B551014/SRVC_API_SFMS_FACI (사용자 제공, 확인됨)
-    응답 필드명은 확인 안 됨 — data.go.kr 상세 페이지가 자동 접근을 차단해 조회하지 못했다.
     """
 
     async def fetch_raw(self) -> list[dict]:
-        raise NotImplementedError("응답 필드 미확인 (엔드포인트는 확인됨: " + SPORTS_PATH + ")")
+        async with httpx.AsyncClient(base_url=SPORTS_BASE_URL, timeout=30) as client:
+            resp = await client.get(
+                SPORTS_PATH,
+                params={"serviceKey": settings.data_go_kr_key, "pageNo": 1, "numOfRows": 100},
+            )
+            resp.raise_for_status()
+
+        root = ET.fromstring(resp.text)
+        mapped = [
+            _map_sports_item({child.tag: (child.text or "").strip() for child in item})
+            for item in root.findall(".//item")
+        ]
+        return [m for m in mapped if m is not None]
 
 
 CULTURE_FACILITY_BASE_URL = "https://apis.data.go.kr"
