@@ -13,20 +13,20 @@
 <body>
   <div class="app-shell">
 
-    <!-- 지도 화면 (메인) -->
+    <!-- MAP: 어디서 아낄 수 있는가 -->
     <section id="screen-map" class="screen active">
       <div id="map" class="map-fullscreen"></div>
 
       <div class="floating-topbar">
         <div class="topbar-row">
           <div class="brand-pill glass">💰 SaveMap</div>
-          <div class="xp-badge glass" id="xp-badge">
-            <div class="xp-ring" id="xp-ring">
-              <div class="xp-ring-inner" id="xp-level">Lv.1</div>
+          <div class="xp-badge glass" id="savings-badge">
+            <div class="xp-ring" id="savings-ring">
+              <div class="xp-ring-inner" id="savings-level">Lv.1</div>
             </div>
             <div class="xp-text">
-              <span class="xp-title" id="xp-title">짠지망생</span>
-              <span class="xp-sub" id="xp-sub">0 XP</span>
+              <span class="xp-title" id="savings-title">절약 초보</span>
+              <span class="xp-sub" id="savings-sub">₩0 절약</span>
             </div>
           </div>
         </div>
@@ -57,19 +57,152 @@
       <div class="bottom-sheet" id="bottom-sheet">
         <button type="button" class="sheet-handle-btn" id="sheet-toggle" aria-label="목록 펼치기/접기">
           <span class="sheet-handle"></span>
-          <span id="sheet-count" class="sheet-count">주변 절약 정보를 찾는 중...</span>
+          <span id="sheet-count" class="sheet-count">주변 절약 기회를 찾는 중...</span>
         </button>
         <div id="search-results" class="sheet-body"></div>
       </div>
+
+      <!-- 절약 정보 상세 (예상 절약 확인 + 절약 인증) -->
+      <div id="offer-detail-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="detail-close-btn" class="detail-close">✕</button>
+          <div id="detail-content"></div>
+        </div>
+      </div>
     </section>
 
-    <!-- 제보 화면 -->
-    <section id="screen-report" class="screen">
+    <!-- EXCHANGE: 절약 자산 교환 -->
+    <section id="screen-exchange" class="screen">
       <header class="screen-header">
-        <h1>📸 절약 정보 제보</h1>
-        <p class="subtitle">사진을 올리면 AI가 가격·혜택을 자동으로 읽어드려요</p>
+        <h1>🔄 절약 교환소</h1>
+        <p class="subtitle">내가 사용하지 않는 절약 기회를 다른 사람이 필요한 절약 기회로 바꿔보세요.</p>
       </header>
       <div class="screen-body">
+        <div id="exchange-login" class="card-form">
+          <p class="subtitle">내 절약 자산을 등록하려면 로그인이 필요해요. 둘러보는 건 로그인 없이도 가능합니다.</p>
+          <button type="button" class="btn-primary" data-goto="my">MY에서 로그인하기</button>
+        </div>
+
+        <div id="exchange-authed" class="hidden">
+          <div class="stats-grid">
+            <div class="stat-tile"><span id="exchange-my-count">0</span><label>보유 자산</label></div>
+            <div class="stat-tile"><span id="exchange-my-value">₩0</span><label>예상 절약 가치</label></div>
+          </div>
+
+          <h2>내 절약 자산 등록</h2>
+          <form id="asset-form" class="card-form">
+            <div class="form-group">
+              <label for="a-category">카테고리</label>
+              <select id="a-category">
+                <option value="cafe">☕ 카페</option>
+                <option value="food">🍔 음식</option>
+                <option value="shopping">🛒 쇼핑</option>
+                <option value="transport">🚗 교통</option>
+                <option value="culture">🎬 문화</option>
+                <option value="etc">🎁 기타</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="a-title">자산명</label>
+              <input type="text" id="a-title" placeholder="예: 아메리카노 쿠폰" required />
+            </div>
+            <div class="form-group">
+              <label for="a-condition">사용 조건 (선택)</label>
+              <input type="text" id="a-condition" placeholder="예: 아메리카노 1잔" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="a-value">예상 절약 가치 (원)</label>
+                <input type="text" id="a-value" placeholder="4500" />
+              </div>
+              <div class="form-group">
+                <label for="a-expires">사용 기한 (선택)</label>
+                <input type="date" id="a-expires" />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">등록하기</button>
+          </form>
+
+          <div class="list-section-header">
+            <h2>내 절약 자산</h2>
+            <button type="button" id="load-my-assets-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="my-assets-list"></div>
+        </div>
+
+        <div class="list-section-header">
+          <h2>교환 가능한 절약 자산</h2>
+          <button type="button" id="load-assets-btn" class="btn-text">새로고침</button>
+        </div>
+        <div id="assets-list"></div>
+      </div>
+    </section>
+
+    <!-- MY: 나는 얼마나 아꼈는가 -->
+    <section id="screen-my" class="screen">
+      <header class="screen-header">
+        <h1>🧑 MY</h1>
+        <p class="subtitle">나만의 절약 탐험가</p>
+      </header>
+      <div class="screen-body">
+        <div id="my-login" class="card-form">
+          <p class="subtitle" id="auth-mode-label">로그인하고 나만의 절약 탐험가를 시작하세요.</p>
+          <div class="form-group">
+            <label for="auth-email">이메일</label>
+            <input type="email" id="auth-email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="auth-password">비밀번호</label>
+            <input type="password" id="auth-password" autocomplete="current-password" minlength="6" required />
+          </div>
+          <div class="form-row">
+            <button type="button" id="auth-login-btn" class="btn-primary">로그인</button>
+            <button type="button" id="auth-signup-btn" class="btn-secondary">회원가입</button>
+          </div>
+          <div id="auth-msg"></div>
+        </div>
+
+        <div id="my-authed" class="hidden">
+          <div class="list-section-header">
+            <span id="auth-user-email" class="subtitle"></span>
+            <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
+          </div>
+
+          <div class="character-card glass">
+            <div class="character-avatar" id="character-avatar">🧭</div>
+            <div class="character-level" id="my-level-badge">Lv.1</div>
+            <div class="character-title" id="my-title">절약 초보</div>
+            <div class="saving-amount">
+              💰 누적 절약<br />
+              <span id="my-total-saved">₩0</span>
+            </div>
+            <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
+            <div class="saving-next" id="my-next-level-text">다음 레벨까지 ₩10,000</div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-tile"><span id="my-cert-count">0</span><label>절약 인증</label></div>
+            <div class="stat-tile"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
+          </div>
+
+          <div id="my-badges" class="badge-row"></div>
+
+          <div class="list-section-header"><h2>바로가기</h2></div>
+          <button type="button" class="btn-secondary" data-goto="exchange">🔄 내 절약 자산 보기</button>
+          <button type="button" class="btn-secondary" data-goto="merchant">🏪 사업자 콘솔</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 -->
+    <section id="screen-community" class="screen">
+      <header class="screen-header">
+        <h1>👥 COMMUNITY</h1>
+        <p class="subtitle">제보와 검증으로 우리 지역 절약 데이터를 함께 만들어요</p>
+      </header>
+      <div class="screen-body">
+        <h2>📸 절약 정보 제보</h2>
+        <p class="subtitle">사진을 올리면 AI가 가격·혜택을 자동으로 읽어드려요</p>
         <form id="report-form" class="card-form">
           <div class="form-group">
             <label for="r-image-url">사진 URL</label>
@@ -88,123 +221,115 @@
           <button type="submit" class="btn-primary">제보하기</button>
         </form>
         <div id="report-result"></div>
+
+        <div class="list-section-header">
+          <h2>최근 제보</h2>
+          <button type="button" id="load-recent-reports-btn" class="btn-text">새로고침</button>
+        </div>
+        <div id="recent-reports-list"></div>
       </div>
     </section>
 
-    <!-- 사업자 화면 -->
+    <!-- 사업자 콘솔 (MY에서 진입, 하단 탭에는 노출하지 않음) -->
     <section id="screen-merchant" class="screen">
       <header class="screen-header">
         <h1>🏪 사업자 콘솔</h1>
         <p class="subtitle">매장과 혜택을 직접 등록·관리하세요</p>
       </header>
       <div class="screen-body">
-        <div id="merchant-login" class="card-form">
-          <p class="subtitle" id="auth-mode-label">사업자 콘솔은 로그인 후 이용할 수 있습니다.</p>
-          <div class="form-group">
-            <label for="auth-email">이메일</label>
-            <input type="email" id="auth-email" autocomplete="email" required />
-          </div>
-          <div class="form-group">
-            <label for="auth-password">비밀번호</label>
-            <input type="password" id="auth-password" autocomplete="current-password" minlength="6" required />
-          </div>
-          <div class="form-row">
-            <button type="button" id="auth-login-btn" class="btn-primary">로그인</button>
-            <button type="button" id="auth-signup-btn" class="btn-secondary">회원가입</button>
-          </div>
-          <div id="auth-msg"></div>
+        <div id="merchant-guard" class="card-form">
+          <p class="subtitle">사업자 콘솔은 로그인 후 이용할 수 있어요.</p>
+          <button type="button" class="btn-primary" data-goto="my">MY에서 로그인하기</button>
         </div>
 
         <div id="merchant-authed" class="hidden">
-        <div class="list-section-header">
-          <span id="auth-user-email" class="subtitle"></span>
-          <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
-        </div>
-
-        <h2>매장 등록</h2>
-        <form id="place-form" class="card-form">
-          <div class="form-group">
-            <label for="p-name">매장명</label>
-            <input type="text" id="p-name" required />
-          </div>
-          <div class="form-group">
-            <label for="p-address">주소</label>
-            <input type="text" id="p-address" />
-          </div>
-          <div class="form-row">
+          <h2>매장 등록</h2>
+          <form id="place-form" class="card-form">
             <div class="form-group">
-              <label for="p-lat">위도</label>
-              <input type="text" id="p-lat" value="36.9925" required />
+              <label for="p-name">매장명</label>
+              <input type="text" id="p-name" required />
             </div>
             <div class="form-group">
-              <label for="p-lng">경도</label>
-              <input type="text" id="p-lng" value="127.1130" required />
+              <label for="p-address">주소</label>
+              <input type="text" id="p-address" />
             </div>
-          </div>
-          <button type="submit" class="btn-primary">매장 등록</button>
-        </form>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="p-lat">위도</label>
+                <input type="text" id="p-lat" value="36.9925" required />
+              </div>
+              <div class="form-group">
+                <label for="p-lng">경도</label>
+                <input type="text" id="p-lng" value="127.1130" required />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">매장 등록</button>
+          </form>
 
-        <h2>혜택 등록</h2>
-        <form id="offer-form" class="card-form">
-          <div class="form-group">
-            <label for="o-place-id">매장 ID</label>
-            <input type="text" id="o-place-id" required />
-          </div>
-          <div class="form-group">
-            <label for="o-title">혜택 제목</label>
-            <input type="text" id="o-title" required />
-          </div>
-          <div class="form-group">
-            <label for="o-category">카테고리</label>
-            <select id="o-category">
-              <option value="discount">할인</option>
-              <option value="free">무료</option>
-              <option value="closing_soon">마감임박</option>
-              <option value="free_parking">무료주차</option>
-              <option value="local_benefit">지역혜택</option>
-            </select>
-          </div>
-          <div class="form-row">
+          <h2>혜택 등록</h2>
+          <form id="offer-form" class="card-form">
             <div class="form-group">
-              <label for="o-base-price">원가</label>
-              <input type="text" id="o-base-price" />
+              <label for="o-place-id">매장 ID</label>
+              <input type="text" id="o-place-id" required />
             </div>
             <div class="form-group">
-              <label for="o-discount">할인액</label>
-              <input type="text" id="o-discount" />
+              <label for="o-title">혜택 제목</label>
+              <input type="text" id="o-title" required />
             </div>
-          </div>
-          <div class="form-group">
-            <label for="o-ttl">타임세일 (초, 비우면 상시할인)</label>
-            <input type="text" id="o-ttl" placeholder="예: 3600" />
-          </div>
-          <button type="submit" class="btn-primary">혜택 등록</button>
-        </form>
+            <div class="form-group">
+              <label for="o-category">카테고리</label>
+              <select id="o-category">
+                <option value="discount">할인</option>
+                <option value="free">무료</option>
+                <option value="closing_soon">마감임박</option>
+                <option value="free_parking">무료주차</option>
+                <option value="local_benefit">지역혜택</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="o-base-price">원가</label>
+                <input type="text" id="o-base-price" />
+              </div>
+              <div class="form-group">
+                <label for="o-discount">할인액</label>
+                <input type="text" id="o-discount" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="o-ttl">타임세일 (초, 비우면 상시할인)</label>
+              <input type="text" id="o-ttl" placeholder="예: 3600" />
+            </div>
+            <button type="submit" class="btn-primary">혜택 등록</button>
+          </form>
 
-        <div class="list-section-header">
-          <h2>내 매장 목록</h2>
-          <button type="button" id="load-places-btn" class="btn-text">새로고침</button>
-        </div>
-        <div id="places-list"></div>
+          <div class="list-section-header">
+            <h2>내 매장 목록</h2>
+            <button type="button" id="load-places-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="places-list"></div>
 
-        <div class="list-section-header">
-          <h2>내 혜택 목록</h2>
-          <button type="button" id="load-offers-btn" class="btn-text">새로고침</button>
-        </div>
-        <div id="offers-list"></div>
+          <div class="list-section-header">
+            <h2>내 혜택 목록</h2>
+            <button type="button" id="load-offers-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="offers-list"></div>
         </div>
       </div>
     </section>
 
     <nav class="bottom-nav">
       <button class="nav-btn active" data-screen="map">
-        <span class="nav-icon">🗺️</span><span class="nav-label">지도</span>
+        <span class="nav-icon">🗺️</span><span class="nav-label">MAP</span>
       </button>
-      <button class="nav-btn" data-screen="report">
-        <span class="nav-icon">📸</span><span class="nav-label">제보</span>
+      <button class="nav-btn" data-screen="exchange">
+        <span class="nav-icon">🔄</span><span class="nav-label">EXCHANGE</span>
       </button>
-      <button class="nav-btn" data-screen="merchant">
-        <span class="nav-icon">🏪</span><span class="nav-label">사업자</span>
+      <button class="nav-btn" data-screen="my">
+        <span class="nav-icon">🧑</span><span class="nav-label">MY</span>
+      </button>
+      <button class="nav-btn" data-screen="community">
+        <span class="nav-icon">👥</span><span class="nav-label">COMMUNITY</span>
       </button>
     </nav>
   </div>

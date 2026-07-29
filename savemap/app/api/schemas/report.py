@@ -18,3 +18,11 @@ class ReportResponse(BaseModel):
     ocr_price: float | None = None
     ocr_title: str | None = None
     has_location: bool = False
+
+
+class RecentReportItem(BaseModel):
+    id: int
+    ai_category: Category | None = None
+    status: ReportStatus
+    ocr_title: str | None = None
+    ocr_price: float | None = None

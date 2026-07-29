@@ -59,3 +59,25 @@ XP_REWARD: dict[XpReason, int] = {
     XpReason.VALID_REPORT: 20,
     XpReason.FIELD_VERIFICATION: 5,
 }
+
+
+class CertificationMethod(str, enum.Enum):
+    SIMPLE = "simple"
+    RECEIPT = "receipt"
+
+
+class CertificationConfidence(str, enum.Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+CERTIFICATION_CONFIDENCE: dict[CertificationMethod, CertificationConfidence] = {
+    CertificationMethod.RECEIPT: CertificationConfidence.HIGH,
+    CertificationMethod.SIMPLE: CertificationConfidence.MEDIUM,
+}
+
+
+class AssetStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    EXCHANGED = "exchanged"

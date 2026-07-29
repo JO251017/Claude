@@ -8,6 +8,34 @@ const CATEGORY_LABELS = {
   local_benefit: '지역혜택',
 };
 
+const ASSET_CATEGORY_LABELS = {
+  cafe: '☕ 카페',
+  food: '🍔 음식',
+  shopping: '🛒 쇼핑',
+  transport: '🚗 교통',
+  culture: '🎬 문화',
+  etc: '🎁 기타',
+};
+
+// (가정) 레벨 구간별 캐릭터 아바타. 실제 AI 3D 캐릭터 생성 전 단계의 임시(Mock) 표현.
+const CHARACTER_AVATARS = [
+  { minLevel: 1, emoji: '🧑‍🌾' },
+  { minLevel: 2, emoji: '🧭' },
+  { minLevel: 3, emoji: '🎒' },
+  { minLevel: 4, emoji: '🗺️' },
+  { minLevel: 5, emoji: '🏅' },
+  { minLevel: 6, emoji: '⚔️' },
+  { minLevel: 7, emoji: '👑' },
+];
+
+function characterAvatarFor(level) {
+  let emoji = CHARACTER_AVATARS[0].emoji;
+  for (const tier of CHARACTER_AVATARS) {
+    if (level >= tier.minLevel) emoji = tier.emoji;
+  }
+  return emoji;
+}
+
 let currentCategory = '';
 
 function escapeHtml(str) {
@@ -16,6 +44,10 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatWon(amount) {
+  return `₩${Math.round(amount || 0).toLocaleString()}`;
 }
 
 async function apiFetch(path, options = {}) {
@@ -35,7 +67,7 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// --- Supabase Auth (사업자 콘솔 로그인) ---
+// --- Supabase Auth (SaveMap 전체에서 공용으로 사용하는 로그인 상태) ---
 const supabaseClient =
   window.supabase && window.SAVEMAP_CONFIG?.supabaseUrl && window.SAVEMAP_CONFIG?.supabaseAnonKey
     ? window.supabase.createClient(window.SAVEMAP_CONFIG.supabaseUrl, window.SAVEMAP_CONFIG.supabaseAnonKey)
@@ -47,20 +79,35 @@ async function getAccessToken() {
   return data?.session?.access_token || null;
 }
 
-function renderAuthState(session) {
-  const loginEl = document.getElementById('merchant-login');
-  const authedEl = document.getElementById('merchant-authed');
-  const emailEl = document.getElementById('auth-user-email');
+function toggleGuard(loginId, authedId, session) {
+  const loginEl = document.getElementById(loginId);
+  const authedEl = document.getElementById(authedId);
+  if (!loginEl || !authedEl) return;
   if (session) {
     loginEl.classList.add('hidden');
     authedEl.classList.remove('hidden');
-    emailEl.textContent = session.user.email;
-    loadPlaces();
-    loadOffers();
   } else {
     loginEl.classList.remove('hidden');
     authedEl.classList.add('hidden');
   }
+}
+
+function renderAuthState(session) {
+  toggleGuard('my-login', 'my-authed', session);
+  toggleGuard('merchant-guard', 'merchant-authed', session);
+  toggleGuard('exchange-login', 'exchange-authed', session);
+
+  const emailEl = document.getElementById('auth-user-email');
+  loadSavingsBadge();
+
+  if (session) {
+    if (emailEl) emailEl.textContent = session.user.email;
+    loadMyProfile();
+    loadPlaces();
+    loadOffers();
+    loadMyAssets();
+  }
+  loadAssets();
 }
 
 if (supabaseClient) {
@@ -103,10 +150,27 @@ if (supabaseClient) {
     await supabaseClient.auth.signOut();
   });
 } else {
-  console.warn('Supabase 설정이 없어 사업자 로그인을 사용할 수 없습니다 (/config.js 확인 필요).');
+  console.warn('Supabase 설정이 없어 로그인을 사용할 수 없습니다 (/config.js 확인 필요).');
+  // 로그인 없이도 공개 데이터(절약 레벨 기본값, 교환 가능한 자산 목록)는 정상적으로 보여야 한다.
+  loadSavingsBadge();
+  loadAssets();
 }
 
-// --- RPG 희귀도 등급 (절약률 기준) ---
+// --- 하단 네비게이션 (화면 전환) + data-goto 바로가기 버튼 공용 ---
+function switchScreen(name) {
+  document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === name));
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
+}
+
+document.querySelectorAll('.nav-btn').forEach((btn) => {
+  btn.addEventListener('click', () => switchScreen(btn.dataset.screen));
+});
+
+document.querySelectorAll('[data-goto]').forEach((btn) => {
+  btn.addEventListener('click', () => switchScreen(btn.dataset.goto));
+});
+
+// --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
   if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '✨ 레전더리' };
   if (savingsRate >= 30) return { cls: 'rarity-epic', label: '💜 에픽' };
@@ -115,31 +179,66 @@ function getRarityTier(savingsRate) {
   return { cls: 'rarity-common', label: '일반' };
 }
 
-// --- XP / 레벨 뱃지 ---
-async function loadXpBadge() {
+// --- 절약 레벨 뱃지 (MAP 상단, "실제 절약금액" 기반 — XP 아님) ---
+async function loadSavingsBadge() {
+  const ringEl = document.getElementById('savings-ring');
+  const levelEl = document.getElementById('savings-level');
+  const titleEl = document.getElementById('savings-title');
+  const subEl = document.getElementById('savings-sub');
+  const token = await getAccessToken();
+
+  if (!token) {
+    ringEl.style.setProperty('--xp-pct', '0%');
+    levelEl.textContent = 'Lv.1';
+    titleEl.textContent = '절약 초보';
+    subEl.textContent = '로그인하고 시작하기';
+    return;
+  }
+
   try {
-    const xp = await apiFetch('/users/me/xp');
-    const pct = Math.round((xp.xp_into_level / xp.xp_per_level) * 100);
-    document.getElementById('xp-ring').style.setProperty('--xp-pct', `${pct}%`);
-    document.getElementById('xp-level').textContent = `Lv.${xp.level}`;
-    document.getElementById('xp-title').textContent = xp.title;
-    document.getElementById('xp-sub').textContent = `${xp.xp_into_level}/${xp.xp_per_level} XP`;
+    const s = await apiFetch('/users/me/savings-summary');
+    ringEl.style.setProperty('--xp-pct', `${s.progress_pct}%`);
+    levelEl.textContent = `Lv.${s.level}`;
+    titleEl.textContent = s.title;
+    subEl.textContent = `${formatWon(s.total_saved)} 절약`;
   } catch (err) {
-    // XP 뱃지는 부가 정보라 실패해도 나머지 화면에 영향 없음
-    console.warn('XP 정보를 불러오지 못했습니다:', err.message);
+    console.warn('절약 레벨 정보를 불러오지 못했습니다:', err.message);
   }
 }
-loadXpBadge();
 
-// --- 하단 네비게이션 (화면 전환) ---
-document.querySelectorAll('.nav-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`screen-${btn.dataset.screen}`).classList.add('active');
-  });
-});
+// --- MY: 나의 절약 탐험가 ---
+async function loadMyProfile() {
+  try {
+    const s = await apiFetch('/users/me/savings-summary');
+    document.getElementById('character-avatar').textContent = characterAvatarFor(s.level);
+    document.getElementById('my-level-badge').textContent = `Lv.${s.level}`;
+    document.getElementById('my-title').textContent = s.title;
+    document.getElementById('my-total-saved').textContent = formatWon(s.total_saved);
+    document.getElementById('my-saving-bar').style.width = `${s.progress_pct}%`;
+    document.getElementById('my-next-level-text').textContent =
+      s.next_threshold == null
+        ? '최고 레벨 구간입니다'
+        : `다음 레벨까지 ${formatWon(s.remaining_to_next)}`;
+    document.getElementById('my-cert-count').textContent = s.certification_count;
+
+    const badges = [];
+    if (s.certification_count >= 1) badges.push('💰 첫 절약 인증');
+    if (s.total_saved >= 100_000) badges.push('🏆 10만원 절약 달성');
+    if (s.total_saved >= 1_000_000) badges.push('👑 절약왕 달성');
+    document.getElementById('my-badges').innerHTML = badges.length
+      ? badges.map((b) => `<span class="badge-pill">${b}</span>`).join('')
+      : '<span class="empty-msg">아직 획득한 배지가 없어요. 절약 인증을 시작해보세요!</span>';
+  } catch (err) {
+    console.warn('내 프로필 정보를 불러오지 못했습니다:', err.message);
+  }
+
+  try {
+    const assets = await apiFetch('/exchange/assets/mine');
+    document.getElementById('my-asset-count').textContent = assets.length;
+  } catch {
+    // 자산 개수는 부가 정보라 실패해도 무시
+  }
+}
 
 // --- 바텀시트 펼치기/접기 ---
 const bottomSheet = document.getElementById('bottom-sheet');
@@ -234,6 +333,16 @@ function clearMarkers() {
   }
 }
 
+// "절약 보물" 마커: 매장 아이콘보다 "여기서 얼마를 아낄 수 있는가"를 먼저 보여준다.
+function treasureMarkerImage() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+    <circle cx="13" cy="13" r="10" fill="#f59e0b" stroke="white" stroke-width="3"/>
+  </svg>`;
+  return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(26, 26));
+}
+
+let lastResults = [];
+
 function renderMapMarkers(originLat, originLng, results) {
   if (!kakaoMap) return;
   clearMarkers();
@@ -252,25 +361,84 @@ function renderMapMarkers(originLat, originLng, results) {
     ),
   });
 
-  const infoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
-
   results.forEach((r) => {
     const pos = new kakao.maps.LatLng(r.lat, r.lng);
     bounds.extend(pos);
-    const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos });
-    kakao.maps.event.addListener(marker, 'click', () => {
-      infoWindow.setContent(
-        `<div style="padding:8px 10px;font-size:12px;min-width:140px;">
-          <strong>${escapeHtml(r.place_name)}</strong><br/>
-          ${r.final_price.toLocaleString()}원 ${r.savings_rate > 0 ? `(${r.savings_rate}% 절약)` : ''}
-        </div>`
-      );
-      infoWindow.open(kakaoMap, marker);
-    });
+    const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: treasureMarkerImage() });
+    kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
   });
 
   kakaoMap.setBounds(bounds);
+}
+
+// --- 절약 정보 상세 (예상 절약 확인 + 절약 인증) ---
+const detailOverlay = document.getElementById('offer-detail-overlay');
+const detailContent = document.getElementById('detail-content');
+
+document.getElementById('detail-close-btn').addEventListener('click', () => {
+  detailOverlay.classList.add('hidden');
+});
+
+function openOfferDetail(r) {
+  const tier = getRarityTier(r.savings_rate);
+  detailContent.innerHTML = `
+    <div class="badge-group">
+      <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
+      <span class="tier-tag">${tier.label}</span>
+    </div>
+    <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
+    <div class="price-line">
+      <span class="final-price">${r.final_price.toLocaleString()}원</span>
+      ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
+    </div>
+    ${r.total_savings > 0 ? `<div class="expected-savings">💰 예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</div>` : ''}
+    <div class="meta-line">📍 현재 위치에서 ${r.distance_m.toFixed(0)}m · 신뢰도 ${(r.trust_score * 100).toFixed(0)}%</div>
+    <div class="detail-actions">
+      <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
+      <button type="button" class="btn-primary" id="detail-certify-btn">✅ 절약 인증하기</button>
+    </div>
+    <div id="detail-certify-msg"></div>
+  `;
+  detailOverlay.classList.remove('hidden');
+
+  document.getElementById('detail-directions-btn').addEventListener('click', () => {
+    window.open(`https://map.kakao.com/link/to/${encodeURIComponent(r.place_name)},${r.lat},${r.lng}`, '_blank');
+  });
+
+  document.getElementById('detail-certify-btn').addEventListener('click', () => certifyOffer(r));
+}
+
+async function certifyOffer(r) {
+  const msgEl = document.getElementById('detail-certify-msg');
+  const token = await getAccessToken();
+  if (!token) {
+    msgEl.innerHTML = '<p class="error-msg">절약 인증은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.</p>';
+    return;
+  }
+
+  const input = prompt('실제로 얼마에 구매하셨나요? (원)', Math.round(r.final_price));
+  if (input === null) return;
+  const actualPrice = parseFloat(input);
+  if (Number.isNaN(actualPrice) || actualPrice < 0) {
+    msgEl.innerHTML = '<p class="error-msg">올바른 금액을 입력해주세요.</p>';
+    return;
+  }
+
+  msgEl.innerHTML = '<p class="empty-msg">절약 인증 처리 중...</p>';
+  try {
+    const cert = await apiFetch(`/offers/${r.offer_id}/certify`, {
+      method: 'POST',
+      body: JSON.stringify({ method: 'simple', actual_price: actualPrice }),
+    });
+    msgEl.innerHTML = `
+      <p class="empty-msg">✅ 절약 인증 완료! 💰 +${Math.round(cert.amount).toLocaleString()}원
+      (누적 ${formatWon(cert.total_saved)}, Lv.${cert.level} ${escapeHtml(cert.title)})</p>`;
+    loadSavingsBadge();
+    loadMyProfile();
+  } catch (err) {
+    msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
 }
 
 // --- 검색 실행 ---
@@ -284,24 +452,25 @@ async function runSearch() {
 
   const resultsEl = document.getElementById('search-results');
   const countEl = document.getElementById('sheet-count');
-  resultsEl.innerHTML = '<p class="empty-msg">검색 중...</p>';
+  resultsEl.innerHTML = '<p class="empty-msg">주변 절약 기회를 찾는 중...</p>';
 
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
+    lastResults = data.results;
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results);
 
     if (data.results.length === 0) {
-      countEl.textContent = '주변에 절약 정보가 없어요';
+      countEl.textContent = '주변에 절약 기회가 없어요';
       resultsEl.innerHTML = '<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>';
       return;
     }
 
-    countEl.textContent = `주변 절약 정보 ${data.results.length}개`;
+    countEl.textContent = `🔥 지금 잡을 수 있는 절약 ${data.results.length}개`;
     resultsEl.innerHTML = data.results
-      .map((r) => {
+      .map((r, i) => {
         const tier = getRarityTier(r.savings_rate);
         return `
-      <div class="result-card ${tier.cls}">
+      <div class="result-card ${tier.cls}" data-idx="${i}">
         <div class="result-header">
           <div class="badge-group">
             <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
@@ -313,12 +482,16 @@ async function runSearch() {
         <div class="price-line">
           <span class="final-price">${r.final_price.toLocaleString()}원</span>
           ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
-          ${r.savings_rate > 0 ? `<span class="savings-rate">${r.savings_rate}% 절약</span>` : ''}
+          ${r.total_savings > 0 ? `<span class="savings-rate">💰 예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</span>` : ''}
         </div>
         <div class="meta-line">신뢰도 ${(r.trust_score * 100).toFixed(0)}% · 점수 ${r.score}</div>
       </div>`;
       })
       .join('');
+
+    resultsEl.querySelectorAll('.result-card').forEach((card) => {
+      card.addEventListener('click', () => openOfferDetail(lastResults[Number(card.dataset.idx)]));
+    });
   } catch (err) {
     countEl.textContent = '검색 실패';
     resultsEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
@@ -328,7 +501,7 @@ async function runSearch() {
 initMap(36.9925, 127.113);
 runSearch();
 
-// --- 제보 ---
+// --- COMMUNITY: 제보 ---
 document.getElementById('report-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const image_url = document.getElementById('r-image-url').value.trim();
@@ -375,12 +548,132 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         </div>
       </div>`;
     e.target.reset();
+    loadRecentReports();
   } catch (err) {
     resultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   } finally {
     submitBtn.disabled = false;
   }
 });
+
+async function loadRecentReports() {
+  const listEl = document.getElementById('recent-reports-list');
+  listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
+  try {
+    const reports = await apiFetch('/reports/recent');
+    listEl.innerHTML = reports.length
+      ? reports
+          .map(
+            (r) => `
+      <div class="list-row">
+        [${CATEGORY_LABELS[r.ai_category] || r.ai_category || '분류중'}] ${escapeHtml(r.ocr_title || '(제목 인식 중)')}
+        ${r.ocr_price != null ? ` - ${r.ocr_price.toLocaleString()}원` : ''}
+        <span class="tier-tag">${r.status === 'pending' ? '🟡 확인 필요' : r.status}</span>
+      </div>`
+          )
+          .join('')
+      : '<p class="empty-msg">아직 제보된 정보가 없습니다.</p>';
+  } catch (err) {
+    listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+document.getElementById('load-recent-reports-btn').addEventListener('click', loadRecentReports);
+loadRecentReports();
+
+// --- EXCHANGE: 절약 자산 등록/교환 ---
+document.getElementById('asset-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = document.getElementById('a-title').value.trim();
+  if (!title) {
+    alert('자산명을 입력해주세요.');
+    document.getElementById('a-title').focus();
+    return;
+  }
+  const expiresRaw = document.getElementById('a-expires').value;
+  const payload = {
+    category: document.getElementById('a-category').value,
+    title,
+    condition_text: document.getElementById('a-condition').value || null,
+    estimated_value: parseFloat(document.getElementById('a-value').value) || null,
+    expires_at: expiresRaw ? new Date(expiresRaw).toISOString() : null,
+  };
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  try {
+    await apiFetch('/exchange/assets', { method: 'POST', body: JSON.stringify(payload) });
+    e.target.reset();
+    loadMyAssets();
+    loadAssets();
+    loadMyProfile();
+  } catch (err) {
+    alert(`등록 실패: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+function assetCard(a, { own } = {}) {
+  const expiresText = a.expires_at ? `사용기한 ${new Date(a.expires_at).toLocaleDateString()}` : '기한 없음';
+  return `
+    <div class="result-card">
+      <div class="result-header">
+        <span class="badge">${ASSET_CATEGORY_LABELS[a.category] || a.category}</span>
+        ${a.estimated_value ? `<span class="distance">예상 절약 ${formatWon(a.estimated_value)}</span>` : ''}
+      </div>
+      <div class="place-name">${escapeHtml(a.title)}</div>
+      ${a.condition_text ? `<div class="meta-line">${escapeHtml(a.condition_text)}</div>` : ''}
+      <div class="meta-line">${expiresText}</div>
+      ${
+        own
+          ? `<button type="button" class="btn-text btn-delete-inline" data-id="${a.id}">삭제</button>`
+          : `<button type="button" class="btn-secondary" disabled>교환 요청 (준비 중)</button>`
+      }
+    </div>`;
+}
+
+async function loadMyAssets() {
+  const listEl = document.getElementById('my-assets-list');
+  listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
+  try {
+    const assets = await apiFetch('/exchange/assets/mine');
+    document.getElementById('exchange-my-count').textContent = assets.length;
+    document.getElementById('exchange-my-value').textContent = formatWon(
+      assets.reduce((sum, a) => sum + (a.estimated_value || 0), 0)
+    );
+    listEl.innerHTML = assets.length
+      ? assets.map((a) => assetCard(a, { own: true })).join('')
+      : '<p class="empty-msg">등록한 절약 자산이 없습니다.</p>';
+    listEl.querySelectorAll('.btn-delete-inline').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await apiFetch(`/exchange/assets/${btn.dataset.id}`, { method: 'DELETE' });
+          loadMyAssets();
+          loadAssets();
+          loadMyProfile();
+        } catch (err) {
+          alert(`삭제 실패: ${err.message}`);
+        }
+      });
+    });
+  } catch (err) {
+    listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+document.getElementById('load-my-assets-btn').addEventListener('click', loadMyAssets);
+
+async function loadAssets() {
+  const listEl = document.getElementById('assets-list');
+  listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
+  try {
+    const assets = await apiFetch('/exchange/assets');
+    listEl.innerHTML = assets.length
+      ? assets.map((a) => assetCard(a, { own: false })).join('')
+      : '<p class="empty-msg">교환 가능한 절약 자산이 아직 없습니다.</p>';
+  } catch (err) {
+    listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+document.getElementById('load-assets-btn').addEventListener('click', loadAssets);
 
 // --- 사업자: 매장 ---
 document.getElementById('place-form').addEventListener('submit', async (e) => {
@@ -503,4 +796,4 @@ async function loadOffers() {
 }
 document.getElementById('load-offers-btn').addEventListener('click', loadOffers);
 
-// 매장/혜택 목록은 로그인 상태(renderAuthState)에서 로드됩니다.
+// 매장/혜택/절약 자산 목록은 로그인 상태(renderAuthState)에서 로드됩니다.

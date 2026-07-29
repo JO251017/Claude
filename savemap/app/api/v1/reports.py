@@ -2,10 +2,26 @@ from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep, UserDep
-from app.api.schemas.report import ReportCreate, ReportResponse
+from app.api.schemas.report import RecentReportItem, ReportCreate, ReportResponse
+from app.sources.user_report import service as report_service
 from app.sources.user_report.pipeline import ReportPipeline
 
 router = APIRouter(tags=["reports"])
+
+
+@router.get("/reports/recent", response_model=list[RecentReportItem])
+async def recent_reports(session: AsyncSession = SessionDep) -> list[RecentReportItem]:
+    reports = await report_service.list_pending(session, limit=20)
+    return [
+        RecentReportItem(
+            id=r.id,
+            ai_category=r.ai_category,
+            status=r.status,
+            ocr_title=(r.ocr_json or {}).get("title"),
+            ocr_price=(r.ocr_json or {}).get("price"),
+        )
+        for r in reports
+    ]
 
 
 @router.post("/reports", response_model=ReportResponse, status_code=201)

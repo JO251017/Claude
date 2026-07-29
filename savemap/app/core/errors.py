@@ -69,3 +69,21 @@ class OfferNotFoundError(SaveMapError):
     code = "SM4042"
     http_status = status.HTTP_404_NOT_FOUND
     message = "혜택을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class OfferPublicNotFoundError(SaveMapError):
+    code = "SM4043"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "혜택을 찾을 수 없습니다"
+
+
+class CertificationNotSupportedError(SaveMapError):
+    code = "SM4223"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "이 혜택은 절약 인증을 지원하지 않습니다 (가격 정보 없음)"
+
+
+class AssetNotFoundError(SaveMapError):
+    code = "SM4044"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "절약 자산을 찾을 수 없거나 소유하고 있지 않습니다"
