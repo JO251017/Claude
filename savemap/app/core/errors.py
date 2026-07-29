@@ -29,6 +29,18 @@ class MissingReportImageError(SaveMapError):
     message = "제보는 이미지가 반드시 있어야 합니다"
 
 
+class ReportImageFetchError(SaveMapError):
+    code = "SM4222"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "사진을 불러올 수 없습니다. 이미지 주소를 다시 확인해주세요"
+
+
+class OcrServiceError(SaveMapError):
+    code = "SM5033"
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "사진 분석 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요"
+
+
 class UnverifiedPaymentMethodError(SaveMapError):
     code = "SM4031"
     http_status = status.HTTP_403_FORBIDDEN

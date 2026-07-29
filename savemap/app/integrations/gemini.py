@@ -6,10 +6,12 @@ from dataclasses import dataclass
 import httpx
 
 from app.core.config import settings
+from app.core.errors import OcrServiceError, ReportImageFetchError
 from app.domain.enums import Category
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com"
 GEMINI_MODEL = "gemini-flash-latest"
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 _VALID_CATEGORIES = {c.value for c in Category}
 
@@ -42,13 +44,24 @@ class GeminiVisionClient:
 
     async def extract_from_image(self, image_url: str) -> OcrResult:
         if not self._key:
-            raise RuntimeError("GEMINI_API_KEY 미설정")
+            raise OcrServiceError("사진 분석 서비스가 설정되지 않았습니다 (GEMINI_API_KEY 미설정)")
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            img_resp = await client.get(image_url)
-            img_resp.raise_for_status()
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            try:
+                img_resp = await client.get(image_url)
+                img_resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise ReportImageFetchError(f"사진을 불러올 수 없습니다: {exc.__class__.__name__}") from exc
+
             image_bytes = img_resp.content
-            mime_type = img_resp.headers.get("content-type", "image/jpeg").split(";")[0]
+            mime_type = img_resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+
+            if not mime_type.startswith("image/"):
+                raise ReportImageFetchError(
+                    f"이미지 파일이 아닙니다 (받은 형식: {mime_type or '알 수 없음'})"
+                )
+            if len(image_bytes) > MAX_IMAGE_BYTES:
+                raise ReportImageFetchError("사진 용량이 너무 큽니다 (최대 10MB)")
 
             payload = {
                 "contents": [
@@ -65,15 +78,23 @@ class GeminiVisionClient:
                     }
                 ]
             }
-            resp = await client.post(
-                f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
-                params={"key": self._key},
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = await client.post(
+                    f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
+                    params={"key": self._key},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except httpx.HTTPError as exc:
+                raise OcrServiceError(
+                    f"사진 분석 요청에 실패했습니다: {exc.__class__.__name__}"
+                ) from exc
 
-        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+        try:
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise OcrServiceError("사진 분석 결과를 이해할 수 없습니다") from exc
 
         try:
             parsed = json.loads(_strip_code_fence(raw_text))

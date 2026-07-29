@@ -83,11 +83,16 @@ document.querySelectorAll('.chip').forEach((chip) => {
 });
 
 // --- 내 위치 사용 ---
-document.getElementById('use-location-btn').addEventListener('click', () => {
+const useLocationBtn = document.getElementById('use-location-btn');
+useLocationBtn.addEventListener('click', () => {
   if (!navigator.geolocation) {
     alert('이 브라우저는 위치 정보를 지원하지 않습니다.');
     return;
   }
+  const originalLabel = useLocationBtn.textContent;
+  useLocationBtn.disabled = true;
+  useLocationBtn.textContent = '📍 위치 확인 중...';
+
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const lat = pos.coords.latitude;
@@ -95,9 +100,21 @@ document.getElementById('use-location-btn').addEventListener('click', () => {
       document.getElementById('s-lat').value = lat.toFixed(6);
       document.getElementById('s-lng').value = lng.toFixed(6);
       if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+      useLocationBtn.disabled = false;
+      useLocationBtn.textContent = originalLabel;
       runSearch();
     },
-    () => alert('위치를 가져올 수 없습니다.')
+    (err) => {
+      useLocationBtn.disabled = false;
+      useLocationBtn.textContent = originalLabel;
+      const reasons = {
+        1: '위치 접근 권한이 거부되었습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 위치 권한을 허용해주세요.',
+        2: '위치 정보를 확인할 수 없습니다.',
+        3: '위치 확인 시간이 초과되었습니다.',
+      };
+      alert(reasons[err.code] || '위치를 가져올 수 없습니다.');
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
   );
 });
 
@@ -239,9 +256,23 @@ runSearch();
 // --- 제보 ---
 document.getElementById('report-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const image_url = document.getElementById('r-image-url').value;
+  const image_url = document.getElementById('r-image-url').value.trim();
   const lat = document.getElementById('r-lat').value;
   const lng = document.getElementById('r-lng').value;
+  const resultEl = document.getElementById('report-result');
+
+  if (!image_url) {
+    resultEl.innerHTML = '<p class="error-msg">사진 URL을 입력해주세요.</p>';
+    document.getElementById('r-image-url').focus();
+    return;
+  }
+  try {
+    new URL(image_url);
+  } catch {
+    resultEl.innerHTML = '<p class="error-msg">올바른 사진 URL 형식이 아닙니다. (예: https://... 로 시작)</p>';
+    document.getElementById('r-image-url').focus();
+    return;
+  }
 
   const payload = { image_url };
   if (lat && lng) {
@@ -249,7 +280,8 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     payload.lng = parseFloat(lng);
   }
 
-  const resultEl = document.getElementById('report-result');
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   resultEl.innerHTML = '<p class="empty-msg">AI가 사진을 분석 중입니다...</p>';
 
   try {
@@ -270,18 +302,31 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     e.target.reset();
   } catch (err) {
     resultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  } finally {
+    submitBtn.disabled = false;
   }
 });
 
 // --- 사업자: 매장 ---
 document.getElementById('place-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const payload = {
-    name: document.getElementById('p-name').value,
-    address: document.getElementById('p-address').value || null,
-    lat: parseFloat(document.getElementById('p-lat').value),
-    lng: parseFloat(document.getElementById('p-lng').value),
-  };
+  const name = document.getElementById('p-name').value.trim();
+  const lat = parseFloat(document.getElementById('p-lat').value);
+  const lng = parseFloat(document.getElementById('p-lng').value);
+
+  if (!name) {
+    alert('매장명을 입력해주세요.');
+    document.getElementById('p-name').focus();
+    return;
+  }
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    alert('위도/경도를 올바르게 입력해주세요.');
+    return;
+  }
+
+  const payload = { name, address: document.getElementById('p-address').value || null, lat, lng };
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   try {
     const place = await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
     alert(`매장 등록 완료! 매장 ID: ${place.id} (혜택 등록 시 이 ID를 사용하세요)`);
@@ -290,6 +335,8 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
     loadPlaces();
   } catch (err) {
     alert(`매장 등록 실패: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
   }
 });
 
@@ -310,15 +357,30 @@ document.getElementById('load-places-btn').addEventListener('click', loadPlaces)
 // --- 사업자: 혜택 ---
 document.getElementById('offer-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const placeId = parseInt(document.getElementById('o-place-id').value, 10);
+  const title = document.getElementById('o-title').value.trim();
   const ttl = document.getElementById('o-ttl').value;
+
+  if (Number.isNaN(placeId)) {
+    alert('매장 ID를 올바르게 입력해주세요.');
+    return;
+  }
+  if (!title) {
+    alert('혜택 제목을 입력해주세요.');
+    document.getElementById('o-title').focus();
+    return;
+  }
+
   const payload = {
-    place_id: parseInt(document.getElementById('o-place-id').value, 10),
-    title: document.getElementById('o-title').value,
+    place_id: placeId,
+    title,
     category: document.getElementById('o-category').value,
     base_price: parseFloat(document.getElementById('o-base-price').value) || null,
     store_discount: parseFloat(document.getElementById('o-discount').value) || null,
     ttl_sec: ttl ? parseInt(ttl, 10) : null,
   };
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   try {
     await apiFetch('/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
     alert('혜택 등록 완료!');
@@ -326,6 +388,8 @@ document.getElementById('offer-form').addEventListener('submit', async (e) => {
     loadOffers();
   } catch (err) {
     alert(`혜택 등록 실패: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
   }
 });
 
