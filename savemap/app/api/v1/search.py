@@ -12,6 +12,7 @@ from app.engine.models import OfferCandidate, PaymentBenefit
 from app.engine.ranker import rank_candidates
 from app.engine.rule_filter import rule_filter
 from app.engine.spatial_query import query_within_radius
+from app.sources.user_verification.service import get_offer_trust_map
 
 router = APIRouter(tags=["search"])
 
@@ -29,6 +30,7 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         lat=point.y,
         lng=point.x,
         store_discount=float(offer.store_discount or 0.0),
+        expires_at=offer.expires_at,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,
@@ -57,6 +59,14 @@ async def search(
     rows = rule_filter(rows, category=category)
 
     candidates = [_to_candidate(o, p, d) for o, p, d in rows]
+
+    trust_map = await get_offer_trust_map(session, [c.offer_id for c in candidates])
+    for c in candidates:
+        score, count, last_at = trust_map.get(c.offer_id, (0.5, 0, None))
+        c.trust_score = score
+        c.verification_count = count
+        c.last_verified_at = last_at
+
     combine(candidates, set(payment_methods))
     ranked = rank_candidates(candidates)
 
@@ -72,7 +82,10 @@ async def search(
             final_price=r.breakdown.final_price,
             total_savings=r.breakdown.total_savings,
             savings_rate=r.breakdown.savings_rate,
+            expires_at=r.candidate.expires_at,
             trust_score=r.candidate.trust_score,
+            verification_count=r.candidate.verification_count,
+            last_verified_at=r.candidate.last_verified_at,
             score=round(r.score, 4),
         )
         for r in ranked

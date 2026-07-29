@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from app.domain.enums import Category, Layer, PaymentMethodType
 
@@ -23,4 +24,7 @@ class OfferCandidate:
     lng: float
     store_discount: float = 0.0
     payment_benefits: list[PaymentBenefit] = field(default_factory=list)
+    expires_at: datetime | None = None
     trust_score: float = 0.5
+    verification_count: int = 0
+    last_verified_at: datetime | None = None

@@ -636,6 +636,121 @@ select:focus {
   background: rgba(220, 38, 38, 0.18);
 }
 
+.btn-end-inline {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 4px 10px;
+}
+
+/* --- 홈 히어로 (내 주변 최대 절약 가능 금액) --- */
+.savings-hero {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+  text-align: center;
+}
+
+/* --- 정보 신뢰도(최신 상태) 표시 --- */
+.fresh-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  background: #94a3b8;
+}
+
+.fresh-now,
+.fresh-recent {
+  background: var(--uncommon);
+}
+
+.fresh-today {
+  background: var(--gold);
+}
+
+.fresh-stale {
+  background: var(--danger);
+}
+
+.fresh-none {
+  background: #94a3b8;
+}
+
+/* --- 오퍼 검증 ("아직 있어요 / 없어졌어요") --- */
+.verify-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.verify-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.verify-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-verify {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(22, 163, 74, 0.1);
+  color: var(--uncommon);
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.btn-verify-negative {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
+}
+
+.btn-verify:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- COMMUNITY: 사진 제보 --- */
+.photo-capture-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--primary-dark);
+  font-weight: 800;
+  font-size: 0.88rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.photo-capture-btn svg {
+  width: 32px;
+  height: 32px;
+}
+
+.report-preview-img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+
 /* --- Bottom nav --- */
 .bottom-nav {
   position: absolute;

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,9 +83,12 @@ class SavingsSummary:
     remaining_to_next: float | None
     progress_pct: float
     certification_count: int
+    monthly_saved: float = 0.0
 
 
-def compute_savings_level(total_saved: float, certification_count: int = 0) -> SavingsSummary:
+def compute_savings_level(
+    total_saved: float, certification_count: int = 0, monthly_saved: float = 0.0
+) -> SavingsSummary:
     total_saved = max(total_saved, 0.0)
     level, title, threshold = SAVINGS_LEVEL_THRESHOLDS[0]
     next_threshold: float | None = None
@@ -118,6 +122,7 @@ def compute_savings_level(total_saved: float, certification_count: int = 0) -> S
         remaining_to_next=remaining,
         progress_pct=pct,
         certification_count=certification_count,
+        monthly_saved=monthly_saved,
     )
 
 
@@ -131,7 +136,20 @@ async def get_savings_summary(session: AsyncSession, user_id: str) -> SavingsSum
         )
     ).one()
     total, count = row
-    return compute_savings_level(float(total), int(count))
+
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    monthly_total = (
+        await session.execute(
+            select(func.coalesce(func.sum(SavingsCertification.amount), 0)).where(
+                SavingsCertification.user_id == user_id,
+                SavingsCertification.created_at >= month_start,
+            )
+        )
+    ).scalar_one()
+
+    return compute_savings_level(float(total), int(count), float(monthly_total))
 
 
 class LeaderboardService:

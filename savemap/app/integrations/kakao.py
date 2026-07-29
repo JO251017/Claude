@@ -34,5 +34,24 @@ class KakaoClient:
                 lat=float(d["y"]), lng=float(d["x"]), address=d.get("address_name", query)
             )
 
+    async def reverse_geocode(self, lat: float, lng: float) -> str | None:
+        """좌표 → 행정동/시군구 이름. 홈 화면 상단 "📍 OO시" 표시용."""
+        if not self._key:
+            return None
+        async with httpx.AsyncClient(base_url=KAKAO_LOCAL_BASE, headers=self._headers) as client:
+            resp = await client.get(
+                "/v2/local/geo/coord2address.json", params={"x": lng, "y": lat}
+            )
+            resp.raise_for_status()
+            docs = resp.json().get("documents", [])
+            if not docs:
+                return None
+            region = docs[0].get("address") or {}
+            parts = [
+                region.get("region_1depth_name"),
+                region.get("region_2depth_name"),
+            ]
+            return " ".join(p for p in parts if p) or None
+
     async def directions(self, origin: tuple[float, float], dest: tuple[float, float]) -> dict:
         raise NotImplementedError("카카오모빌리티 길찾기 스펙 확인 후 구현 (미확인)")

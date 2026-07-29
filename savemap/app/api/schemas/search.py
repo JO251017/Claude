@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.domain.enums import Category, PaymentMethodType
@@ -14,7 +16,10 @@ class SearchResultItem(BaseModel):
     final_price: float
     total_savings: float
     savings_rate: float
+    expires_at: datetime | None = None
     trust_score: float
+    verification_count: int = 0
+    last_verified_at: datetime | None = None
     score: float
 
 

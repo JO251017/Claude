@@ -37,4 +37,5 @@ async def my_savings_summary(
         remaining_to_next=summary.remaining_to_next,
         progress_pct=summary.progress_pct,
         certification_count=summary.certification_count,
+        monthly_saved=summary.monthly_saved,
     )

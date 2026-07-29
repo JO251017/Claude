@@ -2,9 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import MissingReportImageError
 from app.core.spatial import ewkt_point
-from app.domain.enums import ReportStatus
+from app.domain.enums import Category, ReportStatus, XpReason
 from app.domain.report import UserReport
-from app.integrations.gemini import GeminiVisionClient
+from app.gamification.service import award_xp
+from app.integrations.gemini import GeminiVisionClient, OcrResult
 from app.integrations.kakao import KakaoClient
 
 
@@ -34,11 +35,27 @@ class ReportPipeline:
         image_url: str,
         lat: float | None = None,
         lng: float | None = None,
+        title_override: str | None = None,
+        price_override: float | None = None,
+        category_override: Category | None = None,
     ) -> UserReport:
         if not image_url:
             raise MissingReportImageError()
 
-        ocr = await self.gemini.extract_from_image(image_url)
+        has_override = (
+            title_override is not None or price_override is not None or category_override is not None
+        )
+        if has_override:
+            # POST /v1/reports/analyze 로 이미 분석 → 사용자가 확인/수정한 값이므로 재분석하지 않는다.
+            ocr = OcrResult(
+                raw_text="",
+                price=price_override,
+                title=title_override,
+                category=category_override,
+            )
+        else:
+            ocr = await self.gemini.extract_from_image(image_url)
+
         geom = await self._resolve_geom(lat, lng, ocr.location_text)
 
         report = UserReport(
@@ -57,4 +74,6 @@ class ReportPipeline:
         session.add(report)
         await session.commit()
         await session.refresh(report)
+
+        await award_xp(session, user_id, XpReason.VALID_REPORT)
         return report

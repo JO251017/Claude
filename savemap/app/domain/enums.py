@@ -53,11 +53,13 @@ class Verdict(str, enum.Enum):
 class XpReason(str, enum.Enum):
     VALID_REPORT = "valid_report"
     FIELD_VERIFICATION = "field_verification"
+    SAVINGS_CERTIFIED = "savings_certified"
 
 
 XP_REWARD: dict[XpReason, int] = {
     XpReason.VALID_REPORT: 20,
     XpReason.FIELD_VERIFICATION: 5,
+    XpReason.SAVINGS_CERTIFIED: 10,
 }
 
 

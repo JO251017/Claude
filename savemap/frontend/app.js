@@ -68,6 +68,26 @@ function formatWon(amount) {
   return `₩${Math.round(amount || 0).toLocaleString()}`;
 }
 
+// --- 정보 신뢰도(최신 상태) 표시 ---
+function freshnessInfo(lastVerifiedAt, count) {
+  if (!lastVerifiedAt || !count) return { cls: 'fresh-none', label: '확인된 정보 없음' };
+  const diffMin = (Date.now() - new Date(lastVerifiedAt).getTime()) / 60000;
+  if (diffMin < 30) return { cls: 'fresh-now', label: '방금 확인됨' };
+  if (diffMin < 120) return { cls: 'fresh-recent', label: `${Math.round(diffMin)}분 전 확인` };
+  if (diffMin < 24 * 60) return { cls: 'fresh-today', label: `${Math.round(diffMin / 60)}시간 전 확인` };
+  return { cls: 'fresh-stale', label: '오래된 정보 · 확인이 필요해요' };
+}
+
+function formatExpiry(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return d.toDateString() === now.toDateString()
+    ? `오늘 ${hh}:${mm}까지`
+    : `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}까지`;
+}
+
 async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
   const token = await getAccessToken();
@@ -401,6 +421,7 @@ document.getElementById('detail-close-btn').addEventListener('click', () => {
 
 function openOfferDetail(r) {
   const tier = getRarityTier(r.savings_rate);
+  const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
   detailContent.innerHTML = `
     <div class="badge-group">
       <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
@@ -412,12 +433,24 @@ function openOfferDetail(r) {
       ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
     </div>
     ${r.total_savings > 0 ? `<div class="expected-savings">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</div>` : ''}
-    <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m · 신뢰도 ${(r.trust_score * 100).toFixed(0)}%</div>
+    <div class="meta-line">
+      현재 위치에서 ${r.distance_m.toFixed(0)}m ·
+      <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
+    </div>
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
       <button type="button" class="btn-primary" id="detail-certify-btn">절약 인증하기</button>
     </div>
     <div id="detail-certify-msg"></div>
+
+    <div class="verify-row">
+      <span class="verify-label">이 정보 아직 유효한가요?</span>
+      <div class="verify-buttons">
+        <button type="button" class="btn-verify" data-verdict="available">아직 있어요</button>
+        <button type="button" class="btn-verify btn-verify-negative" data-verdict="sold_out">없어졌어요</button>
+      </div>
+      <div id="detail-verify-msg"></div>
+    </div>
   `;
   detailOverlay.classList.remove('hidden');
 
@@ -426,6 +459,26 @@ function openOfferDetail(r) {
   });
 
   document.getElementById('detail-certify-btn').addEventListener('click', () => certifyOffer(r));
+
+  detailContent.querySelectorAll('.btn-verify').forEach((btn) => {
+    btn.addEventListener('click', () => verifyOffer(r.offer_id, btn.dataset.verdict, btn));
+  });
+}
+
+async function verifyOffer(offerId, verdict, btn) {
+  const msgEl = document.getElementById('detail-verify-msg');
+  const buttons = btn.parentElement.querySelectorAll('.btn-verify');
+  buttons.forEach((b) => (b.disabled = true));
+  try {
+    await apiFetch(`/offers/${offerId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ verdict }),
+    });
+    msgEl.innerHTML = `<p class="empty-msg">${ICONS.check} 확인 감사합니다! 신뢰도에 반영됐어요.</p>`;
+  } catch (err) {
+    msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+    buttons.forEach((b) => (b.disabled = false));
+  }
 }
 
 async function certifyOffer(r) {
@@ -460,6 +513,39 @@ async function certifyOffer(r) {
   }
 }
 
+// --- 홈 히어로: "내 주변에서 최대 X원 절약 가능" ---
+let lastRegionLabel = '';
+let lastRegionCoords = null;
+
+async function updateRegionLabel(lat, lng) {
+  if (lastRegionCoords && Math.abs(lastRegionCoords.lat - lat) < 0.01 && Math.abs(lastRegionCoords.lng - lng) < 0.01) {
+    return lastRegionLabel;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/geo/reverse?lat=${lat}&lng=${lng}`);
+    const data = await res.json();
+    lastRegionLabel = data.region || '';
+    lastRegionCoords = { lat, lng };
+  } catch {
+    lastRegionLabel = '';
+  }
+  return lastRegionLabel;
+}
+
+function renderSavingsHero(results) {
+  const heroEl = document.getElementById('savings-hero');
+  const prefix = lastRegionLabel ? `${lastRegionLabel} · ` : '';
+  if (!results || results.length === 0) {
+    heroEl.textContent = `${prefix}내 주변 절약 정보를 찾고 있어요`;
+    return;
+  }
+  const maxSavings = Math.max(...results.map((r) => r.total_savings || 0));
+  heroEl.textContent =
+    maxSavings > 0
+      ? `${prefix}내 주변에서 최대 ${Math.round(maxSavings).toLocaleString()}원 절약 가능`
+      : `${prefix}내 주변 절약 정보를 확인해보세요`;
+}
+
 // --- 검색 실행 ---
 async function runSearch() {
   const lat = document.getElementById('s-lat').value;
@@ -473,10 +559,13 @@ async function runSearch() {
   const countEl = document.getElementById('sheet-count');
   resultsEl.innerHTML = '<p class="empty-msg">주변 절약 기회를 찾는 중...</p>';
 
+  updateRegionLabel(parseFloat(lat), parseFloat(lng)).then(() => renderSavingsHero(lastResults));
+
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
     lastResults = data.results;
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results);
+    renderSavingsHero(data.results);
 
     if (data.results.length === 0) {
       countEl.textContent = '주변에 절약 기회가 없어요';
@@ -488,6 +577,7 @@ async function runSearch() {
     resultsEl.innerHTML = data.results
       .map((r, i) => {
         const tier = getRarityTier(r.savings_rate);
+        const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
         return `
       <div class="result-card ${tier.cls}" data-idx="${i}">
         <div class="result-header">
@@ -503,7 +593,9 @@ async function runSearch() {
           ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
           ${r.total_savings > 0 ? `<span class="savings-rate">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</span>` : ''}
         </div>
-        <div class="meta-line">신뢰도 ${(r.trust_score * 100).toFixed(0)}% · 점수 ${r.score}</div>
+        <div class="meta-line">
+          <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
+        </div>
       </div>`;
       })
       .join('');
@@ -520,58 +612,119 @@ async function runSearch() {
 initMap(36.9925, 127.113);
 runSearch();
 
-// --- COMMUNITY: 제보 ---
-document.getElementById('report-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const image_url = document.getElementById('r-image-url').value.trim();
-  const lat = document.getElementById('r-lat').value;
-  const lng = document.getElementById('r-lng').value;
-  const resultEl = document.getElementById('report-result');
+// --- COMMUNITY: 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록) ---
+let reportImageUrl = null;
+let reportLat = null;
+let reportLng = null;
 
-  if (!image_url) {
-    resultEl.innerHTML = '<p class="error-msg">사진 URL을 입력해주세요.</p>';
-    document.getElementById('r-image-url').focus();
+const reportPhotoInput = document.getElementById('r-photo-input');
+const reportCaptureStatus = document.getElementById('report-capture-status');
+const reportCaptureSection = document.getElementById('report-capture');
+const reportConfirmSection = document.getElementById('report-confirm');
+const reportResultEl = document.getElementById('report-result');
+
+reportPhotoInput.addEventListener('change', () => {
+  const file = reportPhotoInput.files[0];
+  if (!file) return;
+  reportResultEl.innerHTML = '';
+  reportCaptureStatus.textContent = '위치 확인 중...';
+
+  if (!navigator.geolocation) {
+    analyzeReportPhoto(file);
     return;
   }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      reportLat = pos.coords.latitude;
+      reportLng = pos.coords.longitude;
+      analyzeReportPhoto(file);
+    },
+    () => {
+      reportLat = null;
+      reportLng = null;
+      analyzeReportPhoto(file);
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
+async function analyzeReportPhoto(file) {
+  reportCaptureStatus.textContent = 'AI가 사진을 분석하고 있어요...';
+
+  const form = new FormData();
+  form.append('image', file);
+  if (reportLat != null) form.append('lat', reportLat);
+  if (reportLng != null) form.append('lng', reportLng);
+
+  const token = await getAccessToken();
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   try {
-    new URL(image_url);
-  } catch {
-    resultEl.innerHTML = '<p class="error-msg">올바른 사진 URL 형식이 아닙니다. (예: https://... 로 시작)</p>';
-    document.getElementById('r-image-url').focus();
+    const resp = await fetch(`${API_BASE}/reports/analyze`, { method: 'POST', headers, body: form });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const message = data?.detail?.message || data?.detail || `분석 실패 (${resp.status})`;
+      throw new Error(message);
+    }
+
+    reportImageUrl = data.image_url;
+    document.getElementById('report-preview-img').src = data.image_url;
+    document.getElementById('r-title').value = data.ocr_title || '';
+    document.getElementById('r-price').value = data.ocr_price != null ? data.ocr_price : '';
+    document.getElementById('r-category').value = data.ai_category || '';
+    document.getElementById('report-location-status').textContent =
+      reportLat != null ? '현재 위치 자동 설정 완료' : '위치를 확인하지 못했어요 (제보는 계속 가능해요)';
+
+    reportCaptureSection.classList.add('hidden');
+    reportConfirmSection.classList.remove('hidden');
+    reportCaptureStatus.textContent = '';
+  } catch (err) {
+    reportCaptureStatus.textContent = '';
+    reportResultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function resetReportForm() {
+  reportConfirmSection.classList.add('hidden');
+  reportCaptureSection.classList.remove('hidden');
+  reportPhotoInput.value = '';
+  reportImageUrl = null;
+  reportLat = null;
+  reportLng = null;
+}
+
+document.getElementById('report-cancel-btn').addEventListener('click', resetReportForm);
+
+document.getElementById('report-confirm-btn').addEventListener('click', async () => {
+  if (!reportImageUrl) return;
+  const title = document.getElementById('r-title').value.trim();
+  if (!title) {
+    alert('제목을 입력해주세요.');
+    document.getElementById('r-title').focus();
     return;
   }
+  const priceVal = document.getElementById('r-price').value;
+  const payload = {
+    image_url: reportImageUrl,
+    lat: reportLat,
+    lng: reportLng,
+    title,
+    price: priceVal ? parseFloat(priceVal) : null,
+    category: document.getElementById('r-category').value || null,
+  };
 
-  const payload = { image_url };
-  if (lat && lng) {
-    payload.lat = parseFloat(lat);
-    payload.lng = parseFloat(lng);
-  }
-
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  resultEl.innerHTML = '<p class="empty-msg">AI가 사진을 분석 중입니다...</p>';
-
+  const btn = document.getElementById('report-confirm-btn');
+  btn.disabled = true;
   try {
-    const data = await apiFetch('/reports', { method: 'POST', body: JSON.stringify(payload) });
-    resultEl.innerHTML = `
-      <div class="result-card">
-        <div class="result-header">
-          <span class="badge">${CATEGORY_LABELS[data.ai_category] || data.ai_category || '분류 실패'}</span>
-        </div>
-        <div class="place-name">${escapeHtml(data.ocr_title || '(제목 인식 실패)')}</div>
-        <div class="price-line">
-          ${data.ocr_price != null ? `<span class="final-price">${data.ocr_price.toLocaleString()}원</span>` : ''}
-        </div>
-        <div class="meta-line">
-          위치 ${data.has_location ? '인식됨' : '미확인'} · 상태: ${data.status}
-        </div>
-      </div>`;
-    e.target.reset();
+    await apiFetch('/reports', { method: 'POST', body: JSON.stringify(payload) });
+    reportResultEl.innerHTML = `<p class="empty-msg">${ICONS.check} 제보 완료! 검토 후 지도에 반영됩니다.</p>`;
+    resetReportForm();
     loadRecentReports();
   } catch (err) {
-    resultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+    reportResultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   } finally {
-    submitBtn.disabled = false;
+    btn.disabled = false;
   }
 });
 
@@ -695,6 +848,30 @@ async function loadAssets() {
 document.getElementById('load-assets-btn').addEventListener('click', loadAssets);
 
 // --- 사업자: 매장 ---
+document.getElementById('p-use-location-btn').addEventListener('click', (e) => {
+  const btn = e.target;
+  const statusEl = document.getElementById('p-location-status');
+  if (!navigator.geolocation) {
+    statusEl.textContent = '이 브라우저는 위치 정보를 지원하지 않습니다.';
+    return;
+  }
+  btn.disabled = true;
+  statusEl.textContent = '위치 확인 중...';
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      document.getElementById('p-lat').value = pos.coords.latitude;
+      document.getElementById('p-lng').value = pos.coords.longitude;
+      statusEl.textContent = '현재 위치로 설정 완료';
+      btn.disabled = false;
+    },
+    () => {
+      statusEl.textContent = '위치를 가져올 수 없습니다. 다시 시도해주세요.';
+      btn.disabled = false;
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
 document.getElementById('place-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('p-name').value.trim();
@@ -707,7 +884,7 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
     return;
   }
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    alert('위도/경도를 올바르게 입력해주세요.');
+    alert('먼저 "현재 위치로 매장 위치 설정" 버튼을 눌러주세요.');
     return;
   }
 
@@ -715,10 +892,10 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
-    const place = await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
-    alert(`매장 등록 완료! 매장 ID: ${place.id} (혜택 등록 시 이 ID를 사용하세요)`);
-    document.getElementById('o-place-id').value = place.id;
+    await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
+    alert('매장 등록 완료! 아래 혜택 등록에서 매장을 선택할 수 있어요.');
     e.target.reset();
+    document.getElementById('p-location-status').textContent = '매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.';
     loadPlaces();
   } catch (err) {
     alert(`매장 등록 실패: ${err.message}`);
@@ -729,12 +906,17 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
 
 async function loadPlaces() {
   const listEl = document.getElementById('places-list');
+  const selectEl = document.getElementById('o-place-id');
   listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
   try {
     const places = await apiFetch('/merchant/places');
     listEl.innerHTML = places.length
       ? places.map((p) => `<div class="list-row">#${p.id} ${escapeHtml(p.name)} ${p.address ? '- ' + escapeHtml(p.address) : ''}</div>`).join('')
       : '<p class="empty-msg">등록된 매장이 없습니다.</p>';
+
+    selectEl.innerHTML = places.length
+      ? places.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+      : '<option value="">매장을 먼저 등록해주세요</option>';
   } catch (err) {
     listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   }
@@ -749,7 +931,7 @@ document.getElementById('offer-form').addEventListener('submit', async (e) => {
   const ttl = document.getElementById('o-ttl').value;
 
   if (Number.isNaN(placeId)) {
-    alert('매장 ID를 올바르게 입력해주세요.');
+    alert('매장을 선택해주세요. (매장이 없다면 먼저 매장을 등록해주세요)');
     return;
   }
   if (!title) {
@@ -793,11 +975,27 @@ async function loadOffers() {
         #${o.id} [${CATEGORY_LABELS[o.category] || o.category}/${o.layer}] ${escapeHtml(o.title)}
         ${o.base_price != null ? ` - ${o.base_price.toLocaleString()}원` : ''}
         ${o.store_discount != null ? ` (할인 ${o.store_discount.toLocaleString()}원)` : ''}
+        <button class="btn-text btn-end-inline" data-id="${o.id}">종료하기</button>
         <button class="btn-delete-inline" data-id="${o.id}">삭제</button>
       </div>`
           )
           .join('')
       : '<p class="empty-msg">등록된 혜택이 없습니다.</p>';
+
+    listEl.querySelectorAll('.btn-end-inline').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('이 혜택을 지금 종료 처리할까요? 지도에서 바로 사라집니다.')) return;
+        try {
+          await apiFetch(`/merchant/offers/${btn.dataset.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ expires_at: new Date().toISOString() }),
+          });
+          loadOffers();
+        } catch (err) {
+          alert(`종료 처리 실패: ${err.message}`);
+        }
+      });
+    });
 
     listEl.querySelectorAll('.btn-delete-inline').forEach((btn) => {
       btn.addEventListener('click', async () => {

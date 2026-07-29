@@ -87,3 +87,15 @@ class AssetNotFoundError(SaveMapError):
     code = "SM4044"
     http_status = status.HTTP_404_NOT_FOUND
     message = "절약 자산을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class ImageUploadError(SaveMapError):
+    code = "SM5034"
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "사진 업로드에 실패했습니다. 잠시 후 다시 시도해주세요"
+
+
+class InvalidImageError(SaveMapError):
+    code = "SM4224"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "올바른 이미지 파일이 아닙니다"

@@ -1,5 +1,6 @@
 from app.domain.base import Base
 from app.domain.offer import Offer, OfferPaymentBenefit
+from app.domain.offer_verification import OfferVerification
 from app.domain.payment_method import PaymentMethodDerived
 from app.domain.place import Place
 from app.domain.report import UserReport
@@ -15,6 +16,7 @@ __all__ = [
     "OfferPaymentBenefit",
     "UserReport",
     "Verification",
+    "OfferVerification",
     "TrustScore",
     "PaymentMethodDerived",
     "XpLedger",

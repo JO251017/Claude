@@ -17,3 +17,4 @@ class SavingsSummaryResponse(BaseModel):
     remaining_to_next: float | None
     progress_pct: float
     certification_count: int
+    monthly_saved: float = 0.0

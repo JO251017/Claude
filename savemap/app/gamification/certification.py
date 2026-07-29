@@ -3,10 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import CertificationNotSupportedError, OfferPublicNotFoundError
-from app.domain.enums import CERTIFICATION_CONFIDENCE, CertificationMethod
+from app.domain.enums import CERTIFICATION_CONFIDENCE, CertificationMethod, XpReason
 from app.domain.offer import Offer
 from app.domain.savings import SavingsCertification
-from app.gamification.service import SavingsSummary, get_savings_summary
+from app.gamification.service import SavingsSummary, award_xp, get_savings_summary
 from app.integrations.gemini import GeminiVisionClient
 
 
@@ -55,6 +55,8 @@ async def certify_savings(
     session.add(cert)
     await session.commit()
     await session.refresh(cert)
+
+    await award_xp(session, user_id, XpReason.SAVINGS_CERTIFIED)
 
     summary = await get_savings_summary(session, user_id)
     return cert, summary

@@ -30,6 +30,7 @@
             </div>
           </div>
         </div>
+        <div class="savings-hero glass" id="savings-hero">내 주변 절약 정보를 찾고 있어요</div>
         <div class="search-row">
           <button type="button" id="use-location-btn" class="pill-btn">
             <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
@@ -208,24 +209,47 @@
       </header>
       <div class="screen-body">
         <h2>절약 정보 제보</h2>
-        <p class="subtitle">사진을 올리면 AI가 가격·혜택을 자동으로 읽어드려요</p>
-        <form id="report-form" class="card-form">
+        <p class="subtitle">사진 한 장이면 AI가 가격·혜택을 자동으로 채워드려요</p>
+
+        <div id="report-capture" class="card-form">
+          <label for="r-photo-input" class="photo-capture-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span>사진 찍기 / 갤러리에서 선택</span>
+          </label>
+          <input type="file" id="r-photo-input" accept="image/*" capture="environment" class="hidden" />
+          <div id="report-capture-status" class="subtitle"></div>
+        </div>
+
+        <div id="report-confirm" class="card-form hidden">
+          <img id="report-preview-img" class="report-preview-img" alt="제보 사진 미리보기" />
           <div class="form-group">
-            <label for="r-image-url">사진 URL</label>
-            <input type="text" id="r-image-url" placeholder="https://... (영수증/전단지 사진 주소)" required />
+            <label for="r-title">제목</label>
+            <input type="text" id="r-title" required />
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="r-lat">위도 (선택)</label>
-              <input type="text" id="r-lat" placeholder="비워두면 AI가 추정" />
+              <label for="r-price">할인 가격 (원, 선택)</label>
+              <input type="text" id="r-price" />
             </div>
             <div class="form-group">
-              <label for="r-lng">경도 (선택)</label>
-              <input type="text" id="r-lng" placeholder="" />
+              <label for="r-category">카테고리</label>
+              <select id="r-category">
+                <option value="">AI 추정</option>
+                <option value="free">무료</option>
+                <option value="discount">할인</option>
+                <option value="closing_soon">마감임박</option>
+                <option value="free_parking">무료주차</option>
+                <option value="local_benefit">지역혜택</option>
+              </select>
             </div>
           </div>
-          <button type="submit" class="btn-primary">제보하기</button>
-        </form>
+          <p class="subtitle" id="report-location-status">현재 위치 자동 설정</p>
+          <div class="form-row">
+            <button type="button" id="report-cancel-btn" class="btn-secondary">다시 찍기</button>
+            <button type="button" id="report-confirm-btn" class="btn-primary">등록하기</button>
+          </div>
+        </div>
+
         <div id="report-result"></div>
 
         <div class="list-section-header">
@@ -259,15 +283,11 @@
               <label for="p-address">주소</label>
               <input type="text" id="p-address" />
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="p-lat">위도</label>
-                <input type="text" id="p-lat" value="36.9925" required />
-              </div>
-              <div class="form-group">
-                <label for="p-lng">경도</label>
-                <input type="text" id="p-lng" value="127.1130" required />
-              </div>
+            <div class="form-group">
+              <button type="button" id="p-use-location-btn" class="btn-secondary">현재 위치로 매장 위치 설정</button>
+              <p class="subtitle" id="p-location-status">매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.</p>
+              <input type="hidden" id="p-lat" />
+              <input type="hidden" id="p-lng" />
             </div>
             <button type="submit" class="btn-primary">매장 등록</button>
           </form>
@@ -275,8 +295,10 @@
           <h2>혜택 등록</h2>
           <form id="offer-form" class="card-form">
             <div class="form-group">
-              <label for="o-place-id">매장 ID</label>
-              <input type="text" id="o-place-id" required />
+              <label for="o-place-id">매장 선택</label>
+              <select id="o-place-id" required>
+                <option value="">매장을 먼저 등록해주세요</option>
+              </select>
             </div>
             <div class="form-group">
               <label for="o-title">혜택 제목</label>
