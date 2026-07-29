@@ -86,9 +86,13 @@ async def submit_status_update(
             session, user_id, XpReason.STORE_VISIT_UPDATE, expected_savings
         )
 
+    # 관심도는 고유 사용자 수가 아니라 "이 매장에 실제로 발걸음을 한 횟수"(유동인구)로
+    # 보여준다 — 사용자 지시로 반복 방문도 계속 늘어나야 한다.
     interest_count = (
         await session.execute(
-            select(func.count()).select_from(StoreInterest).where(StoreInterest.place_id == place_id)
+            select(func.count())
+            .select_from(StoreStatusUpdate)
+            .where(StoreStatusUpdate.place_id == place_id)
         )
     ).scalar_one()
 

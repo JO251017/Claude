@@ -546,7 +546,7 @@ async function submitStatusUpdate(r, status, btn) {
             accuracy_m: pos.coords.accuracy,
           }),
         });
-        document.getElementById('detail-interest-count').textContent = `관심 ${data.interest_count}명`;
+        document.getElementById('detail-interest-count').textContent = `누적 방문 ${data.interest_count}회`;
         msgEl.innerHTML = data.xp_awarded > 0
           ? `<p class="empty-msg">${ICONS.check} 확인 감사합니다! +${data.xp_awarded} XP</p>`
           : `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;

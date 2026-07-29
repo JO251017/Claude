@@ -10,8 +10,8 @@ from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 
 # 이 개수 미만이면 평균/중앙값을 신뢰할 수 없다고 보고 "비교 데이터 부족"으로 표시한다
-# (기획서 §5). 임의로 정한 값 — 실제 데이터가 쌓이면 조정 필요.
-MIN_RELIABLE_SAMPLE = 3
+# (기획서 §5). 사용자 지시로 2건까지는 비교 가능하다고 판단.
+MIN_RELIABLE_SAMPLE = 2
 
 
 @dataclass
