@@ -48,3 +48,24 @@ class OfferResponse(BaseModel):
     valid_from: datetime | None = None
     expires_at: datetime | None = None
     ttl_sec: int | None = None
+
+
+class MenuItemCreate(BaseModel):
+    place_id: int
+    name: str
+    price: float
+    source_url: str | None = None
+
+
+class MenuItemUpdate(BaseModel):
+    price: float | None = None
+    source_url: str | None = None
+
+
+class MenuItemResponse(BaseModel):
+    id: int
+    place_id: int
+    name: str
+    price: float
+    source_url: str | None = None
+    verified_at: datetime | None = None

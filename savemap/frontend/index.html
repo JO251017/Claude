@@ -331,6 +331,28 @@
             <button type="submit" class="btn-primary">혜택 등록</button>
           </form>
 
+          <h2>메뉴 가격 등록</h2>
+          <p class="subtitle">메뉴별 가격을 등록하면 지역 평균과 비교해 손님에게 정확한 절약 정보를 보여줄 수 있어요.</p>
+          <form id="menu-item-form" class="card-form">
+            <div class="form-group">
+              <label for="mi-place-id">매장 선택</label>
+              <select id="mi-place-id" required>
+                <option value="">매장을 먼저 등록해주세요</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mi-name">메뉴명</label>
+                <input type="text" id="mi-name" placeholder="예: 아메리카노" required />
+              </div>
+              <div class="form-group">
+                <label for="mi-price">가격 (원)</label>
+                <input type="text" id="mi-price" placeholder="3500" required />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">메뉴 등록</button>
+          </form>
+
           <div class="list-section-header">
             <h2>내 매장 목록</h2>
             <button type="button" id="load-places-btn" class="btn-text">새로고침</button>
@@ -342,6 +364,12 @@
             <button type="button" id="load-offers-btn" class="btn-text">새로고침</button>
           </div>
           <div id="offers-list"></div>
+
+          <div class="list-section-header">
+            <h2>내 메뉴 목록</h2>
+            <button type="button" id="load-menu-items-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="menu-items-list"></div>
         </div>
       </div>
     </section>

@@ -20,6 +20,7 @@ class Place(Base, TimestampMixin):
     h3_r9: Mapped[int | None] = mapped_column(BigInteger)
 
     offers = relationship("Offer", back_populates="place", cascade="all, delete-orphan")
+    menu_items = relationship("MenuItem", back_populates="place", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_place_geom_gist", "geom", postgresql_using="gist"),

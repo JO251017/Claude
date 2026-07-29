@@ -1,11 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import OfferNotFoundError, PlaceNotFoundError
+from app.core.errors import MenuItemNotFoundError, OfferNotFoundError, PlaceNotFoundError
 from app.core.spatial import ewkt_point, to_h3
 from app.domain.enums import Category, Layer, SourceType
+from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
 from app.sources.merchant_console.ttl import clear_flash_ttl, set_flash_ttl
@@ -140,4 +141,67 @@ async def delete_offer(session: AsyncSession, owner_user_id: str, offer_id: int)
     if offer.layer == Layer.FLASH:
         await clear_flash_ttl(offer.id)
     await session.delete(offer)
+    await session.commit()
+
+
+async def _get_owned_menu_item(session: AsyncSession, owner_user_id: str, menu_item_id: int) -> MenuItem:
+    item = await session.get(MenuItem, menu_item_id)
+    if item is None:
+        raise MenuItemNotFoundError()
+    place = await session.get(Place, item.place_id)
+    if place is None or place.owner_user_id != owner_user_id:
+        raise MenuItemNotFoundError()
+    return item
+
+
+async def create_menu_item(
+    session: AsyncSession,
+    owner_user_id: str,
+    place_id: int,
+    name: str,
+    price: float,
+    source_url: str | None = None,
+) -> MenuItem:
+    await _get_owned_place(session, owner_user_id, place_id)
+    item = MenuItem(
+        place_id=place_id,
+        name=name,
+        price=price,
+        source=SourceType.S3_MERCHANT,
+        source_url=source_url,
+        verified_at=datetime.now(timezone.utc),
+    )
+    session.add(item)
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
+async def list_menu_items_for_owner(session: AsyncSession, owner_user_id: str, place_id: int) -> list[MenuItem]:
+    await _get_owned_place(session, owner_user_id, place_id)
+    stmt = select(MenuItem).where(MenuItem.place_id == place_id).order_by(MenuItem.id.desc())
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def update_menu_item(
+    session: AsyncSession,
+    owner_user_id: str,
+    menu_item_id: int,
+    price: float | None = None,
+    source_url: str | None = None,
+) -> MenuItem:
+    item = await _get_owned_menu_item(session, owner_user_id, menu_item_id)
+    if price is not None:
+        item.price = price
+        item.verified_at = datetime.now(timezone.utc)
+    if source_url is not None:
+        item.source_url = source_url
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
+async def delete_menu_item(session: AsyncSession, owner_user_id: str, menu_item_id: int) -> None:
+    item = await _get_owned_menu_item(session, owner_user_id, menu_item_id)
+    await session.delete(item)
     await session.commit()

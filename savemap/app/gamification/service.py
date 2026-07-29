@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import XP_REWARD, XpReason
+from app.domain.enums import XP_MULTIPLIER, XP_REWARD, XpReason
 from app.domain.savings import SavingsCertification
 from app.domain.xp import XpLedger
 
@@ -44,6 +44,17 @@ def compute_level(total_xp: int) -> XpSummary:
 
 async def award_xp(session: AsyncSession, user_id: str, reason: XpReason) -> int:
     delta = XP_REWARD[reason]
+    session.add(XpLedger(user_id=user_id, delta=delta, reason=reason))
+    await session.commit()
+    return delta
+
+
+async def award_xp_for_amount(
+    session: AsyncSession, user_id: str, reason: XpReason, base_amount: float
+) -> int:
+    """예상/실제 절약금액에 비례해 XP를 지급한다 (방문 상태 업데이트=100%, 영수증 인증=300%).
+    base_amount가 0 이하면(비교 데이터 부족 등) 지어내지 않고 0 XP를 기록한다."""
+    delta = max(round(max(base_amount, 0.0) * XP_MULTIPLIER[reason]), 0)
     session.add(XpLedger(user_id=user_id, delta=delta, reason=reason))
     await session.commit()
     return delta

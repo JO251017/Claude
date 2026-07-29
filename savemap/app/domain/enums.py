@@ -54,6 +54,8 @@ class XpReason(str, enum.Enum):
     VALID_REPORT = "valid_report"
     FIELD_VERIFICATION = "field_verification"
     SAVINGS_CERTIFIED = "savings_certified"
+    STORE_VISIT_UPDATE = "store_visit_update"
+    RECEIPT_VERIFIED = "receipt_verified"
 
 
 XP_REWARD: dict[XpReason, int] = {
@@ -61,6 +63,20 @@ XP_REWARD: dict[XpReason, int] = {
     XpReason.FIELD_VERIFICATION: 5,
     XpReason.SAVINGS_CERTIFIED: 10,
 }
+
+# 방문 상태 업데이트 / 영수증 인증은 고정 보상이 아니라 예상·실제 절약금액에 비례해
+# 지급한다 (기획서 §11, §13). 배율만 여기 정의하고 실제 지급은 award_xp_amount()로 한다.
+XP_MULTIPLIER: dict[XpReason, float] = {
+    XpReason.STORE_VISIT_UPDATE: 1.0,
+    XpReason.RECEIPT_VERIFIED: 3.0,
+}
+
+
+class BusinessStatus(str, enum.Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+    TEMP_CLOSED = "temp_closed"
+    UNKNOWN = "unknown"
 
 
 class CertificationMethod(str, enum.Enum):

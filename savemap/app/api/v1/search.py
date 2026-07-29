@@ -73,6 +73,7 @@ async def search(
     results = [
         SearchResultItem(
             offer_id=r.candidate.offer_id,
+            place_id=r.candidate.place_id,
             place_name=r.candidate.place_name,
             category=r.candidate.category,
             distance_m=round(r.candidate.distance_m, 1),

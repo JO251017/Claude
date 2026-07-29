@@ -7,6 +7,7 @@ from app.domain.enums import Category, PaymentMethodType
 
 class SearchResultItem(BaseModel):
     offer_id: int
+    place_id: int
     place_name: str
     category: Category
     distance_m: float

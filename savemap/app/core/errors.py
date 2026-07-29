@@ -99,3 +99,27 @@ class InvalidImageError(SaveMapError):
     code = "SM4224"
     http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
     message = "올바른 이미지 파일이 아닙니다"
+
+
+class TooFarFromStoreError(SaveMapError):
+    code = "SM4225"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "매장에서 너무 멀리 떨어져 있습니다 (50m 이내에서만 방문 인증이 가능합니다)"
+
+
+class LowGpsAccuracyError(SaveMapError):
+    code = "SM4226"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "GPS 정확도가 낮아 위치를 확인할 수 없습니다. 실외에서 다시 시도해주세요"
+
+
+class PlacePublicNotFoundError(SaveMapError):
+    code = "SM4045"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "매장을 찾을 수 없습니다"
+
+
+class MenuItemNotFoundError(SaveMapError):
+    code = "SM4046"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "메뉴를 찾을 수 없거나 소유하고 있지 않습니다"

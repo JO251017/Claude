@@ -5,6 +5,7 @@ from app.api.v1 import (
     exchange,
     geo,
     merchant,
+    places,
     reports,
     savings,
     search,
@@ -22,3 +23,4 @@ api_router.include_router(savings.router)
 api_router.include_router(exchange.router)
 api_router.include_router(geo.router)
 api_router.include_router(admin.router)
+api_router.include_router(places.router)

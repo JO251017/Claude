@@ -722,6 +722,97 @@ select:focus {
   cursor: default;
 }
 
+/* --- 카카오맵 매장 정보 링크 --- */
+.kakao-place-link {
+  display: block;
+  margin: 10px 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* --- 메뉴 가격 비교 --- */
+.menu-compare-list {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.menu-compare-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.menu-compare-row:last-child {
+  border-bottom: none;
+}
+
+.menu-name {
+  font-weight: 800;
+  color: var(--ink);
+  flex: 1 0 auto;
+}
+
+.menu-price {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.menu-note {
+  width: 100%;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.menu-note-good {
+  color: var(--uncommon);
+  font-weight: 700;
+}
+
+/* --- 방문/영업 상태 업데이트 --- */
+.visit-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.visit-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-visit {
+  flex: 1;
+  padding: 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.btn-visit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.interest-count {
+  margin-top: 8px;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
 /* --- COMMUNITY: 사진 제보 --- */
 .photo-capture-btn {
   display: flex;

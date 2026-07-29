@@ -55,6 +55,7 @@ function characterAvatarFor(level) {
 }
 
 let currentCategory = '';
+let merchantPlaces = [];
 
 function escapeHtml(str) {
   return String(str)
@@ -141,7 +142,7 @@ function renderAuthState(session) {
   if (session) {
     if (emailEl) emailEl.textContent = session.user.email;
     loadMyProfile();
-    loadPlaces();
+    loadPlaces().then(loadMenuItems);
     loadOffers();
     loadMyAssets();
   }
@@ -422,6 +423,7 @@ document.getElementById('detail-close-btn').addEventListener('click', () => {
 function openOfferDetail(r) {
   const tier = getRarityTier(r.savings_rate);
   const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
+  const kakaoSearchUrl = `https://map.kakao.com/link/search/${encodeURIComponent(r.place_name)}`;
   detailContent.innerHTML = `
     <div class="badge-group">
       <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
@@ -437,6 +439,10 @@ function openOfferDetail(r) {
       현재 위치에서 ${r.distance_m.toFixed(0)}m ·
       <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
     </div>
+    <a class="kakao-place-link" href="${kakaoSearchUrl}" target="_blank" rel="noopener">카카오맵에서 매장 정보 확인 (리뷰·사진·영업시간)</a>
+
+    <div id="detail-menu-section"></div>
+
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
       <button type="button" class="btn-primary" id="detail-certify-btn">절약 인증하기</button>
@@ -451,6 +457,17 @@ function openOfferDetail(r) {
       </div>
       <div id="detail-verify-msg"></div>
     </div>
+
+    <div class="visit-row">
+      <span class="verify-label">지금 매장에 계신가요? (50m 이내에서만 가능)</span>
+      <div class="visit-buttons">
+        <button type="button" class="btn-visit" data-status="open">영업 중</button>
+        <button type="button" class="btn-visit" data-status="closed">휴무</button>
+        <button type="button" class="btn-visit" data-status="temp_closed">임시 휴무</button>
+      </div>
+      <div id="detail-visit-msg"></div>
+      <p class="interest-count" id="detail-interest-count"></p>
+    </div>
   `;
   detailOverlay.classList.remove('hidden');
 
@@ -463,6 +480,88 @@ function openOfferDetail(r) {
   detailContent.querySelectorAll('.btn-verify').forEach((btn) => {
     btn.addEventListener('click', () => verifyOffer(r.offer_id, btn.dataset.verdict, btn));
   });
+
+  detailContent.querySelectorAll('.btn-visit').forEach((btn) => {
+    btn.addEventListener('click', () => submitStatusUpdate(r, btn.dataset.status, btn));
+  });
+
+  loadMenuComparison(r);
+}
+
+async function loadMenuComparison(r) {
+  const sectionEl = document.getElementById('detail-menu-section');
+  try {
+    const items = await apiFetch(`/places/${r.place_id}/menu-items?lat=${r.lat}&lng=${r.lng}`);
+    if (!items.length) {
+      sectionEl.innerHTML = '';
+      return;
+    }
+    sectionEl.innerHTML = `
+      <div class="menu-compare-list">
+        ${items
+          .map((m) => {
+            if (!m.reliable) {
+              return `<div class="menu-compare-row">
+                <span class="menu-name">${escapeHtml(m.name)}</span>
+                <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
+                <span class="menu-note">비교 데이터 부족 (${m.sample_count}건)</span>
+              </div>`;
+            }
+            const cheaper = m.savings_amount > 0;
+            return `<div class="menu-compare-row">
+              <span class="menu-name">${escapeHtml(m.name)}</span>
+              <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
+              <span class="menu-note ${cheaper ? 'menu-note-good' : ''}">
+                지역 평균 ${Math.round(m.region_average).toLocaleString()}원
+                ${cheaper ? ` · ${Math.round(m.savings_amount).toLocaleString()}원 저렴` : ''}
+              </span>
+            </div>`;
+          })
+          .join('')}
+      </div>`;
+  } catch {
+    sectionEl.innerHTML = '';
+  }
+}
+
+async function submitStatusUpdate(r, status, btn) {
+  const msgEl = document.getElementById('detail-visit-msg');
+  if (!navigator.geolocation) {
+    msgEl.innerHTML = '<p class="error-msg">이 브라우저는 위치 정보를 지원하지 않습니다.</p>';
+    return;
+  }
+  const buttons = btn.parentElement.querySelectorAll('.btn-visit');
+  buttons.forEach((b) => (b.disabled = true));
+  msgEl.innerHTML = '<p class="empty-msg">위치 확인 중...</p>';
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const data = await apiFetch(`/places/${r.place_id}/status-updates`, {
+          method: 'POST',
+          body: JSON.stringify({
+            status,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy_m: pos.coords.accuracy,
+          }),
+        });
+        document.getElementById('detail-interest-count').textContent = `관심 ${data.interest_count}명`;
+        msgEl.innerHTML = data.xp_awarded > 0
+          ? `<p class="empty-msg">${ICONS.check} 확인 감사합니다! +${data.xp_awarded} XP</p>`
+          : `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
+      } catch (err) {
+        msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+      } finally {
+        buttons.forEach((b) => (b.disabled = false));
+      }
+    },
+    () => {
+      msgEl.innerHTML = '<p class="error-msg">위치를 가져올 수 없습니다. 위치 권한을 허용해주세요.</p>';
+      buttons.forEach((b) => (b.disabled = false));
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
 }
 
 async function verifyOffer(offerId, verdict, btn) {
@@ -907,6 +1006,7 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
 async function loadPlaces() {
   const listEl = document.getElementById('places-list');
   const selectEl = document.getElementById('o-place-id');
+  const menuSelectEl = document.getElementById('mi-place-id');
   listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
   try {
     const places = await apiFetch('/merchant/places');
@@ -914,9 +1014,13 @@ async function loadPlaces() {
       ? places.map((p) => `<div class="list-row">#${p.id} ${escapeHtml(p.name)} ${p.address ? '- ' + escapeHtml(p.address) : ''}</div>`).join('')
       : '<p class="empty-msg">등록된 매장이 없습니다.</p>';
 
-    selectEl.innerHTML = places.length
+    const options = places.length
       ? places.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
       : '<option value="">매장을 먼저 등록해주세요</option>';
+    selectEl.innerHTML = options;
+    menuSelectEl.innerHTML = options;
+
+    merchantPlaces = places;
   } catch (err) {
     listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   }
@@ -1012,5 +1116,84 @@ async function loadOffers() {
   }
 }
 document.getElementById('load-offers-btn').addEventListener('click', loadOffers);
+
+// --- 사업자: 메뉴 가격 ---
+document.getElementById('menu-item-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const placeId = parseInt(document.getElementById('mi-place-id').value, 10);
+  const name = document.getElementById('mi-name').value.trim();
+  const price = parseFloat(document.getElementById('mi-price').value);
+
+  if (Number.isNaN(placeId)) {
+    alert('매장을 선택해주세요. (매장이 없다면 먼저 매장을 등록해주세요)');
+    return;
+  }
+  if (!name) {
+    alert('메뉴명을 입력해주세요.');
+    document.getElementById('mi-name').focus();
+    return;
+  }
+  if (Number.isNaN(price) || price < 0) {
+    alert('가격을 올바르게 입력해주세요.');
+    document.getElementById('mi-price').focus();
+    return;
+  }
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  try {
+    await apiFetch('/merchant/menu-items', {
+      method: 'POST',
+      body: JSON.stringify({ place_id: placeId, name, price }),
+    });
+    alert('메뉴 등록 완료!');
+    e.target.reset();
+    loadMenuItems();
+  } catch (err) {
+    alert(`메뉴 등록 실패: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+async function loadMenuItems() {
+  const listEl = document.getElementById('menu-items-list');
+  listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
+  if (!merchantPlaces.length) {
+    listEl.innerHTML = '<p class="empty-msg">등록된 매장이 없습니다.</p>';
+    return;
+  }
+  try {
+    const perPlace = await Promise.all(
+      merchantPlaces.map((p) =>
+        apiFetch(`/merchant/places/${p.id}/menu-items`).then((items) => ({ place: p, items }))
+      )
+    );
+    const rows = perPlace.flatMap(({ place, items }) =>
+      items.map(
+        (m) => `
+      <div class="list-row">
+        [${escapeHtml(place.name)}] ${escapeHtml(m.name)} - ${m.price.toLocaleString()}원
+        <button class="btn-delete-inline" data-id="${m.id}">삭제</button>
+      </div>`
+      )
+    );
+    listEl.innerHTML = rows.length ? rows.join('') : '<p class="empty-msg">등록된 메뉴가 없습니다.</p>';
+
+    listEl.querySelectorAll('.btn-delete-inline').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await apiFetch(`/merchant/menu-items/${btn.dataset.id}`, { method: 'DELETE' });
+          loadMenuItems();
+        } catch (err) {
+          alert(`삭제 실패: ${err.message}`);
+        }
+      });
+    });
+  } catch (err) {
+    listEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+document.getElementById('load-menu-items-btn').addEventListener('click', loadMenuItems);
 
 // 매장/혜택/절약 자산 목록은 로그인 상태(renderAuthState)에서 로드됩니다.

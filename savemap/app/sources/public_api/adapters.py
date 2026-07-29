@@ -105,7 +105,9 @@ class PublicParkingAdapter(PublicApiAdapter):
 
     async def fetch_raw(self) -> list[dict]:
         client = GovDataClient(base_url=PARKING_BASE_URL)
-        data = await client.fetch(PARKING_PATH, {"pageNo": 1, "numOfRows": 100, "type": "json"})
+        # 전국 데이터 중 앞부분만 가져오면 지역이 한쪽으로 쏠려 특정 지역 근처 검색에 거의
+        # 안 잡힐 수 있어(예: 서비스 지역이 다른 도시면 결과가 0에 가까움), 최대한 넓게 가져온다.
+        data = await client.fetch(PARKING_PATH, {"pageNo": 1, "numOfRows": 1000, "type": "json"})
 
         body = data.get("response", {}).get("body", {})
         items = body.get("items")
