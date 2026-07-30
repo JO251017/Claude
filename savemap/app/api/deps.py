@@ -13,23 +13,23 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-def _decode_bearer(authorization: str | None) -> str | None:
+async def _decode_bearer(authorization: str | None) -> str | None:
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     token = authorization.split(" ", 1)[1]
     try:
-        claims = decode_supabase_jwt(token)
+        claims = await decode_supabase_jwt(token)
     except ValueError:
         return None
     return claims.get("sub")
 
 
 async def current_user_id(authorization: str | None = Header(default=None)) -> str:
-    return _decode_bearer(authorization) or "anonymous"
+    return await _decode_bearer(authorization) or "anonymous"
 
 
 async def require_user_id(authorization: str | None = Header(default=None)) -> str:
-    user_id = _decode_bearer(authorization)
+    user_id = await _decode_bearer(authorization)
     if not user_id:
         raise AuthenticationRequiredError()
     return user_id
