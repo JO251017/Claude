@@ -337,6 +337,7 @@ document.getElementById('s-radius').addEventListener('change', runSearch);
 // --- 카카오 지도 ---
 let kakaoMap = null;
 let mapMarkers = [];
+let mapLabels = [];
 let originMarker = null;
 const researchBtn = document.getElementById('research-btn');
 
@@ -367,10 +368,30 @@ researchBtn.addEventListener('click', () => {
 function clearMarkers() {
   mapMarkers.forEach((m) => m.setMap(null));
   mapMarkers = [];
+  mapLabels.forEach((l) => l.setMap(null));
+  mapLabels = [];
   if (originMarker) {
     originMarker.setMap(null);
     originMarker = null;
   }
+}
+
+// 다른 지도 앱들처럼 마커 아래에 상호명 라벨을 붙인다.
+function createLabelOverlay(pos, name, variant, onClick) {
+  const el = document.createElement('div');
+  el.className = `map-label map-label--${variant}`;
+  el.textContent = name;
+  if (onClick) el.addEventListener('click', onClick);
+
+  const overlay = new kakao.maps.CustomOverlay({
+    map: kakaoMap,
+    position: pos,
+    content: el,
+    yAnchor: 0,
+    clickable: true,
+    zIndex: variant === 'treasure' ? 2 : 1,
+  });
+  return overlay;
 }
 
 // "절약 보물" 마커: 매장 아이콘보다 "여기서 얼마를 아낄 수 있는가"를 먼저 보여준다.
@@ -416,16 +437,19 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
     const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: treasureMarkerImage() });
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
+    mapLabels.push(createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r)));
   });
 
   discovered.forEach((d) => {
     const pos = new kakao.maps.LatLng(d.lat, d.lng);
     bounds.extend(pos);
     const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: discoveredMarkerImage() });
-    kakao.maps.event.addListener(marker, 'click', () => {
+    const openKakao = () => {
       if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
-    });
+    };
+    kakao.maps.event.addListener(marker, 'click', openKakao);
     mapMarkers.push(marker);
+    mapLabels.push(createLabelOverlay(pos, d.place_name, 'discovered', openKakao));
   });
 
   kakaoMap.setBounds(bounds);
