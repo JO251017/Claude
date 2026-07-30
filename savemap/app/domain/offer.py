@@ -21,6 +21,10 @@ class Offer(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(255))
     base_price: Mapped[float | None] = mapped_column(Numeric(12, 2))
     store_discount: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    # menu_item 가격 비교에서 자동 생성된 오퍼면 그 메뉴를 가리킨다 (재계산/삭제 시 추적용).
+    menu_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("menu_item.id", ondelete="CASCADE"), nullable=True
+    )
 
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

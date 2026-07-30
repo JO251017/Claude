@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from geoalchemy2.shape import to_shape
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,7 @@ from app.domain.enums import Category, Layer, SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
+from app.engine.price_comparison import compare_menu_item
 from app.sources.merchant_console.ttl import clear_flash_ttl, set_flash_ttl
 
 
@@ -154,6 +156,43 @@ async def _get_owned_menu_item(session: AsyncSession, owner_user_id: str, menu_i
     return item
 
 
+async def _sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -> None:
+    """메뉴가 지역 평균보다 확실히 싸면(비교 데이터 신뢰 가능) 지도 검색에 뜨도록 오퍼를
+    자동 생성/갱신한다. 더 이상 싸지 않게 되면 오퍼를 지운다 — 지도 검색(/v1/search)이
+    offer 테이블만 보는 구조라, 메뉴만 등록하고 오퍼가 없으면 지도에 전혀 안 뜨는 문제를
+    해결하기 위함. menu_item_id로 추적해 중복 생성하지 않는다."""
+    point = to_shape(place.geom)
+    cmp = await compare_menu_item(session, item, point.y, point.x)
+
+    existing_offer = (
+        await session.execute(select(Offer).where(Offer.menu_item_id == item.id))
+    ).scalar_one_or_none()
+
+    if cmp.reliable and cmp.savings_amount and cmp.savings_amount > 0:
+        title = f"{item.name} {round(item.price):,}원 · 지역 평균보다 저렴"
+        if existing_offer is None:
+            session.add(
+                Offer(
+                    place_id=place.id,
+                    source=SourceType.S3_MERCHANT,
+                    layer=Layer.CORE_BASE,
+                    category=Category.DISCOUNT,
+                    title=title,
+                    base_price=cmp.region_median,
+                    store_discount=cmp.savings_amount,
+                    menu_item_id=item.id,
+                )
+            )
+        else:
+            existing_offer.title = title
+            existing_offer.base_price = cmp.region_median
+            existing_offer.store_discount = cmp.savings_amount
+    elif existing_offer is not None:
+        await session.delete(existing_offer)
+
+    await session.commit()
+
+
 async def create_menu_item(
     session: AsyncSession,
     owner_user_id: str,
@@ -162,7 +201,7 @@ async def create_menu_item(
     price: float,
     source_url: str | None = None,
 ) -> MenuItem:
-    await _get_owned_place(session, owner_user_id, place_id)
+    place = await _get_owned_place(session, owner_user_id, place_id)
     item = MenuItem(
         place_id=place_id,
         name=name,
@@ -174,6 +213,8 @@ async def create_menu_item(
     session.add(item)
     await session.commit()
     await session.refresh(item)
+
+    await _sync_menu_offer(session, place, item)
     return item
 
 
@@ -191,6 +232,7 @@ async def update_menu_item(
     source_url: str | None = None,
 ) -> MenuItem:
     item = await _get_owned_menu_item(session, owner_user_id, menu_item_id)
+    price_changed = price is not None and float(price) != float(item.price)
     if price is not None:
         item.price = price
         item.verified_at = datetime.now(timezone.utc)
@@ -198,6 +240,10 @@ async def update_menu_item(
         item.source_url = source_url
     await session.commit()
     await session.refresh(item)
+
+    if price_changed:
+        place = await session.get(Place, item.place_id)
+        await _sync_menu_offer(session, place, item)
     return item
 
 
