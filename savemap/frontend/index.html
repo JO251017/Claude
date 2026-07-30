@@ -284,10 +284,15 @@
               <input type="text" id="p-address" />
             </div>
             <div class="form-group">
+              <label for="p-phone">전화번호 (선택)</label>
+              <input type="text" id="p-phone" placeholder="예: 031-000-0000" />
+            </div>
+            <div class="form-group">
               <button type="button" id="p-use-location-btn" class="btn-secondary">현재 위치로 매장 위치 설정</button>
               <p class="subtitle" id="p-location-status">매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.</p>
               <input type="hidden" id="p-lat" />
               <input type="hidden" id="p-lng" />
+              <input type="hidden" id="p-kakao-place-id" />
             </div>
             <button type="submit" class="btn-primary">매장 등록</button>
           </form>

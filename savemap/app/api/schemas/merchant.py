@@ -10,12 +10,15 @@ class PlaceCreate(BaseModel):
     address: str | None = None
     lat: float
     lng: float
+    phone: str | None = None
+    kakao_place_id: str | None = None
 
 
 class PlaceResponse(BaseModel):
     id: int
     name: str
     address: str | None = None
+    phone: str | None = None
 
 
 class OfferCreate(BaseModel):

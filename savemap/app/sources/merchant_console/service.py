@@ -21,10 +21,14 @@ async def create_place(
     address: str | None,
     lat: float,
     lng: float,
+    phone: str | None = None,
+    kakao_place_id: str | None = None,
 ) -> Place:
     place = Place(
         name=name,
         address=address,
+        phone=phone,
+        kakao_place_id=kakao_place_id,
         owner_user_id=owner_user_id,
         geom=ewkt_point(lat, lng),
         h3_r9=to_h3(lat, lng),

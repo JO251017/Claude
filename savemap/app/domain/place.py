@@ -13,6 +13,7 @@ class Place(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255))
     address: Mapped[str | None] = mapped_column(String(500))
     kakao_place_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    phone: Mapped[str | None] = mapped_column(String(32))
     owner_user_id: Mapped[str | None] = mapped_column(String(64))
     geom: Mapped[object] = mapped_column(
         Geometry(geometry_type="POINT", srid=WGS84_SRID, spatial_index=False)

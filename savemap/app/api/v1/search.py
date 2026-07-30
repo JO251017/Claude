@@ -32,6 +32,8 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         lng=point.x,
         store_discount=float(offer.store_discount or 0.0),
         expires_at=offer.expires_at,
+        place_address=place.address,
+        place_phone=place.phone,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,
@@ -76,6 +78,8 @@ async def search(
             offer_id=r.candidate.offer_id,
             place_id=r.candidate.place_id,
             place_name=r.candidate.place_name,
+            address=r.candidate.place_address,
+            phone=r.candidate.place_phone,
             category=r.candidate.category,
             distance_m=round(r.candidate.distance_m, 1),
             lat=r.candidate.lat,
@@ -102,6 +106,7 @@ async def search(
             place_name=c.place.name,
             address=c.place.address,
             category_name=c.place.category_name,
+            phone=c.place.phone,
             distance_m=round(c.distance_m, 1),
             lat=c.place.lat,
             lng=c.place.lng,

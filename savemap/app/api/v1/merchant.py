@@ -30,7 +30,7 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _place_response(place: Place) -> PlaceResponse:
-    return PlaceResponse(id=place.id, name=place.name, address=place.address)
+    return PlaceResponse(id=place.id, name=place.name, address=place.address, phone=place.phone)
 
 
 def _menu_item_response(item: MenuItem) -> MenuItemResponse:
@@ -66,7 +66,14 @@ async def create_place(
     session: AsyncSession = SessionDep,
 ) -> PlaceResponse:
     place = await service.create_place(
-        session, user_id, payload.name, payload.address, payload.lat, payload.lng
+        session,
+        user_id,
+        payload.name,
+        payload.address,
+        payload.lat,
+        payload.lng,
+        phone=payload.phone,
+        kakao_place_id=payload.kakao_place_id,
     )
     return _place_response(place)
 

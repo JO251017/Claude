@@ -493,6 +493,8 @@ function openOfferDetail(r) {
       현재 위치에서 ${r.distance_m.toFixed(0)}m ·
       <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
     </div>
+    ${r.address ? `<div class="store-info-line">${escapeHtml(r.address)}</div>` : ''}
+    ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
     <a class="kakao-place-link" href="${kakaoSearchUrl}" target="_blank" rel="noopener">카카오맵에서 매장 정보 확인 (리뷰·사진·영업시간)</a>
 
     <div id="detail-menu-section"></div>
@@ -591,6 +593,7 @@ function openDiscoveredDetail(d) {
     <div class="meta-line">
       현재 위치에서 ${d.distance_m.toFixed(0)}m${d.address ? ' · ' + escapeHtml(d.address) : ''}
     </div>
+    ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
       아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴 가격을 등록하면 이 매장도 지도에
       절약 정보로 표시되고, 다른 사용자들이 방문해서 가격을 비교하고 인증할 수 있게 돼요.
@@ -615,6 +618,8 @@ function openDiscoveredDetail(d) {
 function prefillMerchantPlace(d) {
   document.getElementById('p-name').value = d.place_name;
   document.getElementById('p-address').value = d.address || '';
+  document.getElementById('p-phone').value = d.phone || '';
+  document.getElementById('p-kakao-place-id').value = d.kakao_place_id || '';
   document.getElementById('p-lat').value = d.lat;
   document.getElementById('p-lng').value = d.lng;
   document.getElementById('p-location-status').textContent =
@@ -1112,7 +1117,14 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
     return;
   }
 
-  const payload = { name, address: document.getElementById('p-address').value || null, lat, lng };
+  const payload = {
+    name,
+    address: document.getElementById('p-address').value || null,
+    phone: document.getElementById('p-phone').value || null,
+    kakao_place_id: document.getElementById('p-kakao-place-id').value || null,
+    lat,
+    lng,
+  };
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {

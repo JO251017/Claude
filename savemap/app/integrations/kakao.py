@@ -24,6 +24,7 @@ class KakaoPlace:
     lng: float
     category_name: str | None
     place_url: str | None
+    phone: str | None = None
 
 
 class KakaoClient:
@@ -97,6 +98,7 @@ class KakaoClient:
                 lng=float(d["x"]),
                 category_name=d.get("category_name"),
                 place_url=d.get("place_url"),
+                phone=d.get("phone") or None,
             )
             for d in docs
             if d.get("id") and d.get("place_name")

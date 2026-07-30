@@ -28,3 +28,5 @@ class OfferCandidate:
     trust_score: float = 0.5
     verification_count: int = 0
     last_verified_at: datetime | None = None
+    place_address: str | None = None
+    place_phone: str | None = None

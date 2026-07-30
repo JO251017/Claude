@@ -551,6 +551,19 @@ body {
   color: var(--ink-soft);
 }
 
+.store-info-line {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.store-info-tel {
+  color: var(--primary-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .empty-msg {
   color: var(--ink-soft);
   text-align: center;

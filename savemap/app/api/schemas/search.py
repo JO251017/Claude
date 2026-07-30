@@ -9,6 +9,8 @@ class SearchResultItem(BaseModel):
     offer_id: int
     place_id: int
     place_name: str
+    address: str | None = None
+    phone: str | None = None
     category: Category
     distance_m: float
     lat: float
@@ -32,6 +34,7 @@ class DiscoveredPlaceItem(BaseModel):
     place_name: str
     address: str | None = None
     category_name: str | None = None
+    phone: str | None = None
     distance_m: float
     lat: float
     lng: float
