@@ -1,9 +1,13 @@
-from fastapi import APIRouter
+import uuid
+
+from fastapi import APIRouter, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
 from app.api.schemas.merchant import (
+    MenuItemAnalyzeResponse,
     MenuItemCreate,
+    MenuItemGuessItem,
     MenuItemResponse,
     MenuItemUpdate,
     OfferCreate,
@@ -12,12 +16,17 @@ from app.api.schemas.merchant import (
     PlaceCreate,
     PlaceResponse,
 )
+from app.core.errors import InvalidImageError
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
+from app.integrations.gemini import GeminiVisionClient
+from app.integrations.supabase_storage import SupabaseStorageClient
 from app.sources.merchant_console import service
 
 router = APIRouter(tags=["merchant"], prefix="/merchant")
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _place_response(place: Place) -> PlaceResponse:
@@ -138,6 +147,33 @@ async def delete_offer(
     session: AsyncSession = SessionDep,
 ) -> None:
     await service.delete_offer(session, user_id, offer_id)
+
+
+@router.post("/menu-items/analyze", response_model=MenuItemAnalyzeResponse)
+async def analyze_menu_photo(
+    image: UploadFile = File(...),
+    user_id: str = RequireUserDep,
+) -> MenuItemAnalyzeResponse:
+    """메뉴판 사진 한 장에서 AI가 메뉴명·가격을 통째로 읽어온다. DB에는 저장하지
+    않고(사용자 확인 전 단계), 확인 후에는 기존 메뉴 등록 API로 하나씩 저장한다."""
+    content_type = image.content_type or ""
+    if not content_type.startswith("image/"):
+        raise InvalidImageError(f"이미지 파일이 아닙니다 (받은 형식: {content_type or '알 수 없음'})")
+
+    content = await image.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise InvalidImageError("사진 용량이 너무 큽니다 (최대 10MB)")
+
+    ext = (content_type.split("/")[-1] or "jpg").split(";")[0]
+    path = f"{uuid.uuid4().hex}.{ext}"
+    image_url = await SupabaseStorageClient().upload(path, content, content_type)
+
+    guesses = await GeminiVisionClient().extract_menu_items(image_url)
+
+    return MenuItemAnalyzeResponse(
+        image_url=image_url,
+        items=[MenuItemGuessItem(name=g.name, price=g.price) for g in guesses],
+    )
 
 
 @router.post("/menu-items", response_model=MenuItemResponse, status_code=201)

@@ -1132,6 +1132,7 @@ async function loadPlaces() {
   const listEl = document.getElementById('places-list');
   const selectEl = document.getElementById('o-place-id');
   const menuSelectEl = document.getElementById('mi-place-id');
+  const menuPhotoSelectEl = document.getElementById('mi-photo-place-id');
   listEl.innerHTML = '<p class="empty-msg">불러오는 중...</p>';
   try {
     const places = await apiFetch('/merchant/places');
@@ -1144,6 +1145,7 @@ async function loadPlaces() {
       : '<option value="">매장을 먼저 등록해주세요</option>';
     selectEl.innerHTML = options;
     menuSelectEl.innerHTML = options;
+    menuPhotoSelectEl.innerHTML = options;
 
     merchantPlaces = places;
   } catch (err) {
@@ -1151,6 +1153,110 @@ async function loadPlaces() {
   }
 }
 document.getElementById('load-places-btn').addEventListener('click', loadPlaces);
+
+// --- 사업자: 메뉴판 사진 한 번에 등록 (AI가 메뉴명·가격을 통째로 읽어옴) ---
+document.getElementById('mi-photo-input').addEventListener('change', async () => {
+  const fileInput = document.getElementById('mi-photo-input');
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const placeId = parseInt(document.getElementById('mi-photo-place-id').value, 10);
+  const statusEl = document.getElementById('mi-photo-status');
+  const resultsEl = document.getElementById('mi-photo-results');
+  resultsEl.innerHTML = '';
+
+  if (Number.isNaN(placeId)) {
+    statusEl.textContent = '먼저 매장을 선택해주세요.';
+    fileInput.value = '';
+    return;
+  }
+
+  statusEl.textContent = 'AI가 메뉴판을 읽고 있어요...';
+  const form = new FormData();
+  form.append('image', file);
+  const token = await getAccessToken();
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const resp = await fetch(`${API_BASE}/merchant/menu-items/analyze`, { method: 'POST', headers, body: form });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const message = data?.detail?.message || data?.detail || `분석 실패 (${resp.status})`;
+      throw new Error(message);
+    }
+
+    const items = data.items || [];
+    statusEl.textContent = items.length
+      ? `${items.length}개 메뉴를 찾았어요. 확인하고 등록해주세요.`
+      : '메뉴를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.';
+
+    resultsEl.innerHTML = items.length
+      ? `
+      <div class="menu-photo-list">
+        ${items
+          .map(
+            (m, i) => `
+          <div class="menu-photo-row">
+            <input type="checkbox" class="mp-check" data-idx="${i}" checked />
+            <input type="text" class="mp-name" data-idx="${i}" value="${escapeHtml(m.name)}" />
+            <input type="text" class="mp-price" data-idx="${i}" value="${Math.round(m.price)}" />
+          </div>`
+          )
+          .join('')}
+      </div>
+      <button type="button" class="btn-primary" id="mi-photo-confirm-btn">선택한 메뉴 일괄 등록</button>`
+      : '';
+
+    if (items.length) {
+      document.getElementById('mi-photo-confirm-btn').addEventListener('click', () => confirmMenuPhotoResults(placeId));
+    }
+  } catch (err) {
+    statusEl.textContent = '';
+    resultsEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  } finally {
+    fileInput.value = '';
+  }
+});
+
+async function confirmMenuPhotoResults(placeId) {
+  const statusEl = document.getElementById('mi-photo-status');
+  const confirmBtn = document.getElementById('mi-photo-confirm-btn');
+  confirmBtn.disabled = true;
+
+  const toSave = [];
+  document.querySelectorAll('.menu-photo-row').forEach((row) => {
+    if (!row.querySelector('.mp-check').checked) return;
+    const name = row.querySelector('.mp-name').value.trim();
+    const price = parseFloat(row.querySelector('.mp-price').value);
+    if (!name || Number.isNaN(price) || price < 0) return;
+    toSave.push({ name, price });
+  });
+
+  if (!toSave.length) {
+    statusEl.textContent = '등록할 메뉴를 선택해주세요.';
+    confirmBtn.disabled = false;
+    return;
+  }
+
+  statusEl.textContent = '등록 중...';
+  let success = 0;
+  for (const item of toSave) {
+    try {
+      await apiFetch('/merchant/menu-items', {
+        method: 'POST',
+        body: JSON.stringify({ place_id: placeId, name: item.name, price: item.price }),
+      });
+      success++;
+    } catch {
+      // 개별 등록 실패는 건너뛰고 계속 진행, 완료 후 성공 개수로 안내
+    }
+  }
+
+  statusEl.textContent = `${success}/${toSave.length}개 메뉴 등록 완료!`;
+  document.getElementById('mi-photo-results').innerHTML = '';
+  loadMenuItems();
+}
 
 // --- 사업자: 혜택 ---
 document.getElementById('offer-form').addEventListener('submit', async (e) => {

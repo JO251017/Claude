@@ -24,8 +24,21 @@ _EXTRACTION_PROMPT = (
 )
 
 
+_MENU_EXTRACTION_PROMPT = (
+    "이 이미지는 식당/카페의 메뉴판 또는 메뉴 사진이야. 보이는 모든 메뉴 이름과 가격을 "
+    "추출해줘. 가격을 알아볼 수 없는 항목은 제외해. "
+    "반드시 아래 JSON 배열 형식으로만 응답하고 다른 텍스트는 포함하지 마:\n"
+    '[{"name": "메뉴명", "price": 숫자}, ...]'
+)
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
+    return match.group(0) if match else text
+
+
+def _strip_array_fence(text: str) -> str:
+    match = re.search(r"\[.*\]", text, re.DOTALL)
     return match.group(0) if match else text
 
 
@@ -38,11 +51,17 @@ class OcrResult:
     location_text: str | None = None
 
 
+@dataclass
+class MenuItemGuess:
+    name: str
+    price: float
+
+
 class GeminiVisionClient:
     def __init__(self, api_key: str | None = None):
         self._key = api_key or settings.gemini_api_key
 
-    async def extract_from_image(self, image_url: str) -> OcrResult:
+    async def _ask_about_image(self, image_url: str, prompt: str) -> str:
         if not self._key:
             raise OcrServiceError("사진 분석 서비스가 설정되지 않았습니다 (GEMINI_API_KEY 미설정)")
 
@@ -67,7 +86,7 @@ class GeminiVisionClient:
                 "contents": [
                     {
                         "parts": [
-                            {"text": _EXTRACTION_PROMPT},
+                            {"text": prompt},
                             {
                                 "inline_data": {
                                     "mime_type": mime_type,
@@ -92,9 +111,12 @@ class GeminiVisionClient:
                 ) from exc
 
         try:
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return data["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError) as exc:
             raise OcrServiceError("사진 분석 결과를 이해할 수 없습니다") from exc
+
+    async def extract_from_image(self, image_url: str) -> OcrResult:
+        raw_text = await self._ask_about_image(image_url, _EXTRACTION_PROMPT)
 
         try:
             parsed = json.loads(_strip_code_fence(raw_text))
@@ -111,3 +133,27 @@ class GeminiVisionClient:
             category=category,
             location_text=parsed.get("location_text"),
         )
+
+    async def extract_menu_items(self, image_url: str) -> list[MenuItemGuess]:
+        """메뉴판 사진에서 메뉴명·가격 목록을 통째로 추출한다 (사장님이 하나씩
+        타이핑하지 않아도 되도록). 결과는 저장 전 사용자 확인을 거친다."""
+        raw_text = await self._ask_about_image(image_url, _MENU_EXTRACTION_PROMPT)
+
+        try:
+            parsed = json.loads(_strip_array_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return []
+
+        if not isinstance(parsed, list):
+            return []
+
+        guesses: list[MenuItemGuess] = []
+        for row in parsed:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("name")
+            price = row.get("price")
+            if not name or not isinstance(price, (int, float)):
+                continue
+            guesses.append(MenuItemGuess(name=str(name).strip(), price=float(price)))
+        return guesses

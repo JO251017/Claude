@@ -857,6 +857,36 @@ select:focus {
   font-weight: 700;
 }
 
+/* --- 사업자: 메뉴판 사진 AI 인식 결과 (등록 전 확인/수정) --- */
+.menu-photo-list {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.menu-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.menu-photo-row .mp-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.menu-photo-row .mp-name {
+  flex: 2;
+}
+
+.menu-photo-row .mp-price {
+  flex: 1;
+  text-align: right;
+}
+
 /* --- 방문/영업 상태 업데이트 --- */
 .visit-row {
   margin-top: 16px;

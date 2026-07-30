@@ -69,3 +69,13 @@ class MenuItemResponse(BaseModel):
     price: float
     source_url: str | None = None
     verified_at: datetime | None = None
+
+
+class MenuItemGuessItem(BaseModel):
+    name: str
+    price: float
+
+
+class MenuItemAnalyzeResponse(BaseModel):
+    image_url: str
+    items: list[MenuItemGuessItem]
