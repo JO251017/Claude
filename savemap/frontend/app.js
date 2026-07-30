@@ -457,12 +457,10 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
     const pos = new kakao.maps.LatLng(d.lat, d.lng);
     bounds.extend(pos);
     const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: discoveredMarkerImage() });
-    const openKakao = () => {
-      if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
-    };
-    kakao.maps.event.addListener(marker, 'click', openKakao);
+    const openDiscovered = () => openDiscoveredDetail(d);
+    kakao.maps.event.addListener(marker, 'click', openDiscovered);
     mapMarkers.push(marker);
-    mapLabels.push(createLabelOverlay(pos, d.place_name, 'discovered', openKakao));
+    mapLabels.push(createLabelOverlay(pos, d.place_name, 'discovered', openDiscovered));
   });
 
   kakaoMap.setBounds(bounds);
@@ -578,6 +576,49 @@ async function loadMenuComparison(r) {
   } catch {
     sectionEl.innerHTML = '';
   }
+}
+
+// --- 아직 가격 정보 없는(카카오로만 발견된) 매장 상세: 그냥 구경만 하고 나가지 않도록
+// "메뉴/가격 등록하기"로 SaveMap의 핵심 루프(등록→비교→방문 인증→XP)에 바로 연결한다. ---
+function openDiscoveredDetail(d) {
+  const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
+  detailContent.innerHTML = `
+    <div class="badge-group">
+      <span class="badge">${escapeHtml(shortCategory || '음식점·카페')}</span>
+      <span class="tier-tag" style="--tier-color:#94a3b8">가격 정보 없음</span>
+    </div>
+    <h2 class="place-name">${escapeHtml(d.place_name)}</h2>
+    <div class="meta-line">
+      현재 위치에서 ${d.distance_m.toFixed(0)}m${d.address ? ' · ' + escapeHtml(d.address) : ''}
+    </div>
+    <p class="empty-msg" style="margin:10px 0; text-align:left;">
+      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴 가격을 등록하면 이 매장도 지도에
+      절약 정보로 표시되고, 다른 사용자들이 방문해서 가격을 비교하고 인증할 수 있게 돼요.
+    </p>
+    <div class="detail-actions">
+      <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 매장 정보 보기</button>
+      <button type="button" class="btn-primary" id="discovered-register-btn">이 매장 메뉴/가격 등록하기</button>
+    </div>
+  `;
+  detailOverlay.classList.remove('hidden');
+
+  document.getElementById('discovered-kakao-btn').addEventListener('click', () => {
+    if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
+  });
+  document.getElementById('discovered-register-btn').addEventListener('click', () => {
+    detailOverlay.classList.add('hidden');
+    prefillMerchantPlace(d);
+    switchScreen('merchant');
+  });
+}
+
+function prefillMerchantPlace(d) {
+  document.getElementById('p-name').value = d.place_name;
+  document.getElementById('p-address').value = d.address || '';
+  document.getElementById('p-lat').value = d.lat;
+  document.getElementById('p-lng').value = d.lng;
+  document.getElementById('p-location-status').textContent =
+    '지도에서 선택한 매장 위치가 자동 입력됐어요. 실제 매장과 다르면 다시 설정해주세요.';
 }
 
 async function submitStatusUpdate(r, status, btn) {
@@ -770,6 +811,7 @@ async function runSearch() {
           <div class="discovered-card" data-idx="${i}">
             <div class="discovered-name">${escapeHtml(d.place_name)}</div>
             <div class="discovered-meta">${shortCategory ? escapeHtml(shortCategory) + ' · ' : ''}${d.distance_m.toFixed(0)}m</div>
+            <div class="discovered-cta">가격 정보 없음 · 눌러서 등록하기</div>
           </div>`;
           })
           .join('')}
@@ -783,10 +825,7 @@ async function runSearch() {
     });
 
     resultsEl.querySelectorAll('.discovered-card').forEach((card) => {
-      card.addEventListener('click', () => {
-        const d = lastDiscovered[Number(card.dataset.idx)];
-        if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
-      });
+      card.addEventListener('click', () => openDiscoveredDetail(lastDiscovered[Number(card.dataset.idx)]));
     });
   } catch (err) {
     countEl.textContent = '검색 실패';

@@ -477,6 +477,13 @@ body {
   margin-top: 2px;
 }
 
+.discovered-cta {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  margin-top: 6px;
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;
