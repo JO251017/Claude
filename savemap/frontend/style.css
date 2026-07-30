@@ -406,9 +406,9 @@ body {
 /* --- 지도 마커 위 상호명 라벨 (다른 지도 앱처럼 마커 아래 표시) --- */
 .map-label {
   margin-top: 4px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
   color: #1e293b;
   font-size: 11px;
   font-weight: 700;
@@ -416,10 +416,24 @@ body {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   border: 1px solid transparent;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.35;
 }
 
+.map-label-savings {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* 절약 정보가 있는 매장: 희귀도(rarity) 등급 색으로 "찾아가면 이득"임을 강조 */
 .map-label--treasure {
-  border-color: #f59e0b;
+  border-color: var(--tier-color, #f59e0b);
+}
+
+.map-label--treasure .map-label-savings {
+  color: var(--tier-color, #f59e0b);
 }
 
 .map-label--discovered {

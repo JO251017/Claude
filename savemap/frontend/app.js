@@ -377,10 +377,15 @@ function clearMarkers() {
 }
 
 // 다른 지도 앱들처럼 마커 아래에 상호명 라벨을 붙인다.
-function createLabelOverlay(pos, name, variant, onClick) {
+// treasure(절약 정보 있는 매장)는 "찾아가면 얼마나 아끼는지"까지 라벨에 바로 보여줘서
+// 사용자가 지도만 보고도 방문(GPS 인증→XP) 동기를 갖게 한다.
+function createLabelOverlay(pos, name, variant, onClick, opts = {}) {
   const el = document.createElement('div');
-  el.className = `map-label map-label--${variant}`;
-  el.textContent = name;
+  el.className = `map-label map-label--${variant}${opts.tierCls ? ' ' + opts.tierCls : ''}`;
+  el.innerHTML = `
+    <span class="map-label-name">${escapeHtml(name)}</span>
+    ${opts.savingsText ? `<span class="map-label-savings">${escapeHtml(opts.savingsText)}</span>` : ''}
+  `;
   if (onClick) el.addEventListener('click', onClick);
 
   const overlay = new kakao.maps.CustomOverlay({
@@ -437,7 +442,15 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
     const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: treasureMarkerImage() });
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
-    mapLabels.push(createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r)));
+
+    const tier = getRarityTier(r.savings_rate);
+    const savingsText =
+      r.total_savings > 0
+        ? `${Math.round(r.savings_rate)}%↓ · ${Math.round(r.total_savings).toLocaleString()}원 절약`
+        : '방문 인증하고 XP 받기';
+    mapLabels.push(
+      createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), { tierCls: tier.cls, savingsText })
+    );
   });
 
   discovered.forEach((d) => {
