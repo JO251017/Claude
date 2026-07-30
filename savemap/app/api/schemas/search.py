@@ -24,10 +24,25 @@ class SearchResultItem(BaseModel):
     score: float
 
 
+class DiscoveredPlaceItem(BaseModel):
+    """SaveMap에 아직 가격/절약 정보가 없는, 카카오 로컬 검색으로 발견한 주변 식당·카페.
+    콜드스타트 문제(초기에 아무도 매장을 등록 안 했을 때 지도가 텅 비는 것) 완화용."""
+
+    kakao_place_id: str
+    place_name: str
+    address: str | None = None
+    category_name: str | None = None
+    distance_m: float
+    lat: float
+    lng: float
+    kakao_url: str | None = None
+
+
 class SearchResponse(BaseModel):
     count: int
     radius_km: float
     results: list[SearchResultItem]
+    discovered_places: list[DiscoveredPlaceItem] = []
 
 
 class SearchQuery(BaseModel):

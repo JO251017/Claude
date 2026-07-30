@@ -381,9 +381,18 @@ function treasureMarkerImage() {
   return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(26, 26));
 }
 
-let lastResults = [];
+// 아직 절약 정보가 없는(카카오로만 발견된) 매장은 회색 마커로 구분한다.
+function discoveredMarkerImage() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+    <circle cx="9" cy="9" r="7" fill="#94a3b8" stroke="white" stroke-width="2.5"/>
+  </svg>`;
+  return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(18, 18));
+}
 
-function renderMapMarkers(originLat, originLng, results) {
+let lastResults = [];
+let lastDiscovered = [];
+
+function renderMapMarkers(originLat, originLng, results, discovered = []) {
   if (!kakaoMap) return;
   clearMarkers();
 
@@ -406,6 +415,16 @@ function renderMapMarkers(originLat, originLng, results) {
     bounds.extend(pos);
     const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: treasureMarkerImage() });
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
+    mapMarkers.push(marker);
+  });
+
+  discovered.forEach((d) => {
+    const pos = new kakao.maps.LatLng(d.lat, d.lng);
+    bounds.extend(pos);
+    const marker = new kakao.maps.Marker({ map: kakaoMap, position: pos, image: discoveredMarkerImage() });
+    kakao.maps.event.addListener(marker, 'click', () => {
+      if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
+    });
     mapMarkers.push(marker);
   });
 
@@ -663,17 +682,21 @@ async function runSearch() {
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
     lastResults = data.results;
-    renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results);
+    lastDiscovered = data.discovered_places || [];
+    renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results, lastDiscovered);
     renderSavingsHero(data.results);
 
-    if (data.results.length === 0) {
+    if (data.results.length === 0 && lastDiscovered.length === 0) {
       countEl.textContent = '주변에 절약 기회가 없어요';
       resultsEl.innerHTML = '<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>';
       return;
     }
 
-    countEl.textContent = `지금 잡을 수 있는 절약 ${data.results.length}개`;
-    resultsEl.innerHTML = data.results
+    countEl.textContent = data.results.length > 0
+      ? `지금 잡을 수 있는 절약 ${data.results.length}개`
+      : `주변 식당·카페 ${lastDiscovered.length}곳 발견`;
+
+    const offerCardsHtml = data.results
       .map((r, i) => {
         const tier = getRarityTier(r.savings_rate);
         const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
@@ -699,8 +722,34 @@ async function runSearch() {
       })
       .join('');
 
+    const discoveredHtml = lastDiscovered.length
+      ? `
+      <div class="discovered-section">
+        <div class="discovered-header">주변 식당·카페 ${lastDiscovered.length}곳 (아직 절약 정보 없음)</div>
+        ${lastDiscovered
+          .map((d, i) => {
+            const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
+            return `
+          <div class="discovered-card" data-idx="${i}">
+            <div class="discovered-name">${escapeHtml(d.place_name)}</div>
+            <div class="discovered-meta">${shortCategory ? escapeHtml(shortCategory) + ' · ' : ''}${d.distance_m.toFixed(0)}m</div>
+          </div>`;
+          })
+          .join('')}
+      </div>`
+      : '';
+
+    resultsEl.innerHTML = offerCardsHtml + discoveredHtml;
+
     resultsEl.querySelectorAll('.result-card').forEach((card) => {
       card.addEventListener('click', () => openOfferDetail(lastResults[Number(card.dataset.idx)]));
+    });
+
+    resultsEl.querySelectorAll('.discovered-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const d = lastDiscovered[Number(card.dataset.idx)];
+        if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
+      });
     });
   } catch (err) {
     countEl.textContent = '검색 실패';

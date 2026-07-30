@@ -3,11 +3,12 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
-from app.api.schemas.search import SearchResponse, SearchResultItem
+from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse, SearchResultItem
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
 from app.domain.enums import Category, PaymentMethodType
 from app.engine.benefit_combiner import combine
+from app.engine.discovery import discover_nearby_places
 from app.engine.models import OfferCandidate, PaymentBenefit
 from app.engine.ranker import rank_candidates
 from app.engine.rule_filter import rule_filter
@@ -91,4 +92,24 @@ async def search(
         )
         for r in ranked
     ]
-    return SearchResponse(count=len(results), radius_km=radius, results=results)
+
+    discovered = await discover_nearby_places(
+        lat, lng, radius, existing_coords=[(r.lat, r.lng) for r in results]
+    )
+    discovered_places = [
+        DiscoveredPlaceItem(
+            kakao_place_id=c.place.kakao_place_id,
+            place_name=c.place.name,
+            address=c.place.address,
+            category_name=c.place.category_name,
+            distance_m=round(c.distance_m, 1),
+            lat=c.place.lat,
+            lng=c.place.lng,
+            kakao_url=c.place.place_url,
+        )
+        for c in discovered
+    ]
+
+    return SearchResponse(
+        count=len(results), radius_km=radius, results=results, discovered_places=discovered_places
+    )

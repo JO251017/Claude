@@ -403,6 +403,41 @@ body {
   box-shadow: 0 0 10px var(--tier-color, transparent);
 }
 
+/* --- 아직 절약 정보 없는 발견된 매장 (카카오 로컬 검색, 콜드스타트 대응) --- */
+.discovered-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.discovered-header {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.discovered-card {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px dashed var(--border);
+  cursor: pointer;
+}
+
+.discovered-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.discovered-meta {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;
