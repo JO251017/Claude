@@ -10,7 +10,7 @@ from app.domain.enums import Category, Layer, SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
-from app.engine.price_comparison import compare_menu_item
+from app.engine.price_comparison import MenuPriceComparison, compare_menu_item
 from app.sources.merchant_console.ttl import clear_flash_ttl, set_flash_ttl
 
 
@@ -160,11 +160,12 @@ async def _get_owned_menu_item(session: AsyncSession, owner_user_id: str, menu_i
     return item
 
 
-async def _sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -> None:
+async def _sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -> MenuPriceComparison:
     """메뉴가 지역 평균보다 확실히 싸면(비교 데이터 신뢰 가능) 지도 검색에 뜨도록 오퍼를
     자동 생성/갱신한다. 더 이상 싸지 않게 되면 오퍼를 지운다 — 지도 검색(/v1/search)이
     offer 테이블만 보는 구조라, 메뉴만 등록하고 오퍼가 없으면 지도에 전혀 안 뜨는 문제를
-    해결하기 위함. menu_item_id로 추적해 중복 생성하지 않는다."""
+    해결하기 위함. menu_item_id로 추적해 중복 생성하지 않는다. 비교 결과를 반환해
+    사장님에게 "왜 지도에 안 뜨는지/떴는지" 그 자리에서 알려줄 수 있게 한다."""
     point = to_shape(place.geom)
     cmp = await compare_menu_item(session, item, point.y, point.x)
 
@@ -195,6 +196,7 @@ async def _sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) 
         await session.delete(existing_offer)
 
     await session.commit()
+    return cmp
 
 
 async def create_menu_item(
@@ -204,7 +206,7 @@ async def create_menu_item(
     name: str,
     price: float,
     source_url: str | None = None,
-) -> MenuItem:
+) -> tuple[MenuItem, MenuPriceComparison]:
     place = await _get_owned_place(session, owner_user_id, place_id)
     item = MenuItem(
         place_id=place_id,
@@ -218,14 +220,20 @@ async def create_menu_item(
     await session.commit()
     await session.refresh(item)
 
-    await _sync_menu_offer(session, place, item)
-    return item
+    cmp = await _sync_menu_offer(session, place, item)
+    return item, cmp
 
 
-async def list_menu_items_for_owner(session: AsyncSession, owner_user_id: str, place_id: int) -> list[MenuItem]:
-    await _get_owned_place(session, owner_user_id, place_id)
+async def list_menu_items_for_owner(
+    session: AsyncSession, owner_user_id: str, place_id: int
+) -> list[tuple[MenuItem, MenuPriceComparison]]:
+    """사장님이 등록한 메뉴가 지금 지도에 절약 정보로 떠 있는지를 목록에서도 바로
+    확인할 수 있도록 각 항목의 지역 비교 결과를 함께 반환한다."""
+    place = await _get_owned_place(session, owner_user_id, place_id)
     stmt = select(MenuItem).where(MenuItem.place_id == place_id).order_by(MenuItem.id.desc())
-    return list((await session.execute(stmt)).scalars().all())
+    items = list((await session.execute(stmt)).scalars().all())
+    point = to_shape(place.geom)
+    return [(item, await compare_menu_item(session, item, point.y, point.x)) for item in items]
 
 
 async def update_menu_item(
@@ -234,7 +242,7 @@ async def update_menu_item(
     menu_item_id: int,
     price: float | None = None,
     source_url: str | None = None,
-) -> MenuItem:
+) -> tuple[MenuItem, MenuPriceComparison | None]:
     item = await _get_owned_menu_item(session, owner_user_id, menu_item_id)
     price_changed = price is not None and float(price) != float(item.price)
     if price is not None:
@@ -245,10 +253,11 @@ async def update_menu_item(
     await session.commit()
     await session.refresh(item)
 
+    cmp = None
     if price_changed:
         place = await session.get(Place, item.place_id)
-        await _sync_menu_offer(session, place, item)
-    return item
+        cmp = await _sync_menu_offer(session, place, item)
+    return item, cmp
 
 
 async def delete_menu_item(session: AsyncSession, owner_user_id: str, menu_item_id: int) -> None:

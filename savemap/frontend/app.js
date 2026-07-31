@@ -1128,17 +1128,32 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
-    await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
-    alert('매장 등록 완료! 아래 혜택 등록에서 매장을 선택할 수 있어요.');
+    const created = await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
     e.target.reset();
     document.getElementById('p-location-status').textContent = '매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.';
-    loadPlaces();
+    await loadPlaces();
+    focusMenuRegistration(created.id);
   } catch (err) {
     alert(`매장 등록 실패: ${err.message}`);
   } finally {
     submitBtn.disabled = false;
   }
 });
+
+// --- 매장 등록만 하고 메뉴 가격을 등록하지 않으면 지도에 절약 정보가 절대 뜨지 않는다
+// (search는 offer만 봄, offer는 메뉴 가격 비교에서 자동 생성됨) — 그래서 매장 등록 직후
+// 바로 메뉴 가격 등록 칸으로 데려가 "등록 = 끝"이라고 착각하지 않게 한다. ---
+function focusMenuRegistration(placeId) {
+  for (const id of ['o-place-id', 'mi-place-id', 'mi-photo-place-id']) {
+    const sel = document.getElementById(id);
+    if (sel && placeId != null) sel.value = String(placeId);
+  }
+  const section = document.getElementById('menu-price-section');
+  if (!section) return;
+  section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  section.classList.add('menu-price-highlight');
+  setTimeout(() => section.classList.remove('menu-price-highlight'), 3200);
+}
 
 async function loadPlaces() {
   const listEl = document.getElementById('places-list');
@@ -1253,19 +1268,23 @@ async function confirmMenuPhotoResults(placeId) {
 
   statusEl.textContent = '등록 중...';
   let success = 0;
+  let listed = 0;
   for (const item of toSave) {
     try {
-      await apiFetch('/merchant/menu-items', {
+      const saved = await apiFetch('/merchant/menu-items', {
         method: 'POST',
         body: JSON.stringify({ place_id: placeId, name: item.name, price: item.price }),
       });
       success++;
+      if (saved.listed_on_map) listed++;
     } catch {
       // 개별 등록 실패는 건너뛰고 계속 진행, 완료 후 성공 개수로 안내
     }
   }
 
-  statusEl.textContent = `${success}/${toSave.length}개 메뉴 등록 완료!`;
+  statusEl.textContent = listed
+    ? `${success}/${toSave.length}개 메뉴 등록 완료! 그중 ${listed}개는 지역 평균보다 저렴해서 지도에 절약 정보로 떴어요.`
+    : `${success}/${toSave.length}개 메뉴 등록 완료! 아직 지도에 뜬 항목은 없어요 — 지역 평균보다 저렴하거나 비교할 주변 매장이 더 모이면 자동으로 떠요.`;
   document.getElementById('mi-photo-results').innerHTML = '';
   loadMenuItems();
 }
@@ -1385,11 +1404,11 @@ document.getElementById('menu-item-form').addEventListener('submit', async (e) =
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
-    await apiFetch('/merchant/menu-items', {
+    const item = await apiFetch('/merchant/menu-items', {
       method: 'POST',
       body: JSON.stringify({ place_id: placeId, name, price }),
     });
-    alert('메뉴 등록 완료!');
+    alert(menuSavingsMessage(item));
     e.target.reset();
     loadMenuItems();
   } catch (err) {
@@ -1398,6 +1417,18 @@ document.getElementById('menu-item-form').addEventListener('submit', async (e) =
     submitBtn.disabled = false;
   }
 });
+
+// --- 메뉴 가격 등록 결과가 실제로 지도에 절약 정보로 뜨는지, 안 뜬다면 왜인지를
+// 그 자리에서 알려준다 (지어내지 않기: 비교 표본이 2곳 미만이면 절약을 단정하지 않음). ---
+function menuSavingsMessage(item) {
+  if (item.listed_on_map) {
+    return `메뉴 등록 완료! "${item.name}"이(가) 지역 평균(${Math.round(item.region_median)}원)보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요. 방문 인증하면 손님이 XP를 받아요.`;
+  }
+  if (item.reliable) {
+    return `메뉴 등록 완료! 다만 지역 평균(${Math.round(item.region_median)}원)보다 저렴하진 않아서 아직 지도엔 절약 정보로 뜨지 않아요.`;
+  }
+  return `메뉴 등록 완료! 아직 주변에 같은 메뉴를 등록한 매장이 부족해서(비교 표본 ${item.sample_count}곳) 절약 비교가 안 돼요. 주변 매장이 2곳 이상 같은 메뉴를 등록하면 자동으로 비교돼요.`;
+}
 
 async function loadMenuItems() {
   const listEl = document.getElementById('menu-items-list');
@@ -1413,13 +1444,19 @@ async function loadMenuItems() {
       )
     );
     const rows = perPlace.flatMap(({ place, items }) =>
-      items.map(
-        (m) => `
+      items.map((m) => {
+        const status = m.listed_on_map
+          ? `<span class="menu-status menu-status--on">지도에 절약 정보로 표시 중 (-${Math.round(m.savings_amount)}원)</span>`
+          : m.reliable
+            ? `<span class="menu-status menu-status--off">지역 평균보다 비싸거나 같음</span>`
+            : `<span class="menu-status menu-status--pending">비교 대기 (주변 등록 ${m.sample_count}곳)</span>`;
+        return `
       <div class="list-row">
         [${escapeHtml(place.name)}] ${escapeHtml(m.name)} - ${m.price.toLocaleString()}원
         <button class="btn-delete-inline" data-id="${m.id}">삭제</button>
-      </div>`
-      )
+        <br />${status}
+      </div>`;
+      })
     );
     listEl.innerHTML = rows.length ? rows.join('') : '<p class="empty-msg">등록된 메뉴가 없습니다.</p>';
 

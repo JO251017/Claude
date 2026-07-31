@@ -20,6 +20,7 @@ from app.core.errors import InvalidImageError
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
+from app.engine.price_comparison import MenuPriceComparison
 from app.integrations.gemini import GeminiVisionClient
 from app.integrations.supabase_storage import SupabaseStorageClient
 from app.sources.merchant_console import service
@@ -33,7 +34,9 @@ def _place_response(place: Place) -> PlaceResponse:
     return PlaceResponse(id=place.id, name=place.name, address=place.address, phone=place.phone)
 
 
-def _menu_item_response(item: MenuItem) -> MenuItemResponse:
+def _menu_item_response(
+    item: MenuItem, cmp: MenuPriceComparison | None = None
+) -> MenuItemResponse:
     return MenuItemResponse(
         id=item.id,
         place_id=item.place_id,
@@ -41,6 +44,12 @@ def _menu_item_response(item: MenuItem) -> MenuItemResponse:
         price=float(item.price),
         source_url=item.source_url,
         verified_at=item.verified_at,
+        region_median=cmp.region_median if cmp else None,
+        sample_count=cmp.sample_count if cmp else 0,
+        savings_amount=cmp.savings_amount if cmp else None,
+        savings_rate=cmp.savings_rate if cmp else None,
+        reliable=cmp.reliable if cmp else False,
+        listed_on_map=bool(cmp and cmp.reliable and cmp.savings_amount and cmp.savings_amount > 0),
     )
 
 
@@ -189,7 +198,7 @@ async def create_menu_item(
     user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> MenuItemResponse:
-    item = await service.create_menu_item(
+    item, cmp = await service.create_menu_item(
         session,
         user_id,
         place_id=payload.place_id,
@@ -197,7 +206,7 @@ async def create_menu_item(
         price=payload.price,
         source_url=payload.source_url,
     )
-    return _menu_item_response(item)
+    return _menu_item_response(item, cmp)
 
 
 @router.get("/places/{place_id}/menu-items", response_model=list[MenuItemResponse])
@@ -207,7 +216,7 @@ async def list_menu_items(
     session: AsyncSession = SessionDep,
 ) -> list[MenuItemResponse]:
     items = await service.list_menu_items_for_owner(session, user_id, place_id)
-    return [_menu_item_response(i) for i in items]
+    return [_menu_item_response(item, cmp) for item, cmp in items]
 
 
 @router.patch("/menu-items/{menu_item_id}", response_model=MenuItemResponse)
@@ -217,10 +226,10 @@ async def update_menu_item(
     user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> MenuItemResponse:
-    item = await service.update_menu_item(
+    item, cmp = await service.update_menu_item(
         session, user_id, menu_item_id, price=payload.price, source_url=payload.source_url
     )
-    return _menu_item_response(item)
+    return _menu_item_response(item, cmp)
 
 
 @router.delete("/menu-items/{menu_item_id}", status_code=204)

@@ -72,6 +72,13 @@ class MenuItemResponse(BaseModel):
     price: float
     source_url: str | None = None
     verified_at: datetime | None = None
+    # 이 가격이 지역 평균과 비교돼 지도에 절약 정보로 떴는지 사장님에게 그 자리에서 알려주기 위함
+    region_median: float | None = None
+    sample_count: int = 0
+    savings_amount: float | None = None
+    savings_rate: float | None = None
+    reliable: bool = False
+    listed_on_map: bool = False
 
 
 class MenuItemGuessItem(BaseModel):
