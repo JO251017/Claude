@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>SaveMap 관리자 - 착한가격업소 가져오기</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=file], input[type=text] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  button.secondary { background: #64748b; margin-left: 8px; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 420px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+  <h1>착한가격업소 데이터 가져오기</h1>
+  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용).</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label for="file">착한가격업소 파일 (.xls 또는 .csv)</label>
+  <input type="file" id="file" accept=".xls,.xlsx,.csv" />
+
+  <label for="regions">지역별로 나눠서 실행 (한 줄에 하나, 비우면 전체를 한 번에)</label>
+  <textarea id="regions" rows="6" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">서울특별시
+경기도
+부산광역시
+전남
+광주
+경상남도
+경상북도
+강원
+충청남도
+대전광역시
+대구광역시
+인천광역시
+전북
+충청북도
+제주
+울산광역시
+세종특별자치시</textarea>
+
+  <div>
+    <button id="dryrun-btn">미리보기 (dry_run, DB에 저장 안 함)</button>
+    <button id="run-btn" class="secondary">실제로 가져오기 시작</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function callImport(file, region, dryRun) {
+  const key = document.getElementById('key').value;
+  const form = new FormData();
+  form.append('file', file);
+  const params = new URLSearchParams();
+  if (region) params.set('region', region);
+  if (dryRun) params.set('dry_run', 'true');
+  const resp = await fetch(`/v1/admin/import/good-price-csv?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'X-Admin-Key': key },
+    body: form,
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+async function runAll(dryRun) {
+  const fileInput = document.getElementById('file');
+  const file = fileInput.files[0];
+  if (!file) { alert('파일을 선택해주세요.'); return; }
+  if (!document.getElementById('key').value) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+
+  const regionsRaw = document.getElementById('regions').value.trim();
+  const regions = regionsRaw ? regionsRaw.split('\n').map((s) => s.trim()).filter(Boolean) : [null];
+
+  document.getElementById('dryrun-btn').disabled = true;
+  document.getElementById('run-btn').disabled = true;
+  logEl.textContent = '';
+  log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : '실제 저장'})`);
+
+  const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0 };
+  for (const region of regions) {
+    log(`\n▶ ${region || '전체'} 처리 중...`);
+    try {
+      const result = await callImport(file, region, dryRun);
+      log(JSON.stringify(result, null, 2));
+      for (const k of Object.keys(totals)) {
+        if (typeof result[k] === 'number') totals[k] += result[k];
+      }
+    } catch (err) {
+      log(`오류: ${err.message}`);
+    }
+  }
+  log(`\n=== 전체 합계 ===\n${JSON.stringify(totals, null, 2)}`);
+
+  document.getElementById('dryrun-btn').disabled = false;
+  document.getElementById('run-btn').disabled = false;
+}
+
+document.getElementById('dryrun-btn').addEventListener('click', () => runAll(true));
+document.getElementById('run-btn').addEventListener('click', () => {
+  if (confirm('실제로 DB에 저장합니다. 계속할까요?')) runAll(false);
+});
+</script>
+</body>
+</html>
