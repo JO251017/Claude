@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.sources.public_api.good_price import parse_price, parse_row
 
 
@@ -5,14 +7,21 @@ def test_parse_price_handles_real_world_formats():
     assert parse_price("9,000") == 9000.0
     assert parse_price("9000원") == 9000.0
     assert parse_price(" 12,500원~ ") == 12500.0
-    assert parse_price(8000) == 8000.0
     assert parse_price("") is None
     assert parse_price(None) is None
     assert parse_price("가격문의") is None
     assert parse_price("50") is None  # 비현실적으로 낮은 값은 버림
 
 
-def test_parse_row_full():
+def test_parse_price_handles_native_numbers_without_inflating_them():
+    # xlrd는 엑셀 숫자 셀을 float로 준다 (예: 8800.0). str(8800.0) = "8800.0"이라
+    # 숫자만 뽑으면 소수점 뒤 0까지 자릿수로 붙어 88000이 되는 실제 발생한 버그였다.
+    assert parse_price(8800.0) == 8800.0
+    assert parse_price(2000.0) == 2000.0
+    assert parse_price(12000) == 12000.0
+
+
+def test_parse_row_full_with_numbered_columns():
     row = {
         "업소명": "평택착한식당",
         "소재지도로명주소": "경기도 평택시 중앙로 1",
@@ -32,6 +41,27 @@ def test_parse_row_full():
     assert abs(parsed["lat"] - 36.9921) < 1e-6
 
 
+def test_parse_row_matches_real_goodprice_go_kr_columns():
+    # goodprice.go.kr에서 실제로 받은 다운로드 파일의 컬럼 그대로 (2026-07-31 확인).
+    # 품목/가격이 번호 없이 단일 쌍이고, 좌표는 아예 없다.
+    row = {
+        "번호": "1",
+        "업종명": "한식",
+        "업소명": "88냉삼 본점",
+        "주요품목": "냉삼",
+        "가격": 8800.0,
+        "업소 전화번호": "031-664-9293",
+        "주소": "경기도 평택시 고덕국제7로 117 (고덕동) 110호 88냉삼 본점",
+    }
+    parsed = parse_row(row)
+    assert parsed is not None
+    assert parsed["name"] == "88냉삼 본점"
+    assert parsed["category"] == "한식"
+    assert parsed["phone"] == "031-664-9293"
+    assert parsed["menu_items"] == [("냉삼", 8800.0)]
+    assert parsed["lat"] is None and parsed["lng"] is None  # 지오코딩은 store_rows에서
+
+
 def test_parse_row_tolerates_spaced_column_names():
     row = {
         "업소명": "가게",
@@ -47,16 +77,25 @@ def test_parse_row_tolerates_spaced_column_names():
     assert parsed["menu_items"] == [("칼국수", 9000.0)]
 
 
+def test_parse_row_missing_coords_parses_but_leaves_lat_lng_none():
+    # 좌표가 없어도 버리지 않는다 — store_rows가 나중에 지오코딩으로 채운다.
+    parsed = parse_row({"업소명": "가게", "품목1": "국밥", "가격1": "9000"})
+    assert parsed is not None
+    assert parsed["lat"] is None and parsed["lng"] is None
+
+
 def test_parse_row_rejects_incomplete_rows():
-    # 좌표 없음
-    assert parse_row({"업소명": "가게", "품목1": "국밥", "가격1": "9000"}) is None
-    # 메뉴 가격 없음
+    # 메뉴 가격 없음 (실제 데이터에서 서비스업 상당수가 '주요품목: -', '가격: '로 온다)
     assert parse_row({"업소명": "가게", "위도": "36.9", "경도": "127.1", "품목1": "국밥"}) is None
-    # 한국 밖 좌표 (데이터 오류)
-    assert (
-        parse_row({"업소명": "가게", "위도": "3.69", "경도": "12.71", "품목1": "국밥", "가격1": "9000"})
-        is None
+    assert parse_row({"업소명": "가게", "주요품목": "-", "가격": ""}) is None
+    # 업소명 없음
+    assert parse_row({"품목1": "국밥", "가격1": "9000"}) is None
+    # 한국 밖 좌표(데이터 오류)는 좌표만 버리고 나머지는 살린다
+    parsed = parse_row(
+        {"업소명": "가게", "위도": "3.69", "경도": "12.71", "품목1": "국밥", "가격1": "9000"}
     )
+    assert parsed is not None
+    assert parsed["lat"] is None
 
 
 def test_parse_csv_bytes_cp949_and_utf8():
@@ -78,3 +117,73 @@ def test_parse_csv_bytes_rejects_undecodable():
 
     with pytest.raises(ValueError):
         parse_csv_bytes(b"\xff\xfe\x00\x01\x02\x81")
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def test_parse_xls_bytes_reads_real_goodprice_export():
+    # 고정 픽스처는 실제 goodprice.go.kr 다운로드 파일(2026-07-31 확인)의 헤더/값
+    # 구조를 그대로 재현한 것 — 제목행 + 빈행 + 헤더행 + 데이터행.
+    from app.sources.public_api.good_price import parse_xls_bytes
+
+    content = (FIXTURES_DIR / "goodprice_sample.xls").read_bytes()
+    rows = parse_xls_bytes(content)
+    assert len(rows) == 1
+    assert rows[0]["업소명"] == "88냉삼 본점"
+    parsed = parse_row(rows[0])
+    assert parsed is not None
+    assert parsed["menu_items"] == [("냉삼", 8800.0)]
+
+
+def test_parse_xls_bytes_rejects_files_without_header():
+    import pytest
+
+    from app.sources.public_api.good_price import parse_xls_bytes
+
+    content = (FIXTURES_DIR / "goodprice_no_header.xls").read_bytes()
+    with pytest.raises(ValueError):
+        parse_xls_bytes(content)
+
+
+def test_geocode_missing_coords_fills_from_kakao_and_leaves_failures_none(monkeypatch):
+    import asyncio
+    from unittest.mock import patch
+
+    from app.integrations.kakao import GeocodeResult
+    from app.sources.public_api import good_price
+
+    monkeypatch.setattr(good_price.settings, "kakao_rest_api_key", "fake-key")
+
+    rows = [
+        {"name": "찾아지는 가게", "address": "경기도 평택시 1", "lat": None, "lng": None},
+        {"name": "안 찾아지는 가게", "address": "존재하지않는주소", "lat": None, "lng": None},
+        {"name": "이미 좌표 있음", "address": "서울", "lat": 37.5, "lng": 127.0},
+    ]
+
+    async def fake_geocode(self, query):
+        if query == "경기도 평택시 1":
+            return GeocodeResult(lat=36.99, lng=127.11, address=query)
+        return None
+
+    with patch("app.integrations.kakao.KakaoClient.geocode", new=fake_geocode):
+        asyncio.run(good_price._geocode_missing_coords(rows))
+
+    assert rows[0]["lat"] == 36.99 and rows[0]["lng"] == 127.11
+    assert rows[1]["lat"] is None  # 못 찾으면 지어내지 않고 None 그대로
+    assert rows[2]["lat"] == 37.5  # 이미 있던 좌표는 건드리지 않음
+
+
+def test_geocode_missing_coords_skips_when_no_kakao_key(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import good_price
+
+    monkeypatch.setattr(good_price.settings, "kakao_rest_api_key", "")
+    rows = [{"name": "가게", "address": "경기도 평택시 1", "lat": None, "lng": None}]
+
+    with patch("app.integrations.kakao.KakaoClient.geocode", new=AsyncMock()) as mocked:
+        asyncio.run(good_price._geocode_missing_coords(rows))
+        mocked.assert_not_called()
+    assert rows[0]["lat"] is None

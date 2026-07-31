@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.errors import AuthenticationRequiredError, InvalidCsvError
 from app.sources.public_api.good_price import (
     parse_csv_bytes,
+    parse_xls_bytes,
     store_rows,
     sync_good_price_stores,
 )
@@ -44,21 +45,41 @@ async def trigger_good_price_sync(
 async def import_good_price_csv(
     file: UploadFile = File(...),
     region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    dry_run: bool = Query(default=False, description="true면 DB에 저장하지 않고 파싱 결과만 미리보기"),
     x_admin_key: str | None = Header(default=None),
     session: AsyncSession = SessionDep,
 ) -> dict:
-    """착한가격업소 CSV 파일을 직접 업로드해서 저장한다 — data.go.kr이 점검 중이거나
-    활용신청이 안 될 때, 지자체 홈페이지·경기데이터드림 등에서 받은 파일로 같은
-    파이프라인(Place + 실제 메뉴 가격 → 절약 엔진)을 태우는 우회 경로."""
+    """착한가격업소 파일(CSV 또는 goodprice.go.kr에서 받은 xls)을 직접 업로드해서
+    저장한다 — data.go.kr이 점검 중이거나 활용신청이 안 될 때, 지자체 홈페이지·
+    경기데이터드림·goodprice.go.kr 등에서 받은 파일로 같은 파이프라인(Place + 실제
+    메뉴 가격 → 절약 엔진)을 태우는 우회 경로. 확장자로 형식을 판단한다."""
     if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
 
     content = await file.read()
+    filename = (file.filename or "").lower()
     try:
-        raw_rows = parse_csv_bytes(content)
+        if filename.endswith(".xls") or filename.endswith(".xlsx"):
+            raw_rows = parse_xls_bytes(content)
+        else:
+            raw_rows = parse_csv_bytes(content)
     except ValueError as exc:
         raise InvalidCsvError(str(exc)) from exc
     if not raw_rows:
-        raise InvalidCsvError("CSV에서 데이터 행을 찾지 못했습니다")
+        raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
+
+    if dry_run:
+        from app.sources.public_api.good_price import parse_row
+
+        parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
+        if region:
+            parsed = [p for p in parsed if p["address"] and region in p["address"]]
+        return {
+            "dry_run": True,
+            "raw_rows": len(raw_rows),
+            "usable_rows": len(parsed),
+            "needs_geocoding": sum(1 for p in parsed if p["lat"] is None),
+            "preview": parsed[:10],
+        }
 
     return await store_rows(session, raw_rows, region=region)

@@ -10,25 +10,31 @@ from app.domain.enums import SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
+from app.integrations.kakao import KakaoClient
 
 logger = logging.getLogger(__name__)
 
-# 행정안전부 "착한가격업소 현황" (data.go.kr 파일데이터 → odcloud 표준 오픈API).
-# 정부·지자체가 "가격이 저렴한 업소"로 직접 지정·공표한 실제 데이터로, 업소명·주소·
-# 전화번호·대표 품목/가격·좌표를 제공한다 — 카카오/네이버가 메뉴를 API로 주지 않는
-# 상황에서, 지어내지 않고 초기(콜드스타트) 절약 정보를 전국 단위로 채울 수 있는
-# 유일하게 확인된 합법적 원천이다.
+# 행정안전부 "착한가격업소 현황" (data.go.kr 파일데이터 → odcloud 표준 오픈API, 또는
+# goodprice.go.kr에서 직접 받은 xls/csv). 정부·지자체가 "가격이 저렴한 업소"로 직접
+# 지정·공표한 실제 데이터로, 업소명·주소·전화번호·대표 품목/가격을 제공한다 —
+# 카카오/네이버가 메뉴를 API로 주지 않는 상황에서, 지어내지 않고 초기(콜드스타트)
+# 절약 정보를 채울 수 있는 유일하게 확인된 합법적 원천이다.
+#
+# 실제 다운로드 파일(goodprice.go.kr, 2026-07-31 확인)에는 좌표(위도/경도)가 아예
+# 없다 — 업소명/주소만 있고, 품목/가격도 "주요품목"/"가격" 단일 쌍 하나뿐이다(품목1,
+# 품목2 형태 아님). odcloud API도 같은 원본 파일을 변환한 것이라 컬럼이 비슷할
+# 가능성이 높아, 두 패턴(단일 쌍 + 번호 붙은 패턴) 둘 다 인식하게 하고, 좌표가 없으면
+# 카카오 주소 검색으로 지오코딩한다(좌표를 지어내지 않고, 실제 주소 매칭 결과만 사용).
 #
 # 엔드포인트 UDDI는 포털 업로드 회차마다 바뀌므로 코드에 하드코딩하지 않고
-# GOOD_PRICE_API_URL 환경변수로 받는다 (활용신청 승인 후 포털 "오픈API 상세" 화면의
-# 요청 URL 그대로). 미설정이면 아무것도 지어내지 않고 그냥 건너뛴다.
+# GOOD_PRICE_API_URL 환경변수로 받는다. 미설정이면 아무것도 지어내지 않고 건너뛴다.
 
 _PER_PAGE = 300
 _MAX_PAGES = 40  # 전국 약 6~7천 건 안전 상한
 
 
 def _row_value(row: dict, *candidates: str):
-    """공공 파일데이터의 한글 컬럼명이 회차별로 조금씩 달라서(띄어쓰기 등) 후보를 순서대로 본다."""
+    """공공 파일데이터의 한글 컬럼명이 회차/출처별로 조금씩 달라서(띄어쓰기 등) 후보를 순서대로 본다."""
     for key in candidates:
         value = row.get(key)
         if value not in (None, ""):
@@ -42,42 +48,59 @@ def _row_value(row: dict, *candidates: str):
 
 
 def parse_price(value) -> float | None:
-    """'9,000', '9000원', '9,000원~' 같은 실데이터 표기를 숫자로. 해석 불가면 None (버림)."""
+    """엑셀에서 온 순수 숫자(8800.0)와, '9,000원' 같은 문자열 표기를 둘 다 다룬다.
+    문자열의 소수점을 숫자로 오인해 자릿수가 밀리지 않도록 숫자 타입은 바로 float
+    변환한다. 해석 불가면 None (버림)."""
     if value in (None, ""):
         return None
-    digits = "".join(ch for ch in str(value) if ch.isdigit())
-    if not digits:
-        return None
-    price = float(digits)
+    if isinstance(value, (int, float)):
+        price = float(value)
+    else:
+        digits = "".join(ch for ch in str(value) if ch.isdigit())
+        if not digits:
+            return None
+        price = float(digits)
     return price if 100 <= price <= 10_000_000 else None
 
 
 def parse_row(row: dict) -> dict | None:
-    """odcloud 응답 한 행 → 저장에 필요한 필드. 이름/좌표/메뉴가격 중 하나라도 없으면
-    None (불완전한 데이터를 지어내서 채우지 않는다)."""
+    """odcloud/xls/csv 행 → 저장에 필요한 필드. 이름/메뉴가격 중 하나라도 없으면
+    None (불완전한 데이터를 지어내서 채우지 않는다). 좌표는 없어도 되고(지오코딩으로
+    나중에 채움), 있으면 그대로 신뢰한다."""
     name = _row_value(row, "업소명")
-    try:
-        lat = float(_row_value(row, "위도") or "")
-        lng = float(_row_value(row, "경도") or "")
-    except (TypeError, ValueError):
-        return None
-    if not name or not (33.0 < lat < 39.5 and 124.0 < lng < 132.0):
+    if not name:
         return None
 
+    lat = lng = None
+    raw_lat, raw_lng = _row_value(row, "위도"), _row_value(row, "경도")
+    if raw_lat not in (None, "") and raw_lng not in (None, ""):
+        try:
+            lat, lng = float(raw_lat), float(raw_lng)
+            if not (33.0 < lat < 39.5 and 124.0 < lng < 132.0):
+                lat = lng = None
+        except (TypeError, ValueError):
+            lat = lng = None
+
     menu_items: list[tuple[str, float]] = []
+    # 실제 goodprice.go.kr 다운로드 형식: 품목/가격이 한 쌍뿐이다.
+    single_name = _row_value(row, "주요품목", "착한가격품목", "품목", "메뉴")
+    single_price = parse_price(_row_value(row, "가격", "착한가격"))
+    if single_name and single_price:
+        menu_items.append((str(single_name).strip(), single_price))
+    # 다른 배포본(odcloud 등)이 번호 붙은 여러 품목을 줄 수도 있으니 함께 지원.
     for i in ("1", "2", "3"):
         item_name = _row_value(row, f"품목{i}", f"착한가격품목{i}", f"메뉴{i}")
         price = parse_price(_row_value(row, f"가격{i}", f"품목{i}가격"))
-        if item_name and price:
+        if item_name and price and str(item_name).strip() != (single_name or "").strip():
             menu_items.append((str(item_name).strip(), price))
     if not menu_items:
         return None
 
     return {
         "name": str(name).strip(),
-        "address": _row_value(row, "소재지도로명주소", "소재지 도로명 주소", "소재지", "주소"),
-        "phone": _row_value(row, "전화번호", "연락처"),
-        "category": _row_value(row, "업종", "구분", "업소구분"),
+        "address": _row_value(row, "주소", "소재지도로명주소", "소재지 도로명 주소", "소재지"),
+        "phone": _row_value(row, "업소 전화번호", "전화번호", "연락처"),
+        "category": _row_value(row, "업종명", "업종", "구분", "업소구분"),
         "lat": lat,
         "lng": lng,
         "menu_items": menu_items,
@@ -110,7 +133,7 @@ async def sync_good_price_stores(session: AsyncSession, region: str | None = Non
     """착한가격업소를 Place + MenuItem(실제 대표메뉴 가격)으로 저장한다. 메뉴가 들어가면
     기존 절약 엔진(지역 비교 → 오퍼 자동 생성 → AI 절약 리포트)이 그대로 동작한다.
     region이 주어지면 주소에 그 문자열이 포함된 행만 (예: '평택') — Render 무료 플랜의
-    요청 시간 제한 안에서 지역 단위로 나눠 넣기 위함."""
+    요청 시간 제한 안에서 지역 단위로 나눠 실행하기 위함."""
     if not settings.good_price_api_url:
         return {"skipped": "GOOD_PRICE_API_URL 미설정 — data.go.kr 활용신청 승인 후 요청 URL을 환경변수로 넣어주세요"}
     if not settings.data_go_kr_key:
@@ -141,11 +164,60 @@ def parse_csv_bytes(content: bytes) -> list[dict]:
     return [dict(row) for row in reader]
 
 
+def parse_xls_bytes(content: bytes) -> list[dict]:
+    """goodprice.go.kr에서 직접 받은 .xls 다운로드 파일을 dict 행 목록으로 변환한다.
+    실제 파일은 1행 제목 + 1빈행 + 3행 헤더로 시작한다 — 헤더 행을 "번호" 컬럼이
+    있는 줄로 자동 탐지해서, 포맷이 살짝 바뀌어도(제목 줄 유무 등) 안전하게 찾는다."""
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=content)
+    sheet = book.sheet_by_index(0)
+
+    header_row_idx = None
+    for r in range(min(10, sheet.nrows)):
+        values = [str(sheet.cell_value(r, c)).strip() for c in range(sheet.ncols)]
+        if "업소명" in values:
+            header_row_idx = r
+            break
+    if header_row_idx is None:
+        raise ValueError("엑셀에서 헤더 행(업소명 컬럼)을 찾지 못했습니다")
+
+    headers = [str(sheet.cell_value(header_row_idx, c)).strip() for c in range(sheet.ncols)]
+    rows = []
+    for r in range(header_row_idx + 1, sheet.nrows):
+        values = [sheet.cell_value(r, c) for c in range(sheet.ncols)]
+        rows.append(dict(zip(headers, values)))
+    return rows
+
+
+async def _geocode_missing_coords(rows: list[dict]) -> None:
+    """좌표 없는 행을 주소 기준으로 지오코딩한다 — 좌표를 지어내지 않고, 카카오
+    주소 검색이 실제로 찾아준 좌표만 채운다. 실패하면 그 행은 좌표 없이 남고
+    store_rows에서 걸러진다."""
+    if not settings.kakao_rest_api_key:
+        return
+    kakao = KakaoClient()
+    for row in rows:
+        if row["lat"] is not None or not row.get("address"):
+            continue
+        try:
+            geocoded = await kakao.geocode(row["address"])
+        except Exception as exc:  # noqa: BLE001 - 한 건 실패가 전체를 막으면 안 됨
+            logger.warning("착한가격업소 지오코딩 실패: %s: %s", row["address"], exc)
+            continue
+        if geocoded is not None:
+            row["lat"], row["lng"] = geocoded.lat, geocoded.lng
+
+
 async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | None = None) -> dict:
-    """파싱→저장 공통 경로 (odcloud API 동기화와 CSV 업로드가 함께 쓴다)."""
+    """파싱→저장 공통 경로 (odcloud API 동기화, CSV/XLS 업로드가 함께 쓴다)."""
     parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
     if region:
         parsed = [p for p in parsed if p["address"] and region in p["address"]]
+
+    geocoded_count = sum(1 for p in parsed if p["lat"] is None and p.get("address"))
+    await _geocode_missing_coords(parsed)
+    parsed = [p for p in parsed if p["lat"] is not None]  # 좌표 못 찾은 행은 지어내지 않고 버림
 
     places_created = 0
     items_created = 0
@@ -202,6 +274,7 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | 
     await session.commit()
     return {
         "usable_rows": len(parsed),
+        "geocoded": geocoded_count,
         "region": region,
         "places_created": places_created,
         "menu_items_created": items_created,
