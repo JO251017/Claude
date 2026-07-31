@@ -1,13 +1,13 @@
 """add savings_certification.place_id (매장별 식사 인증 횟수 집계용)
 
-Revision ID: 0009_savings_certification_place_id
+Revision ID: 0009_savings_cert_place_id
 Revises: 0008_menu_item_ai_typical_price
 Create Date: 2026-07-31
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0009_savings_certification_place_id"
+revision = "0009_savings_cert_place_id"
 down_revision = "0008_menu_item_ai_typical_price"
 branch_labels = None
 depends_on = None

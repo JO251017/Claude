@@ -4,7 +4,7 @@
 ALTER TABLE public.savings_certification ADD COLUMN IF NOT EXISTS place_id integer REFERENCES public.place(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS ix_savings_certification_place_id ON public.savings_certification (place_id);
 
-UPDATE public.alembic_version SET version_num = '0009_savings_certification_place_id' WHERE version_num = '0008_menu_item_ai_typical_price';
+UPDATE public.alembic_version SET version_num = '0009_savings_cert_place_id' WHERE version_num = '0008_menu_item_ai_typical_price';
 
 -- 확인
 SELECT column_name FROM information_schema.columns
