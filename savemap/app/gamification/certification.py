@@ -18,7 +18,7 @@ async def certify_savings(
     actual_price: float | None = None,
     receipt_image_url: str | None = None,
     gemini: GeminiVisionClient | None = None,
-) -> tuple[SavingsCertification, SavingsSummary]:
+) -> tuple[SavingsCertification, SavingsSummary, int]:
     stmt = select(Offer).where(Offer.id == offer_id).options(selectinload(Offer.place))
     offer = (await session.execute(stmt)).scalar_one_or_none()
     if offer is None:
@@ -45,6 +45,7 @@ async def certify_savings(
     cert = SavingsCertification(
         user_id=user_id,
         offer_id=offer.id,
+        place_id=offer.place_id,
         place_name=offer.place.name if offer.place else "알 수 없는 매장",
         base_price=base_price,
         actual_price=actual_price,
@@ -56,7 +57,10 @@ async def certify_savings(
     await session.commit()
     await session.refresh(cert)
 
-    await award_xp(session, user_id, XpReason.SAVINGS_CERTIFIED)
+    # 영수증으로 실제 식사를 인증한 쪽(사진 증거 있음)이 자기 신고 인증(method=simple)보다
+    # 신뢰도가 높으므로, "발견" 보상의 3배를 받는다 — 자기 신고는 기존 고정 보상 유지.
+    xp_reason = XpReason.RECEIPT_VERIFIED if method == CertificationMethod.RECEIPT else XpReason.SAVINGS_CERTIFIED
+    xp_awarded = await award_xp(session, user_id, xp_reason)
 
     summary = await get_savings_summary(session, user_id)
-    return cert, summary
+    return cert, summary, xp_awarded

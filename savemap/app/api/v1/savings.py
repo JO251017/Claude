@@ -15,7 +15,7 @@ async def certify_offer(
     user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> CertificationResponse:
-    cert, summary = await certify_savings(
+    cert, summary, xp_awarded = await certify_savings(
         session,
         user_id,
         offer_id,
@@ -36,4 +36,5 @@ async def certify_offer(
         total_saved=summary.total_saved,
         level=summary.level,
         title=summary.title,
+        xp_awarded=xp_awarded,
     )

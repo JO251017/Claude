@@ -76,16 +76,3 @@ async def compare_menu_item(
         savings_rate=savings_rate,
         reliable=reliable,
     )
-
-
-async def best_expected_savings(
-    session: AsyncSession, menu_items: list[MenuItem], lat: float, lng: float
-) -> float:
-    """매장의 메뉴 중 신뢰 가능한 비교 데이터가 있는 항목 중 가장 큰 절약액.
-    비교 가능한 메뉴가 없으면 0 (방문 XP를 지어내지 않기 위함)."""
-    best = 0.0
-    for item in menu_items:
-        cmp = await compare_menu_item(session, item, lat, lng)
-        if cmp.savings_amount and cmp.savings_amount > best:
-            best = cmp.savings_amount
-    return best

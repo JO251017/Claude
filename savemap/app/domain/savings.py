@@ -16,6 +16,9 @@ class SavingsCertification(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64))
     offer_id: Mapped[int | None] = mapped_column(ForeignKey("offer.id", ondelete="SET NULL"))
+    # offer가 나중에 삭제/변경돼도 "이 매장이 몇 번 식사 인증됐는지" 집계가 끊기지 않도록
+    # place_id를 직접 들고 있는다 (offer_id만으로는 SET NULL 시 매장 연결이 끊김).
+    place_id: Mapped[int | None] = mapped_column(ForeignKey("place.id", ondelete="SET NULL"))
     place_name: Mapped[str] = mapped_column(String(255))
     base_price: Mapped[float] = mapped_column(Numeric(12, 2))
     actual_price: Mapped[float] = mapped_column(Numeric(12, 2))
@@ -25,7 +28,10 @@ class SavingsCertification(Base, TimestampMixin):
         SAEnum(CertificationConfidence, name="certification_confidence")
     )
 
-    __table_args__ = (Index("ix_savings_certification_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_savings_certification_user_id", "user_id"),
+        Index("ix_savings_certification_place_id", "place_id"),
+    )
 
 
 class SavingsAsset(Base, TimestampMixin):

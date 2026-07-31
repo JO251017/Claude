@@ -30,3 +30,5 @@ class OfferCandidate:
     last_verified_at: datetime | None = None
     place_address: str | None = None
     place_phone: str | None = None
+    discover_count: int = 0
+    dining_count: int = 0

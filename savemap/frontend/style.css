@@ -503,17 +503,6 @@ body {
   color: #b45309;
 }
 
-.menu-price-highlight {
-  animation: menu-price-pulse 1.6s ease-out 2;
-  border-radius: 12px;
-}
-
-@keyframes menu-price-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
-  70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-}
-
 .result-header {
   display: flex;
   justify-content: space-between;
@@ -965,6 +954,29 @@ select:focus {
   font-size: 0.76rem;
   color: var(--ink-soft);
   font-weight: 700;
+}
+
+.btn-discover {
+  width: 100%;
+}
+
+#detail-closed-row {
+  margin-top: 8px;
+}
+
+/* --- 인증(발견 전보다 방문 전 사회적 증거) --- */
+.social-proof-line {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  margin: 6px 0;
+}
+
+.certify-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
 }
 
 /* --- COMMUNITY: 사진 제보 --- */

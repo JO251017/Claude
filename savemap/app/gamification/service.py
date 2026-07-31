@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import XP_MULTIPLIER, XP_REWARD, XpReason
+from app.domain.enums import XP_REWARD, XpReason
 from app.domain.savings import SavingsCertification
 from app.domain.xp import XpLedger
 
@@ -49,15 +49,18 @@ async def award_xp(session: AsyncSession, user_id: str, reason: XpReason) -> int
     return delta
 
 
-async def award_xp_for_amount(
-    session: AsyncSession, user_id: str, reason: XpReason, base_amount: float
-) -> int:
-    """예상/실제 절약금액에 비례해 XP를 지급한다 (방문 상태 업데이트=100%, 영수증 인증=300%).
-    base_amount가 0 이하면(비교 데이터 부족 등) 지어내지 않고 0 XP를 기록한다."""
-    delta = max(round(max(base_amount, 0.0) * XP_MULTIPLIER[reason]), 0)
-    session.add(XpLedger(user_id=user_id, delta=delta, reason=reason))
-    await session.commit()
-    return delta
+async def get_dining_counts(session: AsyncSession, place_ids: list[int]) -> dict[int, int]:
+    """검색 결과에 "N번 식사 인증됨"을 보여주기 위한 매장별 누적 영수증/절약 인증 수."""
+    if not place_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(SavingsCertification.place_id, func.count())
+            .where(SavingsCertification.place_id.in_(place_ids))
+            .group_by(SavingsCertification.place_id)
+        )
+    ).all()
+    return {place_id: count for place_id, count in rows}
 
 
 async def get_xp_summary(session: AsyncSession, user_id: str) -> XpSummary:

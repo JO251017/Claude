@@ -8,11 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import LowGpsAccuracyError, PlacePublicNotFoundError, TooFarFromStoreError
 from app.core.spatial import haversine_m
 from app.domain.enums import BusinessStatus, XpReason
-from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.domain.store_visit import StoreInterest, StoreStatusUpdate
-from app.engine.price_comparison import best_expected_savings
-from app.gamification.service import award_xp_for_amount
+from app.gamification.service import award_xp
 
 MAX_VISIT_DISTANCE_M = 50.0
 MAX_GPS_ACCURACY_M = 100.0  # 이보다 오차가 크면 위치를 신뢰할 수 없다고 본다
@@ -73,18 +71,12 @@ async def submit_status_update(
 
     await session.commit()
 
-    # XP는 최초 관심 등록 시에만 지급한다 — 반복 상태 업데이트로 XP를 계속 얻지 않도록 함.
+    # "발견" 보상은 절약 비교 데이터 유무와 무관하게 고정 지급한다 — 비교 표본이
+    # 없으면 0XP가 되던 예전 방식은 "찾아갈 이유가 안 보인다"는 원인이었다.
+    # 최초 관심 등록 시에만 지급해 반복 체크인으로 XP를 계속 얻지 않도록 함.
     xp_awarded = 0
     if is_new_interest:
-        menu_items = list(
-            (await session.execute(select(MenuItem).where(MenuItem.place_id == place_id)))
-            .scalars()
-            .all()
-        )
-        expected_savings = await best_expected_savings(session, menu_items, point.y, point.x)
-        xp_awarded = await award_xp_for_amount(
-            session, user_id, XpReason.STORE_VISIT_UPDATE, expected_savings
-        )
+        xp_awarded = await award_xp(session, user_id, XpReason.STORE_VISIT_UPDATE)
 
     # 관심도는 고유 사용자 수가 아니라 "이 매장에 실제로 발걸음을 한 횟수"(유동인구)로
     # 보여준다 — 사용자 지시로 반복 방문도 계속 늘어나야 한다.
@@ -104,3 +96,17 @@ async def submit_status_update(
         interest_count=interest_count,
         xp_awarded=xp_awarded,
     )
+
+
+async def get_discover_counts(session: AsyncSession, place_ids: list[int]) -> dict[int, int]:
+    """검색 결과에 방문 전부터 "N명이 발견했어요"를 보여주기 위한 매장별 누적 발견(체크인) 수."""
+    if not place_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(StoreStatusUpdate.place_id, func.count())
+            .where(StoreStatusUpdate.place_id.in_(place_ids))
+            .group_by(StoreStatusUpdate.place_id)
+        )
+    ).all()
+    return {place_id: count for place_id, count in rows}

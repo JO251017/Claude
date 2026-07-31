@@ -23,6 +23,8 @@ class SearchResultItem(BaseModel):
     trust_score: float
     verification_count: int = 0
     last_verified_at: datetime | None = None
+    discover_count: int = 0
+    dining_count: int = 0
     score: float
 
 

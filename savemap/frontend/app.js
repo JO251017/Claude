@@ -1,5 +1,18 @@
 const API_BASE = '/v1';
 
+// 백엔드 XP_REWARD(app/domain/enums.py)와 맞춰서 버튼에 보상을 미리 보여준다.
+const XP_DISCOVER = 5;
+const XP_RECEIPT = 15;
+
+// 방문 전에도 "N명이 다녀갔다"는 사회적 증거를 보여줘서 찾아갈 이유를 만든다.
+function socialProofText(discoverCount, diningCount) {
+  if (!discoverCount && !diningCount) return '아직 아무도 발견하지 않았어요 — 첫 발견자가 되어보세요!';
+  const parts = [];
+  if (discoverCount) parts.push(`${discoverCount}명이 발견`);
+  if (diningCount) parts.push(`${diningCount}번 식사 인증됨`);
+  return parts.join(' · ');
+}
+
 const CATEGORY_LABELS = {
   free: '무료',
   discount: '할인',
@@ -500,15 +513,38 @@ function openOfferDetail(r) {
     </div>
     ${r.address ? `<div class="store-info-line">${escapeHtml(r.address)}</div>` : ''}
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
+    <p class="social-proof-line" id="detail-social-proof">${socialProofText(r.discover_count, r.dining_count)}</p>
     <a class="kakao-place-link" href="${kakaoSearchUrl}" target="_blank" rel="noopener">카카오맵에서 매장 정보 확인 (리뷰·사진·영업시간)</a>
 
     <div id="detail-menu-section"></div>
 
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
-      <button type="button" class="btn-primary" id="detail-certify-btn">절약 인증하기</button>
     </div>
-    <div id="detail-certify-msg"></div>
+
+    <div class="visit-row">
+      <button type="button" class="btn-primary btn-discover" id="detail-discover-btn">📍 발견하기 (+${XP_DISCOVER} XP)</button>
+      <p class="subtitle">매장 반경 50m 이내에서만 가능해요. 한 매장당 최초 1회만 XP를 받아요.</p>
+      <div id="detail-visit-msg"></div>
+      <p class="interest-count" id="detail-interest-count"></p>
+      <button type="button" class="btn-text" id="detail-report-closed-btn">혹시 휴무인가요?</button>
+      <div id="detail-closed-row" class="hidden">
+        <div class="visit-buttons">
+          <button type="button" class="btn-visit" data-status="closed">휴무</button>
+          <button type="button" class="btn-visit" data-status="temp_closed">임시 휴무</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="certify-row">
+      <span class="verify-label">실제로 식사하셨나요? 영수증으로 인증하면 훨씬 더 많은 XP를 받아요.</span>
+      <div class="detail-actions">
+        <button type="button" class="btn-primary" id="detail-receipt-btn">🧾 영수증으로 인증 (+${XP_RECEIPT} XP)</button>
+      </div>
+      <input type="file" id="detail-receipt-input" accept="image/*" capture="environment" class="hidden" />
+      <button type="button" class="btn-text" id="detail-simple-certify-btn">영수증 없이 직접 입력해서 인증</button>
+      <div id="detail-certify-msg"></div>
+    </div>
 
     <div class="verify-row">
       <span class="verify-label">이 정보 아직 유효한가요?</span>
@@ -518,17 +554,6 @@ function openOfferDetail(r) {
       </div>
       <div id="detail-verify-msg"></div>
     </div>
-
-    <div class="visit-row">
-      <span class="verify-label">지금 매장에 계신가요? (50m 이내에서만 가능)</span>
-      <div class="visit-buttons">
-        <button type="button" class="btn-visit" data-status="open">영업 중</button>
-        <button type="button" class="btn-visit" data-status="closed">휴무</button>
-        <button type="button" class="btn-visit" data-status="temp_closed">임시 휴무</button>
-      </div>
-      <div id="detail-visit-msg"></div>
-      <p class="interest-count" id="detail-interest-count"></p>
-    </div>
   `;
   detailOverlay.classList.remove('hidden');
 
@@ -536,13 +561,19 @@ function openOfferDetail(r) {
     window.open(`https://map.kakao.com/link/to/${encodeURIComponent(r.place_name)},${r.lat},${r.lng}`, '_blank');
   });
 
-  document.getElementById('detail-certify-btn').addEventListener('click', () => certifyOffer(r));
+  document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.target));
+  document.getElementById('detail-report-closed-btn').addEventListener('click', () => {
+    document.getElementById('detail-closed-row').classList.remove('hidden');
+  });
+  document.getElementById('detail-receipt-btn').addEventListener('click', () => document.getElementById('detail-receipt-input').click());
+  document.getElementById('detail-receipt-input').addEventListener('change', (e) => certifyWithReceipt(r, e.target));
+  document.getElementById('detail-simple-certify-btn').addEventListener('click', () => certifyOffer(r));
 
   detailContent.querySelectorAll('.btn-verify').forEach((btn) => {
     btn.addEventListener('click', () => verifyOffer(r.offer_id, btn.dataset.verdict, btn));
   });
 
-  detailContent.querySelectorAll('.btn-visit').forEach((btn) => {
+  detailContent.querySelectorAll('#detail-closed-row .btn-visit').forEach((btn) => {
     btn.addEventListener('click', () => submitStatusUpdate(r, btn.dataset.status, btn));
   });
 
@@ -629,6 +660,7 @@ function prefillMerchantPlace(d) {
   document.getElementById('p-lng').value = d.lng;
   document.getElementById('p-location-status').textContent =
     '지도에서 선택한 매장 위치가 자동 입력됐어요. 실제 매장과 다르면 다시 설정해주세요.';
+  document.getElementById('p-menu-name').focus();
 }
 
 async function submitStatusUpdate(r, status, btn) {
@@ -637,7 +669,7 @@ async function submitStatusUpdate(r, status, btn) {
     msgEl.innerHTML = '<p class="error-msg">이 브라우저는 위치 정보를 지원하지 않습니다.</p>';
     return;
   }
-  const buttons = btn.parentElement.querySelectorAll('.btn-visit');
+  const buttons = new Set([btn, ...btn.parentElement.querySelectorAll('.btn-visit')]);
   buttons.forEach((b) => (b.disabled = true));
   msgEl.innerHTML = '<p class="empty-msg">위치 확인 중...</p>';
 
@@ -653,9 +685,9 @@ async function submitStatusUpdate(r, status, btn) {
             accuracy_m: pos.coords.accuracy,
           }),
         });
-        document.getElementById('detail-interest-count').textContent = `누적 방문 ${data.interest_count}회`;
+        document.getElementById('detail-interest-count').textContent = `누적 발견 ${data.interest_count}회`;
         msgEl.innerHTML = data.xp_awarded > 0
-          ? `<p class="empty-msg">${ICONS.check} 확인 감사합니다! +${data.xp_awarded} XP</p>`
+          ? `<p class="empty-msg">${ICONS.check} 발견 완료! +${data.xp_awarded} XP</p>`
           : `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
       } catch (err) {
         msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
@@ -687,11 +719,17 @@ async function verifyOffer(offerId, verdict, btn) {
   }
 }
 
+function certifyResultHtml(cert) {
+  return `
+    <p class="empty-msg">${ICONS.check} 인증 완료! +${Math.round(cert.amount).toLocaleString()}원 절약
+    · +${cert.xp_awarded} XP (누적 ${formatWon(cert.total_saved)}, Lv.${cert.level} ${escapeHtml(cert.title)})</p>`;
+}
+
 async function certifyOffer(r) {
   const msgEl = document.getElementById('detail-certify-msg');
   const token = await getAccessToken();
   if (!token) {
-    msgEl.innerHTML = '<p class="error-msg">절약 인증은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.</p>';
+    msgEl.innerHTML = '<p class="error-msg">인증은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.</p>';
     return;
   }
 
@@ -703,19 +741,68 @@ async function certifyOffer(r) {
     return;
   }
 
-  msgEl.innerHTML = '<p class="empty-msg">절약 인증 처리 중...</p>';
+  msgEl.innerHTML = '<p class="empty-msg">인증 처리 중...</p>';
   try {
     const cert = await apiFetch(`/offers/${r.offer_id}/certify`, {
       method: 'POST',
       body: JSON.stringify({ method: 'simple', actual_price: actualPrice }),
     });
-    msgEl.innerHTML = `
-      <p class="empty-msg">${ICONS.check} 절약 인증 완료! +${Math.round(cert.amount).toLocaleString()}원
-      (누적 ${formatWon(cert.total_saved)}, Lv.${cert.level} ${escapeHtml(cert.title)})</p>`;
+    msgEl.innerHTML = certifyResultHtml(cert);
     loadSavingsBadge();
     loadMyProfile();
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// --- 영수증 사진으로 인증: 사진 증거가 있는 인증이라 자기신고(simple)보다 XP를 더
+// 준다 (백엔드가 실제로 사진을 다시 OCR해서 금액을 검증하므로 지어낼 수 없다). ---
+async function certifyWithReceipt(r, fileInput) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById('detail-certify-msg');
+
+  const token = await getAccessToken();
+  if (!token) {
+    msgEl.innerHTML = '<p class="error-msg">인증은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.</p>';
+    fileInput.value = '';
+    return;
+  }
+
+  msgEl.innerHTML = '<p class="empty-msg">영수증을 확인하고 있어요...</p>';
+  const form = new FormData();
+  form.append('image', file);
+  try {
+    const analyzeResp = await fetch(`${API_BASE}/reports/analyze`, { method: 'POST', body: form });
+    const analyzed = await analyzeResp.json().catch(() => null);
+    if (!analyzeResp.ok) {
+      throw new Error(analyzed?.detail?.message || analyzed?.detail || `분석 실패 (${analyzeResp.status})`);
+    }
+
+    const confirmMsg = analyzed.ocr_price
+      ? `영수증에서 ${Math.round(analyzed.ocr_price).toLocaleString()}원을 인식했어요. 이 매장 방문 인증에 사용할까요?`
+      : '영수증에서 금액을 정확히 읽지 못했어요. 그래도 인증에 사용할까요?';
+    if (!confirm(confirmMsg)) {
+      msgEl.innerHTML = '';
+      return;
+    }
+
+    msgEl.innerHTML = '<p class="empty-msg">인증 처리 중...</p>';
+    const cert = await apiFetch(`/offers/${r.offer_id}/certify`, {
+      method: 'POST',
+      body: JSON.stringify({
+        method: 'receipt',
+        receipt_image_url: analyzed.image_url,
+        actual_price: analyzed.ocr_price ?? null,
+      }),
+    });
+    msgEl.innerHTML = certifyResultHtml(cert);
+    loadSavingsBadge();
+    loadMyProfile();
+  } catch (err) {
+    msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  } finally {
+    fileInput.value = '';
   }
 }
 
@@ -1106,11 +1193,16 @@ document.getElementById('p-use-location-btn').addEventListener('click', (e) => {
   );
 });
 
+// 매장 등록과 첫 메뉴 가격 등록을 한 폼, 한 번의 제출로 처리한다 — 매장만 등록하고
+// 메뉴가 없으면 지도 검색(offer 기반)에 절대 안 뜨는데, 예전엔 이걸 별도 폼/버튼으로
+// 나눠놔서 등록이 "끝났다"고 착각하고 메뉴 단계를 건너뛰기 쉬웠다.
 document.getElementById('place-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('p-name').value.trim();
   const lat = parseFloat(document.getElementById('p-lat').value);
   const lng = parseFloat(document.getElementById('p-lng').value);
+  const menuName = document.getElementById('p-menu-name').value.trim();
+  const menuPrice = parseFloat(document.getElementById('p-menu-price').value);
 
   if (!name) {
     alert('매장명을 입력해주세요.');
@@ -1119,6 +1211,16 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
   }
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     alert('먼저 "현재 위치로 매장 위치 설정" 버튼을 눌러주세요.');
+    return;
+  }
+  if (!menuName) {
+    alert('메뉴명을 입력해주세요.');
+    document.getElementById('p-menu-name').focus();
+    return;
+  }
+  if (Number.isNaN(menuPrice) || menuPrice < 0) {
+    alert('메뉴 가격을 올바르게 입력해주세요.');
+    document.getElementById('p-menu-price').focus();
     return;
   }
 
@@ -1133,32 +1235,21 @@ document.getElementById('place-form').addEventListener('submit', async (e) => {
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
-    const created = await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
+    const place = await apiFetch('/merchant/places', { method: 'POST', body: JSON.stringify(payload) });
+    const item = await apiFetch('/merchant/menu-items', {
+      method: 'POST',
+      body: JSON.stringify({ place_id: place.id, name: menuName, price: menuPrice }),
+    });
+    alert(menuSavingsMessage(item));
     e.target.reset();
     document.getElementById('p-location-status').textContent = '매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.';
-    await loadPlaces();
-    focusMenuRegistration(created.id);
+    loadPlaces();
   } catch (err) {
-    alert(`매장 등록 실패: ${err.message}`);
+    alert(`등록 실패: ${err.message}`);
   } finally {
     submitBtn.disabled = false;
   }
 });
-
-// --- 매장 등록만 하고 메뉴 가격을 등록하지 않으면 지도에 절약 정보가 절대 뜨지 않는다
-// (search는 offer만 봄, offer는 메뉴 가격 비교에서 자동 생성됨) — 그래서 매장 등록 직후
-// 바로 메뉴 가격 등록 칸으로 데려가 "등록 = 끝"이라고 착각하지 않게 한다. ---
-function focusMenuRegistration(placeId) {
-  for (const id of ['o-place-id', 'mi-place-id', 'mi-photo-place-id']) {
-    const sel = document.getElementById(id);
-    if (sel && placeId != null) sel.value = String(placeId);
-  }
-  const section = document.getElementById('menu-price-section');
-  if (!section) return;
-  section.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  section.classList.add('menu-price-highlight');
-  setTimeout(() => section.classList.remove('menu-price-highlight'), 3200);
-}
 
 async function loadPlaces() {
   const listEl = document.getElementById('places-list');

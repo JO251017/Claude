@@ -24,3 +24,4 @@ class CertificationResponse(BaseModel):
     total_saved: float
     level: int
     title: str
+    xp_awarded: int
