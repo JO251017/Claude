@@ -117,7 +117,32 @@ async def sync_good_price_stores(session: AsyncSession, region: str | None = Non
         return {"skipped": "DATA_GO_KR_KEY 미설정"}
 
     raw_rows = await _fetch_rows()
+    result = await store_rows(session, raw_rows, region=region)
+    return {"fetched_rows": len(raw_rows), **result}
 
+
+def parse_csv_bytes(content: bytes) -> list[dict]:
+    """지자체/포털에서 받은 착한가격업소 CSV(공공기관 파일은 cp949인 경우가 많다)를
+    odcloud 응답과 같은 dict 행 목록으로 변환한다 — data.go.kr이 점검 중이어도
+    파일만 구하면 같은 파이프라인으로 넣을 수 있게 하는 우회로."""
+    text = None
+    for encoding in ("utf-8-sig", "cp949", "utf-8"):
+        try:
+            text = content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise ValueError("CSV 인코딩을 해석할 수 없습니다 (utf-8/cp949 지원)")
+    import csv
+    import io
+
+    reader = csv.DictReader(io.StringIO(text))
+    return [dict(row) for row in reader]
+
+
+async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | None = None) -> dict:
+    """파싱→저장 공통 경로 (odcloud API 동기화와 CSV 업로드가 함께 쓴다)."""
     parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
     if region:
         parsed = [p for p in parsed if p["address"] and region in p["address"]]
@@ -176,7 +201,6 @@ async def sync_good_price_stores(session: AsyncSession, region: str | None = Non
 
     await session.commit()
     return {
-        "fetched_rows": len(raw_rows),
         "usable_rows": len(parsed),
         "region": region,
         "places_created": places_created,

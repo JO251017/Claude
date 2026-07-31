@@ -123,3 +123,9 @@ class MenuItemNotFoundError(SaveMapError):
     code = "SM4046"
     http_status = status.HTTP_404_NOT_FOUND
     message = "메뉴를 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class InvalidCsvError(SaveMapError):
+    code = "SM4225"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "올바른 CSV 파일이 아닙니다"

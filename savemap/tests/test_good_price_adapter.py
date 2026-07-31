@@ -57,3 +57,24 @@ def test_parse_row_rejects_incomplete_rows():
         parse_row({"업소명": "가게", "위도": "3.69", "경도": "12.71", "품목1": "국밥", "가격1": "9000"})
         is None
     )
+
+
+def test_parse_csv_bytes_cp949_and_utf8():
+    from app.sources.public_api.good_price import parse_csv_bytes
+
+    csv_text = "업소명,소재지도로명주소,품목1,가격1,위도,경도\n평택식당,경기도 평택시 1,국밥,\"9,000\",36.99,127.11\n"
+    for encoding in ("cp949", "utf-8-sig"):
+        rows = parse_csv_bytes(csv_text.encode(encoding))
+        assert rows[0]["업소명"] == "평택식당"
+        parsed = parse_row(rows[0])
+        assert parsed is not None
+        assert parsed["menu_items"] == [("국밥", 9000.0)]
+
+
+def test_parse_csv_bytes_rejects_undecodable():
+    import pytest
+
+    from app.sources.public_api.good_price import parse_csv_bytes
+
+    with pytest.raises(ValueError):
+        parse_csv_bytes(b"\xff\xfe\x00\x01\x02\x81")

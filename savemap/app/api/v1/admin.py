@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, File, Header, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.core.errors import AuthenticationRequiredError
-from app.sources.public_api.good_price import sync_good_price_stores
+from app.core.errors import AuthenticationRequiredError, InvalidCsvError
+from app.sources.public_api.good_price import (
+    parse_csv_bytes,
+    store_rows,
+    sync_good_price_stores,
+)
 from app.sources.public_api.service import sync_all_public_sources
 
 router = APIRouter(tags=["admin"], prefix="/admin")
@@ -34,3 +38,27 @@ async def trigger_good_price_sync(
     if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
     return await sync_good_price_stores(session, region=region)
+
+
+@router.post("/import/good-price-csv")
+async def import_good_price_csv(
+    file: UploadFile = File(...),
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    x_admin_key: str | None = Header(default=None),
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """착한가격업소 CSV 파일을 직접 업로드해서 저장한다 — data.go.kr이 점검 중이거나
+    활용신청이 안 될 때, 지자체 홈페이지·경기데이터드림 등에서 받은 파일로 같은
+    파이프라인(Place + 실제 메뉴 가격 → 절약 엔진)을 태우는 우회 경로."""
+    if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
+        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
+
+    content = await file.read()
+    try:
+        raw_rows = parse_csv_bytes(content)
+    except ValueError as exc:
+        raise InvalidCsvError(str(exc)) from exc
+    if not raw_rows:
+        raise InvalidCsvError("CSV에서 데이터 행을 찾지 못했습니다")
+
+    return await store_rows(session, raw_rows, region=region)
