@@ -11,6 +11,7 @@ from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
 from app.engine.price_comparison import MenuPriceComparison, compare_menu_item
+from app.integrations.gemini import GeminiVisionClient
 from app.sources.merchant_console.ttl import clear_flash_ttl, set_flash_ttl
 
 
@@ -177,10 +178,11 @@ async def _sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) 
         await session.execute(select(Offer).where(Offer.menu_item_id == item.id))
     ).scalar_one_or_none()
 
-    cheaper = bool(cmp.reliable and cmp.savings_amount and cmp.savings_amount > 0)
+    cheaper = bool(cmp.savings_amount and cmp.savings_amount > 0)
     if cheaper:
-        title = f"{item.name} {round(item.price):,}원 · 지역 평균보다 저렴"
-        base_price = cmp.region_median
+        label = "지역 평균보다 저렴" if cmp.benchmark_source == "region" else "통상가보다 저렴 (AI 추정)"
+        title = f"{item.name} {round(item.price):,}원 · {label}"
+        base_price = cmp.benchmark_price
         store_discount = cmp.savings_amount
     else:
         title = f"{item.name} {round(item.price):,}원"
@@ -225,6 +227,9 @@ async def create_menu_item(
         source=SourceType.S3_MERCHANT,
         source_url=source_url,
         verified_at=datetime.now(timezone.utc),
+        # 주변에 같은 메뉴가 아직 없어도 절약을 계산할 수 있도록 등록 시 1회만 추정해 캐싱한다.
+        # 실패하면 None으로 두고(지어내지 않음) 절약은 실측 표본이 모일 때까지 보류된다.
+        ai_typical_price=await GeminiVisionClient().estimate_typical_price(name),
     )
     session.add(item)
     await session.commit()

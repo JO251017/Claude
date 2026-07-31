@@ -36,6 +36,7 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         expires_at=offer.expires_at,
         place_address=place.address,
         place_phone=place.phone,
+        title=offer.title,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,
@@ -87,6 +88,7 @@ async def search(
             offer_id=r.candidate.offer_id,
             place_id=r.candidate.place_id,
             place_name=r.candidate.place_name,
+            title=r.candidate.title,
             address=r.candidate.place_address,
             phone=r.candidate.place_phone,
             category=r.candidate.category,

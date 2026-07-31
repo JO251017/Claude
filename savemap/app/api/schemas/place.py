@@ -13,6 +13,8 @@ class MenuPriceComparisonResponse(BaseModel):
     savings_amount: float | None = None
     savings_rate: float | None = None
     reliable: bool
+    benchmark_source: str | None = None
+    benchmark_price: float | None = None
 
 
 class StatusUpdateCreate(BaseModel):

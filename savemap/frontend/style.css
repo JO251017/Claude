@@ -965,6 +965,13 @@ select:focus {
 }
 
 /* --- 인증(발견 전보다 방문 전 사회적 증거) --- */
+.offer-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 2px 0 4px;
+}
+
 .social-proof-line {
   font-size: 0.76rem;
   font-weight: 700;

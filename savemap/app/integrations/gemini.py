@@ -168,6 +168,26 @@ class GeminiVisionClient:
             location_text=parsed.get("location_text"),
         )
 
+    async def estimate_typical_price(self, item_name: str) -> float | None:
+        """메뉴의 통상 시세를 추정한다 — 주변에 같은 메뉴를 등록한 매장이 아직 없어도
+        절약 정보를 계산할 수 있게 하는 콜드스타트 보조값. 실측 비교가 가능해지면
+        그쪽이 항상 우선하며, 사용자에게는 항상 "AI 추정"으로 표시한다.
+        추정이 불가능하거나 API 호출이 실패하면 None (지어내지 않고 비워둔다)."""
+        try:
+            raw_text = await self._ask_text(_typical_price_prompt(item_name))
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+
+        try:
+            parsed = json.loads(_strip_code_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return None
+
+        price = parsed.get("typical_price") if isinstance(parsed, dict) else None
+        if not isinstance(price, (int, float)) or price <= 0:
+            return None
+        return float(price)
+
     async def extract_menu_items(self, image_url: str) -> list[MenuItemGuess]:
         """메뉴판 사진에서 메뉴명·가격 목록을 통째로 추출한다 (사장님이 하나씩
         타이핑하지 않아도 되도록). 결과는 저장 전 사용자 확인을 거친다."""

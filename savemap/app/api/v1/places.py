@@ -46,6 +46,8 @@ async def list_place_menu_items(
             savings_amount=c.savings_amount,
             savings_rate=c.savings_rate,
             reliable=c.reliable,
+            benchmark_source=c.benchmark_source,
+            benchmark_price=c.benchmark_price,
         )
         for c in comparisons
     ]

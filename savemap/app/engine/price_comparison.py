@@ -26,6 +26,11 @@ class MenuPriceComparison:
     savings_amount: float | None
     savings_rate: float | None
     reliable: bool
+    # 절약을 무엇과 비교해 계산했는지: "region"=주변 매장 실제 등록가(신뢰 높음),
+    # "ai"=AI 추정 통상가(참고용, 주변 표본이 모이면 자동으로 region으로 바뀜), None=비교 불가.
+    # 사용자에게 항상 이 출처를 같이 보여줘서 추정치를 실측처럼 오해하지 않게 한다.
+    benchmark_source: str | None = None
+    benchmark_price: float | None = None
 
 
 async def _region_prices(
@@ -56,12 +61,21 @@ async def compare_menu_item(
     region_average = round(statistics.mean(prices), 0) if prices else None
     region_median = round(statistics.median(prices), 0) if prices else None
 
+    # 주변 실측 표본이 충분하면 그걸 쓰고, 없으면 AI 추정 통상가로라도 절약을 계산한다.
+    # 실측이 항상 우선이라, 나중에 주변 매장이 등록되면 자동으로 실측 기준으로 승격된다.
+    benchmark_source = None
+    benchmark_price = None
+    if reliable and region_median is not None:
+        benchmark_source, benchmark_price = "region", float(region_median)
+    elif menu_item.ai_typical_price is not None:
+        benchmark_source, benchmark_price = "ai", float(menu_item.ai_typical_price)
+
     savings_amount = None
     savings_rate = None
-    if reliable and region_median is not None:
-        savings_amount = max(region_median - float(menu_item.price), 0.0)
+    if benchmark_price is not None:
+        savings_amount = max(benchmark_price - float(menu_item.price), 0.0)
         savings_rate = (
-            round(savings_amount / region_median * 100, 1) if region_median > 0 else 0.0
+            round(savings_amount / benchmark_price * 100, 1) if benchmark_price > 0 else 0.0
         )
 
     return MenuPriceComparison(
@@ -75,4 +89,6 @@ async def compare_menu_item(
         savings_amount=savings_amount,
         savings_rate=savings_rate,
         reliable=reliable,
+        benchmark_source=benchmark_source,
+        benchmark_price=benchmark_price,
     )

@@ -9,6 +9,9 @@ class SearchResultItem(BaseModel):
     offer_id: int
     place_id: int
     place_name: str
+    # 어떤 메뉴의 가격인지 (예: "아메리카노 3,000원") — 이게 없으면 카드에 금액만 떠서
+    # 무슨 음식/음료인지 알 수 없다.
+    title: str | None = None
     address: str | None = None
     phone: str | None = None
     category: Category

@@ -32,3 +32,4 @@ class OfferCandidate:
     place_phone: str | None = None
     discover_count: int = 0
     dining_count: int = 0
+    title: str | None = None

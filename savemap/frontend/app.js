@@ -502,6 +502,7 @@ function openOfferDetail(r) {
       <span class="tier-tag">${tier.label}</span>
     </div>
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
+    ${r.title ? `<div class="offer-title">${escapeHtml(r.title)}</div>` : ''}
     <div class="price-line">
       <span class="final-price">${r.final_price.toLocaleString()}원</span>
       ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
@@ -592,20 +593,23 @@ async function loadMenuComparison(r) {
       <div class="menu-compare-list">
         ${items
           .map((m) => {
-            if (!m.reliable) {
+            if (!m.benchmark_source) {
               return `<div class="menu-compare-row">
                 <span class="menu-name">${escapeHtml(m.name)}</span>
                 <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
-                <span class="menu-note">비교 데이터 부족 (${m.sample_count}건)</span>
+                <span class="menu-note">비교 기준 없음 (주변 등록 ${m.sample_count}곳)</span>
               </div>`;
             }
+            // 추정치를 실측처럼 오해하지 않도록 비교 기준의 출처를 항상 함께 표시한다.
             const cheaper = m.savings_amount > 0;
+            const basis = m.benchmark_source === 'region'
+              ? `지역 평균 ${Math.round(m.benchmark_price).toLocaleString()}원`
+              : `통상가 약 ${Math.round(m.benchmark_price).toLocaleString()}원 (AI 추정)`;
             return `<div class="menu-compare-row">
               <span class="menu-name">${escapeHtml(m.name)}</span>
               <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
               <span class="menu-note ${cheaper ? 'menu-note-good' : ''}">
-                지역 평균 ${Math.round(m.region_average).toLocaleString()}원
-                ${cheaper ? ` · ${Math.round(m.savings_amount).toLocaleString()}원 저렴` : ''}
+                ${basis}${cheaper ? ` · ${Math.round(m.savings_amount).toLocaleString()}원 저렴` : ''}
               </span>
             </div>`;
           })
@@ -885,6 +889,7 @@ async function runSearch() {
           <span class="distance">${r.distance_m.toFixed(0)}m</span>
         </div>
         <div class="place-name">${escapeHtml(r.place_name)}</div>
+        ${r.title ? `<div class="offer-title">${escapeHtml(r.title)}</div>` : ''}
         <div class="price-line">
           <span class="final-price">${r.final_price.toLocaleString()}원</span>
           ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
