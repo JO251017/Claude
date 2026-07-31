@@ -10,6 +10,7 @@ from app.api.schemas.search import (
     SavingsReportItem,
     SearchResponse,
     SearchResultItem,
+    SignatureMenuItem,
 )
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
@@ -17,6 +18,7 @@ from app.domain.enums import Category, PaymentMethodType
 from app.engine.benefit_combiner import combine
 from app.engine.discovery import discover_nearby_places
 from app.engine.models import OfferCandidate, PaymentBenefit
+from app.engine.price_comparison import list_menu_items_by_place
 from app.engine.ranker import rank_candidates
 from app.engine.rule_filter import rule_filter
 from app.engine.savings_report import build_savings_report
@@ -51,6 +53,7 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         place_category_name=place.category_name,
         place_kakao_id=place.kakao_place_id,
         title=offer.title,
+        menu_item_id=offer.menu_item_id,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,
@@ -110,9 +113,19 @@ async def search(
         seen_places.add(r.candidate.place_id)
         deduped.append(r)
 
+    # 대표메뉴: 실제 등록된 메뉴 가격에서만 뽑는다 — 대표 오퍼에 연결된 메뉴가 있으면
+    # 그것(절약이 가장 큰 메뉴), 없으면 가장 먼저 등록된 메뉴. 등록된 메뉴가 하나도
+    # 없으면 표시하지 않는다 (지어내지 않기).
+    menu_items_by_place = await list_menu_items_by_place(session, list(seen_places))
+
     results = []
     for r in deduped:
         c = r.candidate
+        place_items = menu_items_by_place.get(c.place_id, [])
+        signature = next(
+            (item for item in place_items if item.id == c.menu_item_id),
+            place_items[0] if place_items else None,
+        )
         report = build_savings_report(
             savings_rate=r.breakdown.savings_rate,
             discover_count=c.discover_count,
@@ -138,6 +151,11 @@ async def search(
                     confidence_label=report.confidence_label,
                     reasons=report.reasons,
                     one_line=report.one_line,
+                ),
+                signature_menu=(
+                    SignatureMenuItem(name=signature.name, price=float(signature.price))
+                    if signature
+                    else None
                 ),
                 recommend_count=c.recommend_count,
                 kakao_url=(

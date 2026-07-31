@@ -969,6 +969,30 @@ select:focus {
   font-weight: 800;
 }
 
+/* 대표메뉴 한 줄 (실제 등록 가격에서만 나옴 — 전체 메뉴는 카카오맵) */
+.signature-menu {
+  font-size: 0.78rem;
+  color: var(--ink);
+  margin: 4px 0;
+}
+
+.signature-menu strong {
+  font-weight: 800;
+}
+
+.signature-menu-note {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+
+.signature-menu--card {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  margin: 2px 0;
+}
+
 .proof-counts {
   display: flex;
   gap: 10px;

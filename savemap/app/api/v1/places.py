@@ -76,8 +76,8 @@ async def create_menu_report(
         lng=payload.lng,
         category_name=payload.category_name,
     )
-    item, cmp = await submit_menu_report(
-        session, place, name=payload.name, price=payload.price, source_url=payload.source_url
+    item, cmp, xp_awarded = await submit_menu_report(
+        session, user_id, place, name=payload.name, price=payload.price, source_url=payload.source_url
     )
     return MenuItemResponse(
         id=item.id,
@@ -94,6 +94,7 @@ async def create_menu_report(
         benchmark_source=cmp.benchmark_source,
         benchmark_price=cmp.benchmark_price,
         listed_on_map=bool(cmp.savings_amount and cmp.savings_amount > 0),
+        xp_awarded=xp_awarded,
     )
 
 

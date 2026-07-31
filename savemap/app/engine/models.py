@@ -34,5 +34,6 @@ class OfferCandidate:
     dining_count: int = 0
     recommend_count: int = 0
     title: str | None = None
+    menu_item_id: int | None = None
     place_category_name: str | None = None
     place_kakao_id: str | None = None

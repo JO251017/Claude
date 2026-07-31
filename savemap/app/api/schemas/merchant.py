@@ -81,6 +81,8 @@ class MenuItemResponse(BaseModel):
     benchmark_source: str | None = None
     benchmark_price: float | None = None
     listed_on_map: bool = False
+    # 커뮤니티 메뉴 제보 경로에서만 0보다 클 수 있다 (새 메뉴 정보를 더했을 때 보상)
+    xp_awarded: int = 0
 
 
 class MenuItemGuessItem(BaseModel):

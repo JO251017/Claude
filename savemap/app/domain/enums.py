@@ -56,17 +56,21 @@ class XpReason(str, enum.Enum):
     SAVINGS_CERTIFIED = "savings_certified"
     STORE_VISIT_UPDATE = "store_visit_update"
     RECEIPT_VERIFIED = "receipt_verified"
+    MENU_REPORT = "menu_report"
 
 
 # 1차: 매장 근처(50m)에서 "발견하기"만 눌러도 고정 보상 — 비교 데이터가 있어야만
 # 보상이 나오던 예전 방식(예상 절약금액 비례)은 표본 부족 시 0XP가 돼 "찾아갈 이유"가
 # 안 보이는 원인이었다. 2차: 영수증으로 실제 식사를 인증하면 1차의 3배.
+# MENU_REPORT: 메뉴판 사진 제보로 그 매장에 "새로운" 메뉴 가격이 추가될 때만 지급
+# (같은 메뉴 반복 제보로 XP를 캐지 못하도록).
 XP_REWARD: dict[XpReason, int] = {
     XpReason.VALID_REPORT: 20,
     XpReason.FIELD_VERIFICATION: 5,
     XpReason.SAVINGS_CERTIFIED: 10,
     XpReason.STORE_VISIT_UPDATE: 5,
     XpReason.RECEIPT_VERIFIED: 15,
+    XpReason.MENU_REPORT: 10,
 }
 
 

@@ -19,6 +19,14 @@ class SavingsReportItem(BaseModel):
     one_line: str = ""
 
 
+class SignatureMenuItem(BaseModel):
+    """대표메뉴 한 줄. 실제 등록된 메뉴 가격(사장님 등록 또는 사진 제보)에서만 나온다 —
+    전체 메뉴판은 카카오맵의 역할이고, SaveMap은 절약 계산에 쓰인 대표메뉴 하나만 보여준다."""
+
+    name: str
+    price: float
+
+
 class SearchResultItem(BaseModel):
     offer_id: int
     place_id: int
@@ -26,6 +34,7 @@ class SearchResultItem(BaseModel):
     category_name: str | None = None
     business_status: str | None = None
     report: SavingsReportItem | None = None
+    signature_menu: SignatureMenuItem | None = None
     recommend_count: int = 0
     kakao_url: str | None = None
     address: str | None = None

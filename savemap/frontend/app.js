@@ -3,6 +3,7 @@ const API_BASE = '/v1';
 // 백엔드 XP_REWARD(app/domain/enums.py)와 맞춰서 버튼에 보상을 미리 보여준다.
 const XP_DISCOVER = 5;
 const XP_RECEIPT = 15;
+const XP_MENU_REPORT = 10;
 
 const CATEGORY_LABELS = {
   free: '무료',
@@ -529,6 +530,7 @@ function openOfferDetail(r) {
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
     <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
+    ${r.signature_menu ? `<div class="signature-menu">대표메뉴 <strong>${escapeHtml(r.signature_menu.name)} ${Math.round(r.signature_menu.price).toLocaleString()}원</strong> <span class="signature-menu-note">실제 등록 가격 · 전체 메뉴는 카카오맵에서</span></div>` : ''}
 
     ${savingsReportHtml(r)}
 
@@ -647,7 +649,7 @@ function openDiscoveredDetail(d) {
       다른 사람들도 이 매장의 절약 정보를 바로 볼 수 있어요.
     </p>
     <div class="detail-actions">
-      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 사진으로 알려주기</button>
+      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 찍어서 알려주기 (새 메뉴당 +${XP_MENU_REPORT} XP)</button>
     </div>
     <input type="file" id="discovered-menu-input" accept="image/*" capture="environment" class="hidden" />
     <p id="discovered-menu-status" class="subtitle"></p>
@@ -759,6 +761,7 @@ async function confirmDiscoveredMenuReport(d) {
   statusEl.textContent = '제보 중...';
   let success = 0;
   let listed = 0;
+  let totalXp = 0;
   for (const item of toSave) {
     try {
       const saved = await apiFetch('/places/menu-reports', {
@@ -768,6 +771,7 @@ async function confirmDiscoveredMenuReport(d) {
           place_name: d.place_name,
           address: d.address || null,
           phone: d.phone || null,
+          category_name: d.category_name || null,
           lat: d.lat,
           lng: d.lng,
           name: item.name,
@@ -776,15 +780,18 @@ async function confirmDiscoveredMenuReport(d) {
       });
       success++;
       if (saved.listed_on_map) listed++;
+      totalXp += saved.xp_awarded || 0;
     } catch {
       // 개별 실패는 건너뛰고 계속 진행, 완료 후 성공 개수로 안내
     }
   }
 
+  const xpText = totalXp > 0 ? ` +${totalXp} XP 획득!` : '';
   statusEl.textContent = listed
-    ? `${success}/${toSave.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
-    : `${success}/${toSave.length}개 메뉴 제보 완료! 감사합니다.`;
+    ? `${success}/${toSave.length}개 메뉴 제보 완료!${xpText} 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
+    : `${success}/${toSave.length}개 메뉴 제보 완료!${xpText} 감사합니다.`;
   document.getElementById('discovered-menu-results').innerHTML = '';
+  if (totalXp > 0) loadSavingsBadge();
 }
 
 function prefillMerchantPlace(d) {
@@ -1023,6 +1030,7 @@ async function runSearch() {
           <span class="distance">${r.distance_m.toFixed(0)}m</span>
         </div>
         <div class="place-name">${escapeHtml(r.place_name)}</div>
+        ${r.signature_menu ? `<div class="signature-menu signature-menu--card">대표메뉴 ${escapeHtml(r.signature_menu.name)} ${Math.round(r.signature_menu.price).toLocaleString()}원</div>` : ''}
         ${hasScore
           ? `<div class="card-score-line">
               ${confidenceStarsHtml(report.confidence_stars)}

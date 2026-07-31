@@ -1,14 +1,15 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.spatial import ewkt_point, to_h3
-from app.domain.enums import SourceType
+from app.domain.enums import SourceType, XpReason
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
 from app.engine.price_comparison import MenuPriceComparison
+from app.gamification.service import award_xp
 from app.integrations.gemini import GeminiVisionClient
 
 # 카카오/네이버 둘 다 메뉴·가격을 API로 제공하지 않는다 (공식 문서 확인됨) — 그리고
@@ -52,23 +53,47 @@ async def find_or_create_place(
 
 async def submit_menu_report(
     session: AsyncSession,
+    user_id: str,
     place: Place,
     name: str,
     price: float,
     source_url: str | None = None,
-) -> tuple[MenuItem, MenuPriceComparison]:
-    item = MenuItem(
-        place_id=place.id,
-        name=name,
-        price=price,
-        source=SourceType.S4_REPORT,
-        source_url=source_url,
-        verified_at=datetime.now(timezone.utc),
-        ai_typical_price=await GeminiVisionClient().estimate_typical_price(name),
-    )
-    session.add(item)
-    await session.commit()
-    await session.refresh(item)
+) -> tuple[MenuItem, MenuPriceComparison, int]:
+    """메뉴판 사진 제보 저장. 같은 매장에 같은 이름의 메뉴가 이미 있으면 중복 행을
+    만들지 않고 가격만 최신으로 갱신한다. XP는 그 매장에 "새로운" 메뉴 정보를 더했을
+    때만 지급 — 같은 메뉴를 반복 제보해서 XP를 캐는 걸 막기 위함."""
+    existing = (
+        await session.execute(
+            select(MenuItem).where(
+                MenuItem.place_id == place.id,
+                func.lower(func.trim(MenuItem.name)) == name.strip().lower(),
+            )
+        )
+    ).scalars().first()
+
+    xp_awarded = 0
+    if existing is not None:
+        item = existing
+        item.price = price
+        item.verified_at = datetime.now(timezone.utc)
+        if source_url:
+            item.source_url = source_url
+        await session.commit()
+        await session.refresh(item)
+    else:
+        item = MenuItem(
+            place_id=place.id,
+            name=name,
+            price=price,
+            source=SourceType.S4_REPORT,
+            source_url=source_url,
+            verified_at=datetime.now(timezone.utc),
+            ai_typical_price=await GeminiVisionClient().estimate_typical_price(name),
+        )
+        session.add(item)
+        await session.commit()
+        await session.refresh(item)
+        xp_awarded = await award_xp(session, user_id, XpReason.MENU_REPORT)
 
     cmp = await sync_menu_offer(session, place, item)
-    return item, cmp
+    return item, cmp, xp_awarded
