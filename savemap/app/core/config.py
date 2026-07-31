@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     tour_api_key: str = ""
     opinet_api_key: str = ""
     gemini_api_key: str = ""
+    # 행정안전부 착한가격업소 odcloud 오픈API 요청 URL (활용신청 승인 후 포털에서 복사).
+    # 파일데이터 회차마다 UDDI가 바뀌어서 코드에 박지 않고 환경변수로 받는다.
+    good_price_api_url: str = ""
 
     supabase_url: str = ""
     supabase_anon_key: str = ""
