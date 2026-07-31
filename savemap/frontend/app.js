@@ -621,7 +621,10 @@ async function loadMenuComparison(r) {
 }
 
 // --- 아직 가격 정보 없는(카카오로만 발견된) 매장 상세: 그냥 구경만 하고 나가지 않도록
-// "메뉴/가격 등록하기"로 SaveMap의 핵심 루프(등록→비교→방문 인증→XP)에 바로 연결한다. ---
+// 두 가지 길을 준다 — (1) 누구든 실제 메뉴판 사진을 찍어서 바로 제보 (카카오/네이버
+// 어디도 메뉴를 API로 안 주고, 크롤링은 원칙상 안 쓰므로 이게 유일한 실제 데이터 경로),
+// (2) 사장님 본인이면 사업자 콘솔에서 정식 등록. 둘 다 SaveMap의 핵심 루프
+// (등록→비교→방문 인증→XP)로 이어진다. ---
 function openDiscoveredDetail(d) {
   const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
   detailContent.innerHTML = `
@@ -635,12 +638,19 @@ function openDiscoveredDetail(d) {
     </div>
     ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
-      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴 가격을 등록하면 이 매장도 지도에
-      절약 정보로 표시되고, 다른 사용자들이 방문해서 가격을 비교하고 인증할 수 있게 돼요.
+      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴판 사진을 찍어서 알려주시면
+      다른 사람들도 이 매장의 절약 정보를 바로 볼 수 있어요.
     </p>
     <div class="detail-actions">
+      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 사진으로 알려주기</button>
+    </div>
+    <input type="file" id="discovered-menu-input" accept="image/*" capture="environment" class="hidden" />
+    <p id="discovered-menu-status" class="subtitle"></p>
+    <div id="discovered-menu-results"></div>
+
+    <div class="detail-actions">
       <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 매장 정보 보기</button>
-      <button type="button" class="btn-primary" id="discovered-register-btn">이 매장 메뉴/가격 등록하기</button>
+      <button type="button" class="btn-text" id="discovered-register-btn">사장님이신가요? 매장 정식 등록하기</button>
     </div>
   `;
   detailOverlay.classList.remove('hidden');
@@ -653,6 +663,123 @@ function openDiscoveredDetail(d) {
     prefillMerchantPlace(d);
     switchScreen('merchant');
   });
+  document.getElementById('discovered-report-btn').addEventListener('click', () => {
+    document.getElementById('discovered-menu-input').click();
+  });
+  document.getElementById('discovered-menu-input').addEventListener('change', (e) => analyzeDiscoveredMenuPhoto(d, e.target));
+}
+
+// --- 발견된 매장의 메뉴판 사진을 아무 사용자나 올려서 제보. 사진 한 장에서 여러 메뉴를
+// 한 번에 인식하는 기존 사업자용 AI(/merchant/menu-items/analyze, 소유권 확인 없음 —
+// 로그인만 필요)를 그대로 재사용하고, 저장만 제보 전용 엔드포인트로 나눈다. ---
+async function analyzeDiscoveredMenuPhoto(d, fileInput) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('discovered-menu-status');
+  const resultsEl = document.getElementById('discovered-menu-results');
+  resultsEl.innerHTML = '';
+
+  const token = await getAccessToken();
+  if (!token) {
+    statusEl.textContent = '메뉴 제보는 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.';
+    fileInput.value = '';
+    return;
+  }
+
+  statusEl.textContent = 'AI가 메뉴판을 읽고 있어요...';
+  const form = new FormData();
+  form.append('image', file);
+  const headers = { Authorization: `Bearer ${token}` };
+
+  try {
+    const resp = await fetch(`${API_BASE}/merchant/menu-items/analyze`, { method: 'POST', headers, body: form });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      throw new Error(data?.detail?.message || data?.detail || `분석 실패 (${resp.status})`);
+    }
+
+    const items = data.items || [];
+    statusEl.textContent = items.length
+      ? `${items.length}개 메뉴를 찾았어요. 확인하고 제보해주세요.`
+      : '메뉴를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.';
+
+    resultsEl.innerHTML = items.length
+      ? `
+      <div class="menu-photo-list">
+        ${items
+          .map(
+            (m, i) => `
+          <div class="menu-photo-row">
+            <input type="checkbox" class="mp-check" data-idx="${i}" checked />
+            <input type="text" class="mp-name" data-idx="${i}" value="${escapeHtml(m.name)}" />
+            <input type="text" class="mp-price" data-idx="${i}" value="${Math.round(m.price)}" />
+          </div>`
+          )
+          .join('')}
+      </div>
+      <button type="button" class="btn-primary" id="discovered-menu-confirm-btn">선택한 메뉴 제보하기</button>`
+      : '';
+
+    if (items.length) {
+      document.getElementById('discovered-menu-confirm-btn').addEventListener('click', () => confirmDiscoveredMenuReport(d));
+    }
+  } catch (err) {
+    statusEl.textContent = '';
+    resultsEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+  } finally {
+    fileInput.value = '';
+  }
+}
+
+async function confirmDiscoveredMenuReport(d) {
+  const statusEl = document.getElementById('discovered-menu-status');
+  const confirmBtn = document.getElementById('discovered-menu-confirm-btn');
+  confirmBtn.disabled = true;
+
+  const toSave = [];
+  document.querySelectorAll('#discovered-menu-results .menu-photo-row').forEach((row) => {
+    if (!row.querySelector('.mp-check').checked) return;
+    const name = row.querySelector('.mp-name').value.trim();
+    const price = parseFloat(row.querySelector('.mp-price').value);
+    if (!name || Number.isNaN(price) || price < 0) return;
+    toSave.push({ name, price });
+  });
+
+  if (!toSave.length) {
+    statusEl.textContent = '제보할 메뉴를 선택해주세요.';
+    confirmBtn.disabled = false;
+    return;
+  }
+
+  statusEl.textContent = '제보 중...';
+  let success = 0;
+  let listed = 0;
+  for (const item of toSave) {
+    try {
+      const saved = await apiFetch('/places/menu-reports', {
+        method: 'POST',
+        body: JSON.stringify({
+          kakao_place_id: d.kakao_place_id,
+          place_name: d.place_name,
+          address: d.address || null,
+          phone: d.phone || null,
+          lat: d.lat,
+          lng: d.lng,
+          name: item.name,
+          price: item.price,
+        }),
+      });
+      success++;
+      if (saved.listed_on_map) listed++;
+    } catch {
+      // 개별 실패는 건너뛰고 계속 진행, 완료 후 성공 개수로 안내
+    }
+  }
+
+  statusEl.textContent = listed
+    ? `${success}/${toSave.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
+    : `${success}/${toSave.length}개 메뉴 제보 완료! 감사합니다.`;
+  document.getElementById('discovered-menu-results').innerHTML = '';
 }
 
 function prefillMerchantPlace(d) {
@@ -1522,13 +1649,19 @@ document.getElementById('menu-item-form').addEventListener('submit', async (e) =
 // --- 메뉴 가격 등록 결과가 실제로 지도에 절약 정보로 뜨는지, 안 뜬다면 왜인지를
 // 그 자리에서 알려준다 (지어내지 않기: 비교 표본이 2곳 미만이면 절약을 단정하지 않음). ---
 function menuSavingsMessage(item) {
+  const basis = item.benchmark_source === 'region'
+    ? `지역 평균(${Math.round(item.benchmark_price).toLocaleString()}원)`
+    : item.benchmark_source === 'ai'
+      ? `AI 추정 통상가(약 ${Math.round(item.benchmark_price).toLocaleString()}원)`
+      : null;
+
   if (item.listed_on_map) {
-    return `메뉴 등록 완료! "${item.name}"이(가) 지역 평균(${Math.round(item.region_median)}원)보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요. 방문 인증하면 손님이 XP를 받아요.`;
+    return `메뉴 등록 완료! "${item.name}"이(가) ${basis}보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요. 방문 인증하면 손님이 XP를 받아요.`;
   }
-  if (item.reliable) {
-    return `메뉴 등록 완료! 다만 지역 평균(${Math.round(item.region_median)}원)보다 저렴하진 않아서 아직 지도엔 절약 정보로 뜨지 않아요.`;
+  if (basis) {
+    return `메뉴 등록 완료! 다만 ${basis}보다 저렴하진 않아서 아직 지도엔 절약 정보로 뜨지 않아요.`;
   }
-  return `메뉴 등록 완료! 아직 주변에 같은 메뉴를 등록한 매장이 부족해서(비교 표본 ${item.sample_count}곳) 절약 비교가 안 돼요. 주변 매장이 2곳 이상 같은 메뉴를 등록하면 자동으로 비교돼요.`;
+  return `메뉴 등록 완료! 비교 기준을 찾지 못해서(주변 등록 ${item.sample_count}곳) 절약 계산이 아직 안 돼요.`;
 }
 
 async function loadMenuItems() {
@@ -1547,10 +1680,10 @@ async function loadMenuItems() {
     const rows = perPlace.flatMap(({ place, items }) =>
       items.map((m) => {
         const status = m.listed_on_map
-          ? `<span class="menu-status menu-status--on">지도에 절약 정보로 표시 중 (-${Math.round(m.savings_amount)}원)</span>`
-          : m.reliable
-            ? `<span class="menu-status menu-status--off">지역 평균보다 비싸거나 같음</span>`
-            : `<span class="menu-status menu-status--pending">비교 대기 (주변 등록 ${m.sample_count}곳)</span>`;
+          ? `<span class="menu-status menu-status--on">지도에 절약 정보로 표시 중 (-${Math.round(m.savings_amount)}원${m.benchmark_source === 'ai' ? ', AI 추정' : ''})</span>`
+          : m.benchmark_source
+            ? `<span class="menu-status menu-status--off">비교 기준보다 비싸거나 같음</span>`
+            : `<span class="menu-status menu-status--pending">비교 기준 없음 (주변 등록 ${m.sample_count}곳)</span>`;
         return `
       <div class="list-row">
         [${escapeHtml(place.name)}] ${escapeHtml(m.name)} - ${m.price.toLocaleString()}원

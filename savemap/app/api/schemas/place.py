@@ -17,6 +17,21 @@ class MenuPriceComparisonResponse(BaseModel):
     benchmark_price: float | None = None
 
 
+class MenuReportCreate(BaseModel):
+    """아직 SaveMap에 등록 안 된(카카오로만 발견된) 매장의 메뉴를 아무 사용자나 실제
+    사진으로 제보할 때 쓴다. kakao_place_id로 매장을 찾거나 없으면 새로 만든다."""
+
+    kakao_place_id: str
+    place_name: str
+    address: str | None = None
+    phone: str | None = None
+    lat: float
+    lng: float
+    name: str
+    price: float
+    source_url: str | None = None
+
+
 class StatusUpdateCreate(BaseModel):
     status: BusinessStatus
     lat: float

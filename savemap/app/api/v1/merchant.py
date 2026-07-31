@@ -49,7 +49,9 @@ def _menu_item_response(
         savings_amount=cmp.savings_amount if cmp else None,
         savings_rate=cmp.savings_rate if cmp else None,
         reliable=cmp.reliable if cmp else False,
-        listed_on_map=bool(cmp and cmp.reliable and cmp.savings_amount and cmp.savings_amount > 0),
+        benchmark_source=cmp.benchmark_source if cmp else None,
+        benchmark_price=cmp.benchmark_price if cmp else None,
+        listed_on_map=bool(cmp and cmp.savings_amount and cmp.savings_amount > 0),
     )
 
 
