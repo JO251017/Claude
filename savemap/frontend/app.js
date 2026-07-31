@@ -443,11 +443,16 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
 
+    // 지역 평균보다 싸다고 확인되기 전에도(비교 표본 부족 등) 사장님이 등록한 실제
+    // 가격은 있으므로, 그 가격 자체를 "찾아갈 이유"로 보여준다 — 절약률만 기다리다
+    // 아무 정보 없이 지도에 뜨는 일이 없도록.
     const tier = getRarityTier(r.savings_rate);
     const savingsText =
       r.total_savings > 0
         ? `${Math.round(r.savings_rate)}%↓ · ${Math.round(r.total_savings).toLocaleString()}원 절약`
-        : '방문 인증하고 XP 받기';
+        : r.final_price > 0
+          ? `${Math.round(r.final_price).toLocaleString()}원`
+          : '방문 인증하고 XP 받기';
     mapLabels.push(
       createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), { tierCls: tier.cls, savingsText })
     );
