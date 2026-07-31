@@ -58,8 +58,7 @@ function log(msg) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-async function callImport(file, region, dryRun) {
-  const key = document.getElementById('key').value;
+async function callImport(file, region, dryRun, key) {
   const form = new FormData();
   form.append('file', file);
   const params = new URLSearchParams();
@@ -81,7 +80,11 @@ async function runAll(dryRun) {
   const fileInput = document.getElementById('file');
   const file = fileInput.files[0];
   if (!file) { alert('파일을 선택해주세요.'); return; }
-  if (!document.getElementById('key').value) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+  // 입력창 값은 시작할 때 딱 한 번만 읽어서 끝까지 재사용한다 — 매 요청마다 새로
+  // 읽으면, 긴 작업 도중 브라우저가 비밀번호 칸을 비우는 경우(자동완성/보안 정책 등)
+  // 중간부터 401이 나는 문제가 있었다.
+  const key = document.getElementById('key').value;
+  if (!key) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
 
   const regionsRaw = document.getElementById('regions').value.trim();
   const regions = regionsRaw ? regionsRaw.split('\n').map((s) => s.trim()).filter(Boolean) : [null];
@@ -91,17 +94,21 @@ async function runAll(dryRun) {
   logEl.textContent = '';
   log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : '실제 저장'})`);
 
-  const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0 };
+  const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0, failed_rows: 0 };
   for (const region of regions) {
     log(`\n▶ ${region || '전체'} 처리 중...`);
     try {
-      const result = await callImport(file, region, dryRun);
+      const result = await callImport(file, region, dryRun, key);
       log(JSON.stringify(result, null, 2));
       for (const k of Object.keys(totals)) {
         if (typeof result[k] === 'number') totals[k] += result[k];
       }
     } catch (err) {
       log(`오류: ${err.message}`);
+      if (err.message.includes('HTTP 401')) {
+        log('\n키 인증 실패라 나머지 지역은 진행하지 않고 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
+        break;
+      }
     }
   }
   log(`\n=== 전체 합계 ===\n${JSON.stringify(totals, null, 2)}`);
