@@ -32,6 +32,18 @@ _MENU_EXTRACTION_PROMPT = (
 )
 
 
+def _typical_price_prompt(item_name: str) -> str:
+    return (
+        f'한국의 동네 식당/카페에서 "{item_name}"과(와) 같은 메뉴를 판매한다면, '
+        "일반적으로 얼마 정도에 판매될지 대략적인 통상 가격을 알려줘. "
+        "이건 특정 매장이나 지역의 실제 조사 데이터가 아니라 참고용 짐작이라는 걸 감안해서, "
+        "합리적으로 짐작할 수 있으면 원 단위 숫자로, 메뉴 이름이 너무 모호하거나 "
+        "짐작이 무의미하면 null로 답해줘. "
+        '반드시 아래 JSON 형식으로만 응답하고 다른 텍스트는 포함하지 마:\n'
+        '{"typical_price": 숫자 또는 null}'
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     return match.group(0) if match else text
@@ -114,6 +126,28 @@ class GeminiVisionClient:
             return data["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError) as exc:
             raise OcrServiceError("사진 분석 결과를 이해할 수 없습니다") from exc
+
+    async def _ask_text(self, prompt: str) -> str:
+        if not self._key:
+            raise OcrServiceError("AI 서비스가 설정되지 않았습니다 (GEMINI_API_KEY 미설정)")
+
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                resp = await client.post(
+                    f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
+                    params={"key": self._key},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except httpx.HTTPError as exc:
+                raise OcrServiceError(f"AI 요청에 실패했습니다: {exc.__class__.__name__}") from exc
+
+        try:
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise OcrServiceError("AI 응답을 이해할 수 없습니다") from exc
 
     async def extract_from_image(self, image_url: str) -> OcrResult:
         raw_text = await self._ask_about_image(image_url, _EXTRACTION_PROMPT)

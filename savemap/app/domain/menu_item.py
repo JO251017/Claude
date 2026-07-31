@@ -22,6 +22,11 @@ class MenuItem(Base, TimestampMixin):
     source: Mapped[SourceType] = mapped_column(SAEnum(SourceType, name="source_type"))
     source_url: Mapped[str | None] = mapped_column(String(1024))
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 주변에 같은 메뉴를 등록한 매장이 아직 2곳 미만이라 실제 지역 비교가 안 될 때,
+    # "이 가격이 싼 편인지" 참고용으로만 쓸 Gemini 추정 시세. 절약률/XP 계산에는 절대
+    # 쓰지 않는다(지어내지 않기 원칙) — 등록 시 1회 추정해 캐싱, 실제 비교 데이터가
+    # 쌓이면 그쪽이 항상 우선한다.
+    ai_typical_price: Mapped[float | None] = mapped_column(Numeric(12, 2))
 
     place = relationship("Place", back_populates="menu_items")
 
