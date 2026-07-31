@@ -218,8 +218,21 @@ async def _geocode_missing_coords(rows: list[dict]) -> None:
     await asyncio.gather(*(_geocode_one(row) for row in targets))
 
 
+def _truncate(value: str | None, max_len: int) -> str | None:
+    """DB 컬럼 길이를 넘는 실데이터(전화번호 여러 개 붙여쓴 경우 등)가 와도 잘라서
+    저장할 뿐, 행 전체를 실패시키지 않는다 — 잘못된 값을 지어내는 게 아니라 실제
+    값의 일부를 그대로 쓰는 것이므로 원칙에 어긋나지 않는다."""
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:max_len] if len(value) > max_len else value
+
+
 async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | None = None) -> dict:
-    """파싱→저장 공통 경로 (odcloud API 동기화, CSV/XLS 업로드가 함께 쓴다)."""
+    """파싱→저장 공통 경로 (odcloud API 동기화, CSV/XLS 업로드가 함께 쓴다). 실제 정부
+    데이터는 컬럼 길이 초과 등 예상 못 한 행이 섞여 있을 수 있어(예: 전화번호 여러 개를
+    한 칸에 붙여쓴 경우), 행 하나가 실패해도 나머지 수천 건이 통째로 날아가지 않도록
+    행 단위로 격리해서 처리한다."""
     parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
     if region:
         parsed = [p for p in parsed if p["address"] and region in p["address"]]
@@ -231,54 +244,66 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | 
     places_created = 0
     items_created = 0
     items_updated = 0
+    failed_rows: list[dict] = []
     for row in parsed:
-        place = (
-            await session.execute(
-                select(Place).where(Place.name == row["name"], Place.address == row["address"])
-            )
-        ).scalars().first()
-        if place is None:
-            place = Place(
-                name=row["name"],
-                address=row["address"],
-                phone=row["phone"],
-                category_name=f"착한가격업소 > {row['category']}" if row["category"] else "착한가격업소",
-                owner_user_id=None,
-                geom=ewkt_point(row["lat"], row["lng"]),
-                h3_r9=to_h3(row["lat"], row["lng"]),
-            )
-            session.add(place)
-            await session.flush()
-            places_created += 1
-
-        for item_name, price in row["menu_items"]:
-            existing = (
+        try:
+            place = (
                 await session.execute(
-                    select(MenuItem).where(
-                        MenuItem.place_id == place.id,
-                        func.lower(func.trim(MenuItem.name)) == item_name.lower(),
-                    )
+                    select(Place).where(Place.name == row["name"], Place.address == row["address"])
                 )
             ).scalars().first()
-            if existing is not None:
-                if float(existing.price) != price:
-                    existing.price = price
-                    items_updated += 1
-                item = existing
-            else:
-                item = MenuItem(
-                    place_id=place.id,
-                    name=item_name,
-                    price=price,
-                    source=SourceType.S1_PUBLIC,
-                    # 대량 임포트라 AI 추정 통상가는 채우지 않는다 — 실측 데이터가
-                    # 수천 건 들어오면 지역 비교가 자연스럽게 가능해진다.
-                    ai_typical_price=None,
+            if place is None:
+                category = row["category"]
+                category_name = _truncate(
+                    f"착한가격업소 > {category}" if category else "착한가격업소", 255
                 )
-                session.add(item)
+                place = Place(
+                    name=_truncate(row["name"], 255),
+                    address=_truncate(row["address"], 500),
+                    phone=_truncate(row["phone"], 32),
+                    category_name=category_name,
+                    owner_user_id=None,
+                    geom=ewkt_point(row["lat"], row["lng"]),
+                    h3_r9=to_h3(row["lat"], row["lng"]),
+                )
+                session.add(place)
                 await session.flush()
-                items_created += 1
-            await sync_menu_offer(session, place, item)
+                places_created += 1
+
+            for item_name, price in row["menu_items"]:
+                item_name = _truncate(item_name, 255)
+                existing = (
+                    await session.execute(
+                        select(MenuItem).where(
+                            MenuItem.place_id == place.id,
+                            func.lower(func.trim(MenuItem.name)) == item_name.lower(),
+                        )
+                    )
+                ).scalars().first()
+                if existing is not None:
+                    if float(existing.price) != price:
+                        existing.price = price
+                        items_updated += 1
+                    item = existing
+                else:
+                    item = MenuItem(
+                        place_id=place.id,
+                        name=item_name,
+                        price=price,
+                        source=SourceType.S1_PUBLIC,
+                        # 대량 임포트라 AI 추정 통상가는 채우지 않는다 — 실측 데이터가
+                        # 수천 건 들어오면 지역 비교가 자연스럽게 가능해진다.
+                        ai_typical_price=None,
+                    )
+                    session.add(item)
+                    await session.flush()
+                    items_created += 1
+                await sync_menu_offer(session, place, item)
+        except Exception as exc:  # noqa: BLE001 - 행 하나 실패가 나머지 수천 건을 막으면 안 됨
+            logger.warning("착한가격업소 저장 실패 (%s): %s", row.get("name"), exc)
+            await session.rollback()
+            failed_rows.append({"name": row.get("name"), "reason": str(exc)[:200]})
+            continue
 
     await session.commit()
     return {
@@ -288,4 +313,6 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | 
         "places_created": places_created,
         "menu_items_created": items_created,
         "menu_items_updated": items_updated,
+        "failed_rows": len(failed_rows),
+        "failed_samples": failed_rows[:5],
     }
