@@ -228,14 +228,29 @@ def _truncate(value: str | None, max_len: int) -> str | None:
     return value[:max_len] if len(value) > max_len else value
 
 
-async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | None = None) -> dict:
+async def store_rows(
+    session: AsyncSession,
+    raw_rows: list[dict],
+    region: str | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> dict:
     """파싱→저장 공통 경로 (odcloud API 동기화, CSV/XLS 업로드가 함께 쓴다). 실제 정부
     데이터는 컬럼 길이 초과 등 예상 못 한 행이 섞여 있을 수 있어(예: 전화번호 여러 개를
     한 칸에 붙여쓴 경우), 행 하나가 실패해도 나머지 수천 건이 통째로 날아가지 않도록
-    행 단위로 격리해서 처리한다."""
+    행 단위로 격리해서 처리한다.
+    offset/limit: 지역 하나(예: 서울 1,989건)조차 지오코딩+저장을 한 요청 안에서 다
+    처리하면 배포 환경 타임아웃(502)에 걸린다 — 지역별 매칭 결과를 이 범위로 한 번 더
+    잘라서, 호출하는 쪽(관리자 페이지)이 작은 묶음으로 여러 번 나눠 부를 수 있게 한다."""
     parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
     if region:
         parsed = [p for p in parsed if p["address"] and region in p["address"]]
+    total_matching = len(parsed)
+    if limit is not None:
+        parsed = parsed[offset : offset + limit]
+    elif offset:
+        parsed = parsed[offset:]
+    slice_size = len(parsed)  # 지오코딩 실패로 나중에 줄어들어도 offset 전진 폭은 이 값 기준
 
     geocoded_count = sum(1 for p in parsed if p["lat"] is None and p.get("address"))
     await _geocode_missing_coords(parsed)
@@ -306,6 +321,7 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | 
             continue
 
     await session.commit()
+    next_offset = offset + slice_size
     return {
         "usable_rows": len(parsed),
         "geocoded": geocoded_count,
@@ -315,4 +331,8 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | 
         "menu_items_updated": items_updated,
         "failed_rows": len(failed_rows),
         "failed_samples": failed_rows[:5],
+        "offset": offset,
+        "total_matching_rows": total_matching,
+        "next_offset": next_offset,
+        "done": next_offset >= total_matching,
     }

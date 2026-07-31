@@ -45,6 +45,10 @@ async def trigger_good_price_sync(
 async def import_good_price_csv(
     file: UploadFile = File(...),
     region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="이 지역 매칭 결과 중 몇 번째부터 처리할지"),
+    limit: int | None = Query(
+        default=None, ge=1, description="한 번에 몇 건까지 처리할지 — 큰 지역은 이걸로 쪼개서 여러 번 호출"
+    ),
     dry_run: bool = Query(default=False, description="true면 DB에 저장하지 않고 파싱 결과만 미리보기"),
     x_admin_key: str | None = Header(default=None),
     session: AsyncSession = SessionDep,
@@ -52,7 +56,10 @@ async def import_good_price_csv(
     """착한가격업소 파일(CSV 또는 goodprice.go.kr에서 받은 xls)을 직접 업로드해서
     저장한다 — data.go.kr이 점검 중이거나 활용신청이 안 될 때, 지자체 홈페이지·
     경기데이터드림·goodprice.go.kr 등에서 받은 파일로 같은 파이프라인(Place + 실제
-    메뉴 가격 → 절약 엔진)을 태우는 우회 경로. 확장자로 형식을 판단한다."""
+    메뉴 가격 → 절약 엔진)을 태우는 우회 경로. 확장자로 형식을 판단한다.
+    offset/limit: 서울처럼 한 지역이 커도(1,989건) 지오코딩+저장을 한 요청 안에서
+    다 처리하면 배포 환경 타임아웃(502)에 걸린다 — 응답의 next_offset/done을 보고
+    done이 false면 같은 region으로 offset=next_offset을 넣어 이어서 호출한다."""
     if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
 
@@ -82,4 +89,4 @@ async def import_good_price_csv(
             "preview": parsed[:10],
         }
 
-    return await store_rows(session, raw_rows, region=region)
+    return await store_rows(session, raw_rows, region=region, offset=offset, limit=limit)

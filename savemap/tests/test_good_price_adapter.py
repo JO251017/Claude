@@ -187,3 +187,61 @@ def test_geocode_missing_coords_skips_when_no_kakao_key(monkeypatch):
         asyncio.run(good_price._geocode_missing_coords(rows))
         mocked.assert_not_called()
     assert rows[0]["lat"] is None
+
+
+def test_store_rows_paginates_large_regions_without_processing_everything_at_once():
+    """서울(수천 건)처럼 큰 지역을 offset/limit으로 쪼개 호출했을 때, 각 페이지가
+    딱 그만큼만 처리하고 next_offset/done을 정확히 계산하는지 — 실제 DB 세션 없이
+    session.execute/add/flush/commit/rollback 인터페이스만 흉내 낸 페이크로 검증."""
+    import asyncio
+
+    from app.sources.public_api import good_price
+
+    class _FakeResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None  # 매번 "새 매장/메뉴" 취급
+
+    class _FakeSession:
+        def __init__(self):
+            self.committed = 0
+
+        async def execute(self, *a, **kw):
+            return _FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            self.committed += 1
+
+        async def rollback(self):
+            pass
+
+    raw_rows = [
+        {"업소명": f"평택가게{i}", "주소": "경기도 평택시", "주요품목": "메뉴", "가격": 8000.0, "위도": "36.99", "경도": "127.11"}
+        for i in range(25)
+    ]
+
+    session = _FakeSession()
+    page1 = asyncio.run(good_price.store_rows(session, raw_rows, region="평택", offset=0, limit=10))
+    assert page1["total_matching_rows"] == 25
+    assert page1["usable_rows"] == 10
+    assert page1["next_offset"] == 10
+    assert page1["done"] is False
+
+    page2 = asyncio.run(good_price.store_rows(session, raw_rows, region="평택", offset=10, limit=10))
+    assert page2["next_offset"] == 20
+    assert page2["done"] is False
+
+    page3 = asyncio.run(good_price.store_rows(session, raw_rows, region="평택", offset=20, limit=10))
+    assert page3["usable_rows"] == 5  # 마지막 페이지는 남은 것만
+    assert page3["next_offset"] == 25
+    assert page3["done"] is True
+
+

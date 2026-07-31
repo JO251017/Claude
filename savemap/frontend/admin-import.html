@@ -58,12 +58,20 @@ function log(msg) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-async function callImport(file, region, dryRun, key) {
+// 서울처럼 지역 하나가 커도(1,989건) 이 크기 단위로 더 쪼개서 여러 번 호출한다 —
+// 지역만으로 나누는 걸로는 배포 환경(Render) 타임아웃(502)을 못 피했다.
+const CHUNK_SIZE = 200;
+
+async function callImport(file, region, dryRun, key, offset) {
   const form = new FormData();
   form.append('file', file);
   const params = new URLSearchParams();
   if (region) params.set('region', region);
   if (dryRun) params.set('dry_run', 'true');
+  else {
+    params.set('offset', String(offset || 0));
+    params.set('limit', String(CHUNK_SIZE));
+  }
   const resp = await fetch(`/v1/admin/import/good-price-csv?${params.toString()}`, {
     method: 'POST',
     headers: { 'X-Admin-Key': key },
@@ -92,22 +100,44 @@ async function runAll(dryRun) {
   document.getElementById('dryrun-btn').disabled = true;
   document.getElementById('run-btn').disabled = true;
   logEl.textContent = '';
-  log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : '실제 저장'})`);
+  log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : `실제 저장, ${CHUNK_SIZE}건씩 나눠서`})`);
 
   const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0, failed_rows: 0 };
+  outer:
   for (const region of regions) {
     log(`\n▶ ${region || '전체'} 처리 중...`);
-    try {
-      const result = await callImport(file, region, dryRun, key);
-      log(JSON.stringify(result, null, 2));
-      for (const k of Object.keys(totals)) {
-        if (typeof result[k] === 'number') totals[k] += result[k];
+    if (dryRun) {
+      try {
+        const result = await callImport(file, region, dryRun, key, 0);
+        log(JSON.stringify(result, null, 2));
+      } catch (err) {
+        log(`오류: ${err.message}`);
       }
-    } catch (err) {
-      log(`오류: ${err.message}`);
-      if (err.message.includes('HTTP 401')) {
-        log('\n키 인증 실패라 나머지 지역은 진행하지 않고 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
-        break;
+      continue;
+    }
+
+    // 실제 저장 모드: done=true가 될 때까지 같은 region을 offset만 바꿔가며 반복 호출
+    let offset = 0;
+    let done = false;
+    let pageNum = 1;
+    while (!done) {
+      try {
+        const result = await callImport(file, region, dryRun, key, offset);
+        log(`  [${pageNum}페이지, offset ${offset}] ${JSON.stringify(result)}`);
+        for (const k of Object.keys(totals)) {
+          if (typeof result[k] === 'number') totals[k] += result[k];
+        }
+        offset = result.next_offset;
+        done = result.done;
+        pageNum++;
+      } catch (err) {
+        log(`오류: ${err.message}`);
+        if (err.message.includes('HTTP 401')) {
+          log('\n키 인증 실패라 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
+          break outer;
+        }
+        log(`  이 페이지(offset ${offset})는 건너뛰고 다음 묶음으로 계속합니다...`);
+        offset += CHUNK_SIZE; // 이 페이지는 포기하고 다음 구간으로 넘어가 전체가 멈추지 않게 함
       }
     }
   }
