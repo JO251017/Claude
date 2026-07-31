@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import httpx
@@ -190,23 +191,31 @@ def parse_xls_bytes(content: bytes) -> list[dict]:
     return rows
 
 
+_GEOCODE_CONCURRENCY = 10
+
+
 async def _geocode_missing_coords(rows: list[dict]) -> None:
     """좌표 없는 행을 주소 기준으로 지오코딩한다 — 좌표를 지어내지 않고, 카카오
     주소 검색이 실제로 찾아준 좌표만 채운다. 실패하면 그 행은 좌표 없이 남고
-    store_rows에서 걸러진다."""
+    store_rows에서 걸러진다. 전국 규모(1만 건 이상)에서 한 건씩 순차 호출하면
+    배포 환경(Render)의 요청 타임아웃을 넘기므로, 제한된 동시성으로 병렬 처리한다."""
     if not settings.kakao_rest_api_key:
         return
     kakao = KakaoClient()
-    for row in rows:
-        if row["lat"] is not None or not row.get("address"):
-            continue
-        try:
-            geocoded = await kakao.geocode(row["address"])
-        except Exception as exc:  # noqa: BLE001 - 한 건 실패가 전체를 막으면 안 됨
-            logger.warning("착한가격업소 지오코딩 실패: %s: %s", row["address"], exc)
-            continue
-        if geocoded is not None:
-            row["lat"], row["lng"] = geocoded.lat, geocoded.lng
+    semaphore = asyncio.Semaphore(_GEOCODE_CONCURRENCY)
+
+    async def _geocode_one(row: dict) -> None:
+        async with semaphore:
+            try:
+                geocoded = await kakao.geocode(row["address"])
+            except Exception as exc:  # noqa: BLE001 - 한 건 실패가 전체를 막으면 안 됨
+                logger.warning("착한가격업소 지오코딩 실패: %s: %s", row["address"], exc)
+                return
+            if geocoded is not None:
+                row["lat"], row["lng"] = geocoded.lat, geocoded.lng
+
+    targets = [row for row in rows if row["lat"] is None and row.get("address")]
+    await asyncio.gather(*(_geocode_one(row) for row in targets))
 
 
 async def store_rows(session: AsyncSession, raw_rows: list[dict], region: str | None = None) -> dict:
