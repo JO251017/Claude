@@ -51,6 +51,24 @@ async def _region_prices(
     return [float(r) for r in rows]
 
 
+async def list_menu_items_by_place(
+    session: AsyncSession, place_ids: list[int]
+) -> dict[int, list[MenuItem]]:
+    """지도 카드 한 장에 그 매장 메뉴 전체가 한눈에 보이도록(검색 결과가 메뉴 하나당
+    카드 하나로 쪼개지지 않도록) 매장별 메뉴 목록을 한 번에 가져온다."""
+    if not place_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(MenuItem).where(MenuItem.place_id.in_(place_ids)).order_by(MenuItem.id)
+        )
+    ).scalars().all()
+    grouped: dict[int, list[MenuItem]] = {}
+    for item in rows:
+        grouped.setdefault(item.place_id, []).append(item)
+    return grouped
+
+
 async def compare_menu_item(
     session: AsyncSession, menu_item: MenuItem, lat: float, lng: float, radius_km: float = 3.0
 ) -> MenuPriceComparison:

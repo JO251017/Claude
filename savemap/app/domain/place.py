@@ -14,6 +14,9 @@ class Place(Base, TimestampMixin):
     address: Mapped[str | None] = mapped_column(String(500))
     kakao_place_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     phone: Mapped[str | None] = mapped_column(String(32))
+    # 카카오 로컬 API가 준 실제 업종 문자열 (예: "음식점 > 한식 > 국밥").
+    # SaveMap이 메뉴를 직접 보여주지 않는 대신, 무슨 업종인지는 알려줘야 하기 때문에 저장한다.
+    category_name: Mapped[str | None] = mapped_column(String(255))
     owner_user_id: Mapped[str | None] = mapped_column(String(64))
     geom: Mapped[object] = mapped_column(
         Geometry(geometry_type="POINT", srid=WGS84_SRID, spatial_index=False)

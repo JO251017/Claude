@@ -25,6 +25,7 @@ class MenuReportCreate(BaseModel):
     place_name: str
     address: str | None = None
     phone: str | None = None
+    category_name: str | None = None
     lat: float
     lng: float
     name: str
@@ -37,6 +38,12 @@ class StatusUpdateCreate(BaseModel):
     lat: float
     lng: float
     accuracy_m: float | None = None
+
+
+class RecommendationResponse(BaseModel):
+    place_id: int
+    is_new: bool
+    recommend_count: int
 
 
 class StatusUpdateResponse(BaseModel):

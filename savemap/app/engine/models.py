@@ -32,4 +32,7 @@ class OfferCandidate:
     place_phone: str | None = None
     discover_count: int = 0
     dining_count: int = 0
+    recommend_count: int = 0
     title: str | None = None
+    place_category_name: str | None = None
+    place_kakao_id: str | None = None

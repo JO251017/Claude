@@ -7,6 +7,7 @@ from app.api.schemas.merchant import MenuItemResponse
 from app.api.schemas.place import (
     MenuPriceComparisonResponse,
     MenuReportCreate,
+    RecommendationResponse,
     StatusUpdateCreate,
     StatusUpdateResponse,
 )
@@ -15,7 +16,7 @@ from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.engine.price_comparison import compare_menu_item
 from app.sources.community_menu.service import find_or_create_place, submit_menu_report
-from app.sources.store_visit.service import submit_status_update
+from app.sources.store_visit.service import submit_recommendation, submit_status_update
 
 router = APIRouter(tags=["places"], prefix="/places")
 
@@ -73,6 +74,7 @@ async def create_menu_report(
         phone=payload.phone,
         lat=payload.lat,
         lng=payload.lng,
+        category_name=payload.category_name,
     )
     item, cmp = await submit_menu_report(
         session, place, name=payload.name, price=payload.price, source_url=payload.source_url
@@ -93,6 +95,16 @@ async def create_menu_report(
         benchmark_price=cmp.benchmark_price,
         listed_on_map=bool(cmp.savings_amount and cmp.savings_amount > 0),
     )
+
+
+@router.post("/{place_id}/recommendations", response_model=RecommendationResponse, status_code=201)
+async def create_recommendation(
+    place_id: int,
+    user_id: str = RequireUserDep,
+    session: AsyncSession = SessionDep,
+) -> RecommendationResponse:
+    is_new, count = await submit_recommendation(session, user_id, place_id)
+    return RecommendationResponse(place_id=place_id, is_new=is_new, recommend_count=count)
 
 
 @router.post("/{place_id}/status-updates", response_model=StatusUpdateResponse, status_code=201)

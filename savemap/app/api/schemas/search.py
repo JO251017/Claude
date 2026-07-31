@@ -5,13 +5,29 @@ from pydantic import BaseModel, Field
 from app.domain.enums import Category, PaymentMethodType
 
 
+class SavingsReportItem(BaseModel):
+    """SaveMap의 핵심 콘텐츠. 메뉴가 아니라 "얼마나 절약되고 얼마나 믿을 수 있는지"를
+    실제 집계 데이터만으로 계산한 결과 — 데이터가 부족하면 score/grade는 null이고
+    confidence_tier가 "low"로 내려간다 (지어내지 않기)."""
+
+    score: int | None = None
+    grade: str | None = None
+    confidence_tier: str
+    confidence_stars: int
+    confidence_label: str
+    reasons: list[str] = []
+    one_line: str = ""
+
+
 class SearchResultItem(BaseModel):
     offer_id: int
     place_id: int
     place_name: str
-    # 어떤 메뉴의 가격인지 (예: "아메리카노 3,000원") — 이게 없으면 카드에 금액만 떠서
-    # 무슨 음식/음료인지 알 수 없다.
-    title: str | None = None
+    category_name: str | None = None
+    business_status: str | None = None
+    report: SavingsReportItem | None = None
+    recommend_count: int = 0
+    kakao_url: str | None = None
     address: str | None = None
     phone: str | None = None
     category: Category

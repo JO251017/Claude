@@ -4,15 +4,6 @@ const API_BASE = '/v1';
 const XP_DISCOVER = 5;
 const XP_RECEIPT = 15;
 
-// 방문 전에도 "N명이 다녀갔다"는 사회적 증거를 보여줘서 찾아갈 이유를 만든다.
-function socialProofText(discoverCount, diningCount) {
-  if (!discoverCount && !diningCount) return '아직 아무도 발견하지 않았어요 — 첫 발견자가 되어보세요!';
-  const parts = [];
-  if (discoverCount) parts.push(`${discoverCount}명이 발견`);
-  if (diningCount) parts.push(`${diningCount}번 식사 인증됨`);
-  return parts.join(' · ');
-}
-
 const CATEGORY_LABELS = {
   free: '무료',
   discount: '할인',
@@ -80,26 +71,6 @@ function escapeHtml(str) {
 
 function formatWon(amount) {
   return `₩${Math.round(amount || 0).toLocaleString()}`;
-}
-
-// --- 정보 신뢰도(최신 상태) 표시 ---
-function freshnessInfo(lastVerifiedAt, count) {
-  if (!lastVerifiedAt || !count) return { cls: 'fresh-none', label: '확인된 정보 없음' };
-  const diffMin = (Date.now() - new Date(lastVerifiedAt).getTime()) / 60000;
-  if (diffMin < 30) return { cls: 'fresh-now', label: '방금 확인됨' };
-  if (diffMin < 120) return { cls: 'fresh-recent', label: `${Math.round(diffMin)}분 전 확인` };
-  if (diffMin < 24 * 60) return { cls: 'fresh-today', label: `${Math.round(diffMin / 60)}시간 전 확인` };
-  return { cls: 'fresh-stale', label: '오래된 정보 · 확인이 필요해요' };
-}
-
-function formatExpiry(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return d.toDateString() === now.toDateString()
-    ? `오늘 ${hh}:${mm}까지`
-    : `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}까지`;
 }
 
 async function apiFetch(path, options = {}) {
@@ -456,16 +427,16 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
 
-    // 지역 평균보다 싸다고 확인되기 전에도(비교 표본 부족 등) 사장님이 등록한 실제
-    // 가격은 있으므로, 그 가격 자체를 "찾아갈 이유"로 보여준다 — 절약률만 기다리다
-    // 아무 정보 없이 지도에 뜨는 일이 없도록.
+    // 라벨의 핵심은 가격이 아니라 "AI 절약점수/절약률" — 데이터가 부족하면 지어내지
+    // 않고 "계산 중"으로 표시한다.
     const tier = getRarityTier(r.savings_rate);
+    const hasScore = r.report && r.report.score != null;
     const savingsText =
       r.total_savings > 0
-        ? `${Math.round(r.savings_rate)}%↓ · ${Math.round(r.total_savings).toLocaleString()}원 절약`
-        : r.final_price > 0
-          ? `${Math.round(r.final_price).toLocaleString()}원`
-          : '방문 인증하고 XP 받기';
+        ? `${Math.round(r.savings_rate)}%↓ · 약 ${Math.round(r.total_savings).toLocaleString()}원 절약`
+        : hasScore
+          ? `AI 절약점수 ${r.report.score}점`
+          : '절약 정보 계산 중';
     mapLabels.push(
       createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), { tierCls: tier.cls, savingsText })
     );
@@ -492,36 +463,87 @@ document.getElementById('detail-close-btn').addEventListener('click', () => {
   detailOverlay.classList.add('hidden');
 });
 
+// --- AI 절약 리포트: SaveMap의 핵심 콘텐츠. 메뉴는 카카오맵의 역할이고, SaveMap은
+// "얼마나 절약되고 얼마나 믿을 수 있는지"만 실제 데이터로 분석해 보여준다. ---
+const CONFIDENCE_ICONS = { high: '🟢', medium: '🟡', low: '⚪' };
+
+function confidenceStarsHtml(stars) {
+  if (!stars) return '';
+  return `<span class="report-stars">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span>`;
+}
+
+function savingsReportHtml(r) {
+  const report = r.report;
+  if (!report) return '';
+  const icon = CONFIDENCE_ICONS[report.confidence_tier] || '⚪';
+
+  if (report.confidence_tier === 'low' || report.score == null) {
+    return `
+    <div class="ai-report ai-report--low">
+      <div class="ai-report-title">💰 AI 절약 리포트</div>
+      <div class="ai-report-calc">절약 정보를 계산하는 중입니다.</div>
+      <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)}</div>
+      ${report.reasons.length ? `
+      <div class="report-reasons">
+        ${report.reasons.map((reason) => `<div class="report-reason">✓ ${escapeHtml(reason)}</div>`).join('')}
+      </div>` : ''}
+      ${report.one_line ? `<p class="report-one-line">"${escapeHtml(report.one_line)}"</p>` : ''}
+    </div>`;
+  }
+
+  return `
+    <div class="ai-report">
+      <div class="ai-report-title">💰 AI 절약 리포트</div>
+      ${r.total_savings > 0 ? `
+      <div class="ai-report-hero">
+        <div class="ai-report-rate">평균보다 <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
+        <div class="ai-report-amount">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>
+      </div>` : `
+      <div class="ai-report-hero">
+        <div class="ai-report-rate">현재 확인된 추가 절약 없음</div>
+      </div>`}
+      <div class="ai-report-scores">
+        <div class="ai-report-cell"><span class="cell-label">절약 등급</span><span class="cell-value grade">${escapeHtml(report.grade)}</span></div>
+        <div class="ai-report-cell"><span class="cell-label">AI 절약점수</span><span class="cell-value">${report.score}점</span></div>
+      </div>
+      <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)} ${confidenceStarsHtml(report.confidence_stars)}</div>
+      <div class="report-reasons">
+        <div class="report-reasons-title">판단 근거</div>
+        ${report.reasons.map((reason) => `<div class="report-reason">✓ ${escapeHtml(reason)}</div>`).join('')}
+      </div>
+      ${report.one_line ? `<p class="report-one-line">"${escapeHtml(report.one_line)}"</p>` : ''}
+    </div>`;
+}
+
+const STATUS_LABELS = { open: '🟢 영업중', closed: '🔴 휴무', temp_closed: '🟠 임시 휴무' };
+
 function openOfferDetail(r) {
-  const tier = getRarityTier(r.savings_rate);
-  const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
-  const kakaoSearchUrl = `https://map.kakao.com/link/search/${encodeURIComponent(r.place_name)}`;
+  const shortCategory = r.category_name ? r.category_name.split(' > ').pop() : '';
+  const kakaoUrl = r.kakao_url || `https://map.kakao.com/link/search/${encodeURIComponent(r.place_name)}`;
+  const statusLabel = STATUS_LABELS[r.business_status] || '';
   detailContent.innerHTML = `
     <div class="badge-group">
-      <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
-      <span class="tier-tag">${tier.label}</span>
+      <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
+      ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
     </div>
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
-    ${r.title ? `<div class="offer-title">${escapeHtml(r.title)}</div>` : ''}
-    <div class="price-line">
-      <span class="final-price">${r.final_price.toLocaleString()}원</span>
-      ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
-    </div>
-    ${r.total_savings > 0 ? `<div class="expected-savings">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</div>` : ''}
-    <div class="meta-line">
-      현재 위치에서 ${r.distance_m.toFixed(0)}m ·
-      <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
-    </div>
-    ${r.address ? `<div class="store-info-line">${escapeHtml(r.address)}</div>` : ''}
+    <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
-    <p class="social-proof-line" id="detail-social-proof">${socialProofText(r.discover_count, r.dining_count)}</p>
-    <a class="kakao-place-link" href="${kakaoSearchUrl}" target="_blank" rel="noopener">카카오맵에서 매장 정보 확인 (리뷰·사진·영업시간)</a>
 
-    <div id="detail-menu-section"></div>
+    ${savingsReportHtml(r)}
+
+    <div class="proof-counts">
+      <span class="proof-item">👀 관심 <strong>${r.discover_count}</strong></span>
+      <span class="proof-item">🔥 식사 인증 <strong>${r.dining_count}</strong></span>
+      <span class="proof-item" id="detail-recommend-count">👍 추천 <strong>${r.recommend_count || 0}</strong></span>
+    </div>
 
     <div class="detail-actions">
+      <button type="button" class="btn-primary" id="detail-kakao-btn">카카오맵에서 메뉴 보기</button>
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
+      <button type="button" class="btn-secondary" id="detail-recommend-btn">👍 추천</button>
     </div>
+    <div id="detail-recommend-msg"></div>
 
     <div class="visit-row">
       <button type="button" class="btn-primary btn-discover" id="detail-discover-btn">📍 발견하기 (+${XP_DISCOVER} XP)</button>
@@ -558,9 +580,13 @@ function openOfferDetail(r) {
   `;
   detailOverlay.classList.remove('hidden');
 
+  document.getElementById('detail-kakao-btn').addEventListener('click', () => {
+    window.open(kakaoUrl, '_blank', 'noopener');
+  });
   document.getElementById('detail-directions-btn').addEventListener('click', () => {
     window.open(`https://map.kakao.com/link/to/${encodeURIComponent(r.place_name)},${r.lat},${r.lng}`, '_blank');
   });
+  document.getElementById('detail-recommend-btn').addEventListener('click', (e) => recommendPlace(r, e.target));
 
   document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.target));
   document.getElementById('detail-report-closed-btn').addEventListener('click', () => {
@@ -577,46 +603,25 @@ function openOfferDetail(r) {
   detailContent.querySelectorAll('#detail-closed-row .btn-visit').forEach((btn) => {
     btn.addEventListener('click', () => submitStatusUpdate(r, btn.dataset.status, btn));
   });
-
-  loadMenuComparison(r);
 }
 
-async function loadMenuComparison(r) {
-  const sectionEl = document.getElementById('detail-menu-section');
+async function recommendPlace(r, btn) {
+  const msgEl = document.getElementById('detail-recommend-msg');
+  const token = await getAccessToken();
+  if (!token) {
+    msgEl.innerHTML = '<p class="error-msg">추천은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.</p>';
+    return;
+  }
+  btn.disabled = true;
   try {
-    const items = await apiFetch(`/places/${r.place_id}/menu-items?lat=${r.lat}&lng=${r.lng}`);
-    if (!items.length) {
-      sectionEl.innerHTML = '';
-      return;
-    }
-    sectionEl.innerHTML = `
-      <div class="menu-compare-list">
-        ${items
-          .map((m) => {
-            if (!m.benchmark_source) {
-              return `<div class="menu-compare-row">
-                <span class="menu-name">${escapeHtml(m.name)}</span>
-                <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
-                <span class="menu-note">비교 기준 없음 (주변 등록 ${m.sample_count}곳)</span>
-              </div>`;
-            }
-            // 추정치를 실측처럼 오해하지 않도록 비교 기준의 출처를 항상 함께 표시한다.
-            const cheaper = m.savings_amount > 0;
-            const basis = m.benchmark_source === 'region'
-              ? `지역 평균 ${Math.round(m.benchmark_price).toLocaleString()}원`
-              : `통상가 약 ${Math.round(m.benchmark_price).toLocaleString()}원 (AI 추정)`;
-            return `<div class="menu-compare-row">
-              <span class="menu-name">${escapeHtml(m.name)}</span>
-              <span class="menu-price">${Math.round(m.store_price).toLocaleString()}원</span>
-              <span class="menu-note ${cheaper ? 'menu-note-good' : ''}">
-                ${basis}${cheaper ? ` · ${Math.round(m.savings_amount).toLocaleString()}원 저렴` : ''}
-              </span>
-            </div>`;
-          })
-          .join('')}
-      </div>`;
-  } catch {
-    sectionEl.innerHTML = '';
+    const data = await apiFetch(`/places/${r.place_id}/recommendations`, { method: 'POST' });
+    document.getElementById('detail-recommend-count').innerHTML = `👍 추천 <strong>${data.recommend_count}</strong>`;
+    msgEl.innerHTML = data.is_new
+      ? `<p class="empty-msg">${ICONS.check} 추천했어요! AI 절약 리포트 신뢰도에 반영돼요.</p>`
+      : `<p class="empty-msg">이미 추천한 매장이에요.</p>`;
+  } catch (err) {
+    msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+    btn.disabled = false;
   }
 }
 
@@ -649,7 +654,7 @@ function openDiscoveredDetail(d) {
     <div id="discovered-menu-results"></div>
 
     <div class="detail-actions">
-      <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 매장 정보 보기</button>
+      <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 전체 메뉴 보기</button>
       <button type="button" class="btn-text" id="discovered-register-btn">사장님이신가요? 매장 정식 등록하기</button>
     </div>
   `;
@@ -1004,27 +1009,31 @@ async function runSearch() {
 
     const offerCardsHtml = data.results
       .map((r, i) => {
-        const tier = getRarityTier(r.savings_rate);
-        const fresh = freshnessInfo(r.last_verified_at, r.verification_count);
+        const report = r.report;
+        const shortCategory = r.category_name ? r.category_name.split(' > ').pop() : '';
+        const statusLabel = STATUS_LABELS[r.business_status] || '';
+        const hasScore = report && report.score != null;
         return `
-      <div class="result-card ${tier.cls}" data-idx="${i}">
+      <div class="result-card" data-idx="${i}">
         <div class="result-header">
           <div class="badge-group">
-            <span class="badge">${CATEGORY_LABELS[r.category] || r.category}</span>
-            <span class="tier-tag">${tier.label}</span>
+            <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
+            ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
           </div>
           <span class="distance">${r.distance_m.toFixed(0)}m</span>
         </div>
         <div class="place-name">${escapeHtml(r.place_name)}</div>
-        ${r.title ? `<div class="offer-title">${escapeHtml(r.title)}</div>` : ''}
-        <div class="price-line">
-          <span class="final-price">${r.final_price.toLocaleString()}원</span>
-          ${r.total_savings > 0 ? `<span class="base-price">${r.base_price.toLocaleString()}원</span>` : ''}
-          ${r.total_savings > 0 ? `<span class="savings-rate">예상 절약 ${Math.round(r.total_savings).toLocaleString()}원</span>` : ''}
-        </div>
-        <div class="meta-line">
-          <span class="fresh-dot ${fresh.cls}"></span>${fresh.label}${r.expires_at ? ` · ${formatExpiry(r.expires_at)}` : ''}
-        </div>
+        ${hasScore
+          ? `<div class="card-score-line">
+              ${confidenceStarsHtml(report.confidence_stars)}
+              <span class="card-score">AI 절약점수 <strong>${report.score}점</strong></span>
+              <span class="card-grade">${escapeHtml(report.grade)}</span>
+            </div>
+            ${r.total_savings > 0
+              ? `<div class="card-savings-line">평균보다 <strong>${Math.round(r.savings_rate)}% 저렴</strong> · 예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>`
+              : ''}`
+          : `<div class="card-score-line card-score-line--calc">⚪ 절약 정보를 계산하는 중입니다</div>`}
+        <div class="card-proof-line">👀 관심 ${r.discover_count} · 🔥 방문 인증 ${r.dining_count}${r.recommend_count ? ` · 👍 추천 ${r.recommend_count}` : ''}</div>
       </div>`;
       })
       .join('');

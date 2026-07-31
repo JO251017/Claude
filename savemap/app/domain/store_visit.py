@@ -46,3 +46,19 @@ class StoreInterest(Base):
         UniqueConstraint("user_id", "place_id", name="uq_store_interest_user_place"),
         Index("ix_store_interest_place_id", "place_id"),
     )
+
+
+class PlaceRecommendation(Base, TimestampMixin):
+    """매장 추천(👍). 사용자당 매장 하나에 한 번만 집계된다 — AI 절약 리포트의
+    "판단 근거"(사용자 추천 N건)에 실제 집계로만 반영하기 위함."""
+
+    __tablename__ = "place_recommendation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64))
+    place_id: Mapped[int] = mapped_column(ForeignKey("place.id", ondelete="CASCADE"))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "place_id", name="uq_place_recommendation_user_place"),
+        Index("ix_place_recommendation_place_id", "place_id"),
+    )

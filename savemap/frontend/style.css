@@ -845,48 +845,182 @@ select:focus {
   text-decoration: underline;
 }
 
-/* --- 메뉴 가격 비교 --- */
-.menu-compare-list {
+/* --- AI 절약 리포트 (SaveMap의 핵심 콘텐츠) --- */
+.ai-report {
   margin: 12px 0;
-  padding: 12px;
+  padding: 14px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border);
+  text-align: left;
 }
 
-.menu-compare-row {
+.ai-report-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.ai-report-hero {
+  margin-bottom: 10px;
+}
+
+.ai-report-rate {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.ai-report-rate strong {
+  color: var(--primary-dark);
+  font-weight: 900;
+}
+
+.ai-report-amount {
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.ai-report-amount strong {
+  color: var(--primary-dark);
+}
+
+.ai-report-scores {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+  gap: 8px;
+  margin: 8px 0;
 }
 
-.menu-compare-row:last-child {
-  border-bottom: none;
+.ai-report-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, 0.1);
 }
 
-.menu-name {
-  font-weight: 800;
-  color: var(--ink);
-  flex: 1 0 auto;
-}
-
-.menu-price {
-  font-weight: 800;
-  color: var(--ink);
-}
-
-.menu-note {
-  width: 100%;
-  font-size: 0.72rem;
+.ai-report-cell .cell-label {
+  font-size: 0.68rem;
   color: var(--ink-soft);
 }
 
-.menu-note-good {
-  color: var(--uncommon);
-  font-weight: 700;
+.ai-report-cell .cell-value {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.ai-report-cell .cell-value.grade {
+  color: var(--gold-glow, #f59e0b);
+}
+
+.report-confidence {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 8px 0 4px;
+}
+
+.report-stars {
+  color: #f59e0b;
+  letter-spacing: 1px;
+}
+
+.report-reasons {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.report-reasons-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+.report-reason {
+  font-size: 0.76rem;
+  color: var(--ink);
+  padding: 1px 0;
+}
+
+.report-one-line {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.ai-report--low .ai-report-calc {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  margin: 6px 0;
+}
+
+.status-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.proof-counts {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.proof-item {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.proof-item strong {
+  color: var(--ink);
+}
+
+.card-score-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--ink);
+  margin: 2px 0;
+}
+
+.card-score-line--calc {
+  color: var(--ink-soft);
+}
+
+.card-score strong {
+  font-weight: 900;
+}
+
+.card-grade {
+  font-weight: 900;
+  color: var(--gold-glow, #f59e0b);
+}
+
+.card-savings-line {
+  font-size: 0.76rem;
+  color: var(--ink);
+  margin: 2px 0;
+}
+
+.card-savings-line strong {
+  color: var(--primary-dark);
+}
+
+.card-proof-line {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
 }
 
 /* --- 사업자: 메뉴판 사진 AI 인식 결과 (등록 전 확인/수정) --- */
@@ -970,13 +1104,6 @@ select:focus {
   font-weight: 700;
   color: var(--ink);
   margin: 2px 0 4px;
-}
-
-.social-proof-line {
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: var(--primary-dark);
-  margin: 6px 0;
 }
 
 .certify-row {

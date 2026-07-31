@@ -9,7 +9,7 @@ from app.core.errors import LowGpsAccuracyError, PlacePublicNotFoundError, TooFa
 from app.core.spatial import haversine_m
 from app.domain.enums import BusinessStatus, XpReason
 from app.domain.place import Place
-from app.domain.store_visit import StoreInterest, StoreStatusUpdate
+from app.domain.store_visit import PlaceRecommendation, StoreInterest, StoreStatusUpdate
 from app.gamification.service import award_xp
 
 MAX_VISIT_DISTANCE_M = 50.0
@@ -107,6 +107,75 @@ async def get_discover_counts(session: AsyncSession, place_ids: list[int]) -> di
             select(StoreStatusUpdate.place_id, func.count())
             .where(StoreStatusUpdate.place_id.in_(place_ids))
             .group_by(StoreStatusUpdate.place_id)
+        )
+    ).all()
+    return {place_id: count for place_id, count in rows}
+
+
+async def get_latest_status(
+    session: AsyncSession, place_ids: list[int]
+) -> dict[int, BusinessStatus]:
+    """매장별 가장 최근 사용자 체크인 영업 상태 — 실제 체크인이 없으면 그 매장은
+    딕셔너리에 없다(모른다는 뜻이지, 영업 중이라고 지어내지 않는다)."""
+    if not place_ids:
+        return {}
+    rank = (
+        func.row_number()
+        .over(partition_by=StoreStatusUpdate.place_id, order_by=StoreStatusUpdate.created_at.desc())
+        .label("rn")
+    )
+    subq = (
+        select(StoreStatusUpdate.place_id, StoreStatusUpdate.status, rank)
+        .where(StoreStatusUpdate.place_id.in_(place_ids))
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(subq.c.place_id, subq.c.status).where(subq.c.rn == 1)
+        )
+    ).all()
+    return {place_id: status for place_id, status in rows}
+
+
+async def submit_recommendation(
+    session: AsyncSession, user_id: str, place_id: int
+) -> tuple[bool, int]:
+    """매장 추천(👍). AI 절약 리포트의 "판단 근거"에 실제 집계로 반영되는, 사용자당
+    1회만 유효한 실제 신호다."""
+    place = await session.get(Place, place_id)
+    if place is None:
+        raise PlacePublicNotFoundError()
+
+    existing = (
+        await session.execute(
+            select(PlaceRecommendation).where(
+                PlaceRecommendation.user_id == user_id, PlaceRecommendation.place_id == place_id
+            )
+        )
+    ).scalar_one_or_none()
+    is_new = existing is None
+    if is_new:
+        session.add(PlaceRecommendation(user_id=user_id, place_id=place_id))
+        await session.commit()
+
+    count = (
+        await session.execute(
+            select(func.count())
+            .select_from(PlaceRecommendation)
+            .where(PlaceRecommendation.place_id == place_id)
+        )
+    ).scalar_one()
+    return is_new, count
+
+
+async def get_recommend_counts(session: AsyncSession, place_ids: list[int]) -> dict[int, int]:
+    if not place_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(PlaceRecommendation.place_id, func.count())
+            .where(PlaceRecommendation.place_id.in_(place_ids))
+            .group_by(PlaceRecommendation.place_id)
         )
     ).all()
     return {place_id: count for place_id, count in rows}

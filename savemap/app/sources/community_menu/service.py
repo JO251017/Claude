@@ -26,6 +26,7 @@ async def find_or_create_place(
     phone: str | None,
     lat: float,
     lng: float,
+    category_name: str | None = None,
 ) -> Place:
     existing = (
         await session.execute(select(Place).where(Place.kakao_place_id == kakao_place_id))
@@ -38,6 +39,7 @@ async def find_or_create_place(
         address=address,
         phone=phone,
         kakao_place_id=kakao_place_id,
+        category_name=category_name,
         owner_user_id=None,
         geom=ewkt_point(lat, lng),
         h3_r9=to_h3(lat, lng),
