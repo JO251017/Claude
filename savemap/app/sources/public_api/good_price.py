@@ -130,18 +130,23 @@ async def _fetch_rows() -> list[dict]:
     return rows
 
 
-async def sync_good_price_stores(session: AsyncSession, region: str | None = None) -> dict:
+async def sync_good_price_stores(
+    session: AsyncSession, region: str | None = None, offset: int = 0, limit: int | None = None
+) -> dict:
     """착한가격업소를 Place + MenuItem(실제 대표메뉴 가격)으로 저장한다. 메뉴가 들어가면
     기존 절약 엔진(지역 비교 → 오퍼 자동 생성 → AI 절약 리포트)이 그대로 동작한다.
     region이 주어지면 주소에 그 문자열이 포함된 행만 (예: '평택') — Render 무료 플랜의
-    요청 시간 제한 안에서 지역 단위로 나눠 실행하기 위함."""
+    요청 시간 제한 안에서 지역 단위로 나눠 실행하기 위함.
+    offset/limit: CSV 업로드 경로(store_rows)와 동일하게, 지역 하나가 커도(서울 등)
+    지오코딩+저장을 여러 번의 작은 호출로 쪼갤 수 있게 그대로 전달한다 — 안 넘기면
+    이전에 CSV 대량 임포트에서 겪은 것과 같은 502 타임아웃을 그대로 다시 겪는다."""
     if not settings.good_price_api_url:
         return {"skipped": "GOOD_PRICE_API_URL 미설정 — data.go.kr 활용신청 승인 후 요청 URL을 환경변수로 넣어주세요"}
     if not settings.data_go_kr_key:
         return {"skipped": "DATA_GO_KR_KEY 미설정"}
 
     raw_rows = await _fetch_rows()
-    result = await store_rows(session, raw_rows, region=region)
+    result = await store_rows(session, raw_rows, region=region, offset=offset, limit=limit)
     return {"fetched_rows": len(raw_rows), **result}
 
 
