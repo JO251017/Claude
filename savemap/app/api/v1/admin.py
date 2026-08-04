@@ -10,6 +10,7 @@ from app.sources.public_api.good_price import (
     store_rows,
     sync_good_price_stores,
 )
+from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
 router = APIRouter(tags=["admin"], prefix="/admin")
@@ -45,6 +46,25 @@ async def trigger_good_price_sync(
     if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
     return await sync_good_price_stores(session, region=region, offset=offset, limit=limit)
+
+
+@router.post("/sync/restaurant-registry")
+async def trigger_restaurant_registry_sync(
+    category: str = Query(..., description="일반음식점 | 휴게음식점 | 유흥주점"),
+    region: str = Query(..., description="도로명주소에 포함될 지역명 (예: 평택시) — 전국 일괄은 지원하지 않음"),
+    page: int = Query(default=1, ge=1, description="이 region/category 안에서 몇 번째 페이지인지"),
+    per_page: int = Query(default=100, ge=1, le=100, description="페이지당 건수 (API 상한 100)"),
+    x_admin_key: str | None = Header(default=None),
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """행정안전부 일반음식점/휴게음식점(카페)/유흥주점 인허가 현황을 Place로 저장한다.
+    착한가격업소와 달리 가격 정보는 없지만 전국 커버리지가 훨씬 커서, 지도의 기본
+    베이스를 먼저 채우는 용도다 — 절약/가격비교는 이 위에 착한가격업소·사용자제보 등
+    다른 소스가 나중에 얹힌다. 전국은 한 번에 못 돌리니 region으로 나누고, 한 지역도
+    응답의 has_more가 true면 같은 region/category로 page+1을 넣어 이어서 호출한다."""
+    if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
+        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
+    return await sync_restaurant_registry(session, category=category, region=region, page=page, per_page=per_page)
 
 
 @router.post("/import/good-price-csv")
