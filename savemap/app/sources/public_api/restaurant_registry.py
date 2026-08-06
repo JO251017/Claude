@@ -77,7 +77,7 @@ def parse_row(row: dict, category_label: str) -> dict | None:
 async def _fetch_page(slug: str, region: str, page: int, per_page: int) -> tuple[list[dict], bool]:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(
-            f"{_BASE_URL}/{slug}",
+            f"{_BASE_URL}/{slug}/info",
             params={
                 "serviceKey": settings.data_go_kr_key,
                 "pageNo": page,
