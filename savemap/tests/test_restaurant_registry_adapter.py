@@ -1,6 +1,22 @@
 from app.sources.public_api.restaurant_registry import parse_row
 
 
+def test_parse_row_with_priority_field_codes_from_application_screen():
+    # 활용신청 화면에서 실제 확인된 조건 필드코드(BPLC_NM 등)가 응답 항목명으로도
+    # 그대로 오는 경우를 최우선으로 인식하는지 확인 — 한글 컬럼명과 안 섞여도 동작해야 함.
+    row = {
+        "BPLC_NM": "평택식당",
+        "ROAD_NM_ADDR": "경기도 평택시 중앙로 1",
+        "SALS_STTS_NM": "영업/정상",
+        "UPTAE_NM": "한식",
+    }
+    parsed = parse_row(row, "일반음식점")
+    assert parsed is not None
+    assert parsed["name"] == "평택식당"
+    assert parsed["address"] == "경기도 평택시 중앙로 1"
+    assert parsed["category"] == "일반음식점 > 한식"
+
+
 def test_parse_row_with_localdata_standard_columns():
     row = {
         "사업장명": "평택식당",
@@ -169,3 +185,96 @@ def test_sync_restaurant_registry_rejects_unknown_category():
         restaurant_registry.sync_restaurant_registry(None, category="편의점", region="평택시")
     )
     assert "skipped" in result
+
+
+def _fake_response(json_body: dict):
+    import httpx
+
+    request = httpx.Request("GET", "https://apis.data.go.kr/1741000/general_restaurants/info")
+    return httpx.Response(200, request=request, json=json_body)
+
+
+def test_fetch_page_parses_response_body_items_item_as_list():
+    # apis.data.go.kr 표준 오픈API 응답 포맷(response.header + response.body.items.item) —
+    # 처음에 이걸 놓치고 odcloud식 {"data": [...]}로 읽어서 항상 0건이 나오던 실제 장애가
+    # 있었다(2026-08-06, 서울로 바꿔도 동일하게 0건).
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import restaurant_registry
+
+    body = {
+        "response": {
+            "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+            "body": {
+                "items": {"item": [{"BPLC_NM": "가게1"}, {"BPLC_NM": "가게2"}]},
+                "totalCount": 2,
+            },
+        }
+    }
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(body))):
+        rows, has_more = asyncio.run(
+            restaurant_registry._fetch_page("general_restaurants", "평택시", 1, 100)
+        )
+    assert len(rows) == 2
+    assert rows[0]["BPLC_NM"] == "가게1"
+    assert has_more is False  # totalCount(2) <= page*per_page(100)
+
+
+def test_fetch_page_handles_single_item_as_dict_not_list():
+    # 결과가 1건이면 item이 list가 아니라 dict 하나로 온다 — 흔한 XML→JSON 변환 함정.
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import restaurant_registry
+
+    body = {
+        "response": {
+            "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+            "body": {"items": {"item": {"BPLC_NM": "가게1"}}, "totalCount": 1},
+        }
+    }
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(body))):
+        rows, _ = asyncio.run(restaurant_registry._fetch_page("general_restaurants", "평택시", 1, 100))
+    assert rows == [{"BPLC_NM": "가게1"}]
+
+
+def test_fetch_page_handles_zero_results_without_crashing():
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import restaurant_registry
+
+    body = {
+        "response": {
+            "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+            "body": {"items": "", "totalCount": 0},
+        }
+    }
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(body))):
+        rows, has_more = asyncio.run(
+            restaurant_registry._fetch_page("general_restaurants", "존재하지않는지역", 1, 100)
+        )
+    assert rows == []
+    assert has_more is False
+
+
+def test_fetch_page_raises_with_result_message_on_logical_error():
+    # data.go.kr은 HTTP 200이면서도 resultCode로 논리적 오류(키 미등록 등)를 알리는
+    # 경우가 있다 — 이걸 놓치면 "성공했는데 이상하게 0건"으로만 보인다.
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    import pytest
+
+    from app.sources.public_api import restaurant_registry
+
+    body = {
+        "response": {
+            "header": {"resultCode": "30", "resultMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR"},
+            "body": {},
+        }
+    }
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(body))):
+        with pytest.raises(RuntimeError, match="SERVICE_KEY_IS_NOT_REGISTERED_ERROR"):
+            asyncio.run(restaurant_registry._fetch_page("general_restaurants", "평택시", 1, 100))

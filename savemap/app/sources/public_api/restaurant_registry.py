@@ -38,16 +38,28 @@ _CLOSED_STATUS_WORDS = ("폐업", "휴업", "취소", "말소")
 def parse_row(row: dict, category_label: str) -> dict | None:
     """인허가 행 → Place 저장에 필요한 필드. 상호명/주소 중 하나라도 없으면 None.
     폐업/휴업으로 표시된 행은 지도에 살아있는 가게처럼 보이면 안 되므로 건너뛴다."""
-    name = _row_value(row, "사업장명", "업소명", "상호명", "BPLCNM", "bplcNm")
+    # 신청 화면에서 실제 확인된 조건 필드코드(BPLC_NM/ROAD_NM_ADDR/SALS_STTS_CD)는
+    # 이 LOCALDATA 계열 API에서 요청 조건명과 응답 항목명이 같은 경우가 많아 최우선
+    # 후보로 둔다 — 그 외엔 한글 표준 컬럼명/카멜케이스를 계속 폭넓게 받아준다.
+    name = _row_value(row, "BPLC_NM", "사업장명", "업소명", "상호명", "BPLCNM", "bplcNm")
     if not name:
         return None
     address = _row_value(
-        row, "도로명전체주소", "소재지도로명주소", "소재지전체주소", "지번주소", "RDNWHLADDR", "rdnWhlAddr"
+        row,
+        "ROAD_NM_ADDR",
+        "도로명전체주소",
+        "소재지도로명주소",
+        "소재지전체주소",
+        "지번주소",
+        "RDNWHLADDR",
+        "rdnWhlAddr",
     )
     if not address:
         return None
 
-    status = _row_value(row, "영업상태명", "영업상태구분명", "TRDSTATENM", "trdStateNm") or ""
+    status = (
+        _row_value(row, "SALS_STTS_NM", "영업상태명", "영업상태구분명", "TRDSTATENM", "trdStateNm") or ""
+    )
     if any(word in str(status) for word in _CLOSED_STATUS_WORDS):
         return None
 
@@ -61,13 +73,13 @@ def parse_row(row: dict, category_label: str) -> dict | None:
         except (TypeError, ValueError):
             lat = lng = None
 
-    business_type = _row_value(row, "업태구분명", "위생업태명", "업종명", "UPTAENM")
+    business_type = _row_value(row, "UPTAE_NM", "업태구분명", "위생업태명", "업종명", "UPTAENM")
     category = f"{category_label} > {business_type}" if business_type else category_label
 
     return {
         "name": str(name).strip(),
         "address": str(address).strip(),
-        "phone": _row_value(row, "소재지전화", "전화번호", "지번전화", "LOCALPHONE"),
+        "phone": _row_value(row, "LOC_TELNO", "소재지전화", "전화번호", "지번전화", "LOCALPHONE"),
         "category": category,
         "lat": lat,
         "lng": lng,
@@ -97,8 +109,29 @@ async def _fetch_page(slug: str, region: str, page: int, per_page: int) -> tuple
             # "400 Bad Request"만 보이고 무엇이 잘못됐는지 알 수 없었다 (이번에 겪은 문제) —
             # 원인 진단이 바로 되도록 응답 본문을 그대로 붙여서 다시 던진다.
             raise RuntimeError(f"{exc} — 응답 본문: {resp.text[:500]}") from exc
-        body = resp.json()
-    rows = body.get("data", [])
+        payload = resp.json()
+
+    # apis.data.go.kr 표준 오픈API 응답은 odcloud(good_price.py가 쓰는 {"data": [...]})와
+    # 다르다 — response.header(resultCode/resultMsg) + response.body.items.item 구조다.
+    # 이걸 놓치고 그냥 data 키를 읽어서 지역과 무관하게 항상 0건으로 나오던 실제 장애가
+    # 있었다(HTTP 200인데 fetched_rows가 계속 0, 2026-08-06). item은 결과가 1건이면
+    # dict, 여러 건이면 list, 0건이면 빈 문자열/누락으로 온다.
+    response = payload.get("response", payload)
+    header = response.get("header", {})
+    result_code = header.get("resultCode")
+    if result_code not in (None, "00", "0"):
+        raise RuntimeError(f"data.go.kr 오류 응답 (resultCode={result_code}): {header.get('resultMsg')}")
+
+    body = response.get("body", {})
+    items = body.get("items")
+    if isinstance(items, dict):
+        item = items.get("item", [])
+        rows = item if isinstance(item, list) else ([item] if item else [])
+    elif isinstance(items, list):
+        rows = items
+    else:
+        rows = []
+
     total_count = body.get("totalCount")
     has_more = (page * per_page) < total_count if isinstance(total_count, int) else len(rows) == per_page
     return rows, has_more
@@ -145,7 +178,7 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], category_label
             continue
 
     await session.commit()
-    return {
+    result = {
         "parsed_rows": len(parsed),
         "geocoded": geocoded_count,
         "places_created": places_created,
@@ -153,6 +186,14 @@ async def store_rows(session: AsyncSession, raw_rows: list[dict], category_label
         "failed_rows": len(failed_rows),
         "failed_samples": failed_rows[:5],
     }
+    if raw_rows and not parsed:
+        # 응답은 받아왔는데(raw_rows > 0) 파싱 결과가 0건이면, parse_row의 컬럼명 후보가
+        # 실제 응답 필드명과 안 맞는다는 뜻이다 — 이번에 응답 구조 자체(response.body.items)를
+        # 잘못 읽어서 겪은 것과 같은 종류의 문제를 또 추측으로 헤매지 않도록, 실제 첫 행의
+        # 키 목록을 그대로 보여준다(값은 개인정보 우려 없는 사업자 공개정보라 문제없지만
+        # 그래도 키만 노출한다).
+        result["sample_raw_keys"] = list(raw_rows[0].keys())
+    return result
 
 
 async def sync_restaurant_registry(
