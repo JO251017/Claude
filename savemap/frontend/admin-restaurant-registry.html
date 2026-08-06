@@ -85,10 +85,12 @@ async function runAll() {
       log(`\n▶ [${category}] ${region} 처리 중...`);
       let page = 1;
       let hasMore = true;
+      let consecutiveFailures = 0;
       while (hasMore) {
         try {
           const result = await callSync(category, region, page, key);
           log(`  [${page}페이지] ${JSON.stringify(result)}`);
+          consecutiveFailures = 0;
           for (const k of Object.keys(totals)) {
             if (typeof result[k] === 'number') totals[k] += result[k];
           }
@@ -99,6 +101,15 @@ async function runAll() {
           if (err.message.includes('HTTP 401')) {
             log('\n키 인증 실패라 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
             break outer;
+          }
+          consecutiveFailures++;
+          // 연달아 3번 실패하면 API 설정 자체가 잘못됐을 가능성이 높다(필드명/키 오류 등) —
+          // 그런 경우 계속 재시도해봐야 매번 똑같이 실패하면서 API 호출 한도만 낭비하므로,
+          // 페이지 500까지 무의미하게 도는 대신 이 구간을 바로 포기하고 사용자가 원인을
+          // 확인하게 한다 (실제로 겪은 문제: 잘못된 필드명으로 280페이지 이상 전부 실패).
+          if (consecutiveFailures >= 3) {
+            log(`  같은 구간에서 ${consecutiveFailures}번 연속 실패 — API 설정 문제일 가능성이 높아 이 구간을 중단합니다. (다음 지역/업종으로 넘어갑니다)`);
+            break;
           }
           log(`  이 페이지(${page})는 건너뛰고 다음으로 계속합니다...`);
           page++;

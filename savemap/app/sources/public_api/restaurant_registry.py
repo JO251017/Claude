@@ -83,10 +83,20 @@ async def _fetch_page(slug: str, region: str, page: int, per_page: int) -> tuple
                 "pageNo": page,
                 "numOfRows": per_page,
                 "returnType": "JSON",
-                "cond[RDN_WHLADDR::LIKE]": region,
+                # 필드 코드는 신청 화면에서 확인된 실제 조건 파라미터명(ROAD_NM_ADDR)을 쓴다 —
+                # 이전에 RDN_WHLADDR로 추측해서 넣었다가 존재하지 않는 필드라 매 요청이
+                # 400으로 거부되는 실제 장애가 있었다 (2026-08-06).
+                "cond[ROAD_NM_ADDR::LIKE]": region,
             },
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # data.go.kr은 400/401일 때 원인(파라미터 오류/키 미등록 등)을 응답 본문에 담아
+            # 주는데, raise_for_status()만 쓰면 그 본문이 사라져서 관리자 페이지 로그에
+            # "400 Bad Request"만 보이고 무엇이 잘못됐는지 알 수 없었다 (이번에 겪은 문제) —
+            # 원인 진단이 바로 되도록 응답 본문을 그대로 붙여서 다시 던진다.
+            raise RuntimeError(f"{exc} — 응답 본문: {resp.text[:500]}") from exc
         body = resp.json()
     rows = body.get("data", [])
     total_count = body.get("totalCount")
