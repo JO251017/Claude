@@ -217,6 +217,9 @@ def test_store_rows_paginates_large_regions_without_processing_everything_at_onc
         async def flush(self):
             pass
 
+        async def refresh(self, obj):
+            pass
+
         async def commit(self):
             self.committed += 1
 
@@ -294,6 +297,9 @@ def test_store_parsed_rows_skips_re_parsing_and_matches_store_rows_shape():
         async def flush(self):
             pass
 
+        async def refresh(self, obj):
+            pass
+
         async def commit(self):
             pass
 
@@ -316,5 +322,91 @@ def test_store_parsed_rows_skips_re_parsing_and_matches_store_rows_shape():
     assert result["places_created"] == 1
     assert result["menu_items_created"] == 1
     assert result["done"] is True
+
+
+def test_store_parsed_rows_refreshes_newly_created_place_before_syncing_offer():
+    # flush 직후의 place.geom은 우리가 assign한 EWKT 문자열 그대로라, 그 상태로
+    # sync_menu_offer(to_shape(place.geom) 호출)에 넘기면 geoalchemy2가
+    # "Only WKBElement and WKTElement objects are supported"로 실패하고 rollback돼서
+    # 아무것도 저장 안 되는 실제 장애가 있었다(2026-08-11, 전국 착한가격업소 임포트
+    # 13,103건이 전부 "성공"으로 집계됐지만 실제로는 0건 저장됨). refresh를 빼먹으면
+    # 바로 이 회귀를 다시 만드니, refresh가 실제로 호출되는지 직접 확인한다.
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.engine.price_comparison import MenuPriceComparison
+    from app.sources.public_api import good_price
+
+    class _FakeResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None  # 항상 "새 Place" 취급
+
+    class _TrackingSession:
+        def __init__(self):
+            self.refreshed = []
+
+        async def execute(self, *a, **kw):
+            return _FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def flush(self):
+            pass
+
+        async def refresh(self, obj):
+            self.refreshed.append(obj)
+
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+    parsed = [
+        {
+            "name": "평택가게",
+            "address": "경기도 평택시",
+            "phone": None,
+            "category": "한식",
+            "lat": 36.99,
+            "lng": 127.11,
+            "menu_items": [("국밥", 8000.0)],
+        }
+    ]
+
+    # sync_menu_offer 자체는 (to_shape 등 실제 geoalchemy2 변환이 필요해) 진짜 DB
+    # 없이는 흉내내기 어려우니 모킹한다 — 이 테스트가 검증하려는 건 딱 하나,
+    # "refresh가 sync_menu_offer보다 먼저 호출되는가"다.
+    fake_cmp = MenuPriceComparison(
+        menu_item_id=1, name="국밥", store_price=8000.0, place_id=1, region_average=None,
+        region_median=None, sample_count=0, savings_amount=None, savings_rate=None,
+        reliable=False, benchmark_source=None, benchmark_price=None,
+    )
+    call_order = []
+    session = _TrackingSession()
+
+    async def fake_sync_menu_offer(sess, place, item):
+        call_order.append("sync_menu_offer")
+        return fake_cmp
+
+    original_refresh = session.refresh
+
+    async def tracking_refresh(obj):
+        call_order.append("refresh")
+        await original_refresh(obj)
+
+    session.refresh = tracking_refresh
+
+    with patch("app.sources.public_api.good_price.sync_menu_offer", new=AsyncMock(side_effect=fake_sync_menu_offer)):
+        result = asyncio.run(good_price.store_parsed_rows(session, parsed, region="평택"))
+
+    assert len(session.refreshed) == 1, "새로 만든 Place는 sync_menu_offer 전에 refresh돼야 한다"
+    assert call_order == ["refresh", "sync_menu_offer"], "refresh가 sync_menu_offer보다 먼저 일어나야 한다"
+    assert result["places_created"] == 1
+    assert result["failed_rows"] == 0
 
 

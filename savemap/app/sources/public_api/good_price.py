@@ -327,6 +327,15 @@ async def store_parsed_rows(
                 )
                 session.add(place)
                 await session.flush()
+                # flush 직후의 place.geom은 우리가 넣은 EWKT 문자열 그대로다 — DB에서
+                # 다시 읽어오기 전까진 geoalchemy2가 WKBElement로 바꿔주지 않는다.
+                # 바로 아래 sync_menu_offer가 to_shape(place.geom)을 호출하는데,
+                # 문자열을 넘기면 "Only WKBElement and WKTElement objects are
+                # supported"로 매 건 실패하고 rollback되어 아무것도 저장되지 않는
+                # 실제 장애가 있었다(2026-08-11, 전국 착한가격업소 임포트에서 13,103건
+                # 전부 "성공"으로 집계됐지만 실제로는 0건 저장). refresh로 DB가 반환한
+                # WKBElement로 다시 채워야 한다.
+                await session.refresh(place)
                 places_created += 1
 
             for item_name, price in row["menu_items"]:
