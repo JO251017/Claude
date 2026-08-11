@@ -35,6 +35,7 @@
 
   <div>
     <button id="run-btn">실제로 가져오기 시작</button>
+    <button id="verify-btn" style="background:#475569;">DB에 실제로 저장됐는지 확인</button>
   </div>
 
   <div id="log"></div>
@@ -126,6 +127,31 @@ async function runAll() {
 document.getElementById('run-btn').addEventListener('click', () => {
   if (confirm('실제로 DB에 저장합니다. 계속할까요?')) runAll();
 });
+
+async function verifyStored() {
+  const key = document.getElementById('key').value;
+  if (!key) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+  // 지역 칸의 첫 줄만 필터로 쓴다 — 여러 지역을 한 번에 돌렸어도 대표로 하나만 확인.
+  const region = document.getElementById('regions').value.trim().split('\n')[0]?.trim() || '';
+
+  logEl.textContent = '';
+  log(`DB 확인 중... (지역 필터: ${region || '전체'})`);
+  try {
+    const params = new URLSearchParams(region ? { region } : {});
+    const resp = await fetch(`/v1/admin/places/stats?${params.toString()}`, {
+      headers: { 'X-Admin-Key': key },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+    log(`\n총 저장된 Place 수: ${data.total_places}건`);
+    log(`\n업종별 분포:\n${JSON.stringify(data.by_category, null, 2)}`);
+    log(`\n최근 생성된 샘플 5건:\n${JSON.stringify(data.recent_samples, null, 2)}`);
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+}
+
+document.getElementById('verify-btn').addEventListener('click', verifyStored);
 </script>
 </body>
 </html>

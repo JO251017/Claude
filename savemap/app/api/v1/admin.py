@@ -1,9 +1,11 @@
 from fastapi import APIRouter, File, Header, Query, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.core.errors import AuthenticationRequiredError, InvalidCsvError
+from app.domain.place import Place
 from app.sources.public_api.good_price import (
     parse_csv_bytes,
     parse_xls_bytes,
@@ -65,6 +67,52 @@ async def trigger_restaurant_registry_sync(
     if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
     return await sync_restaurant_registry(session, category=category, region=region, page=page, per_page=per_page)
+
+
+@router.get("/places/stats")
+async def get_places_stats(
+    region: str | None = Query(default=None, description="주소에 포함될 문자열로 필터 (예: 평택시). 비우면 전체"),
+    x_admin_key: str | None = Header(default=None),
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """방금 실행한 임포트(인허가 데이터/착한가격업소 등)가 실제로 DB에 반영됐는지 확인하는
+    조회 전용 엔드포인트. 관리자 페이지 브라우저 콘솔에 찍히는 places_created 합계는 API
+    응답값일 뿐 실제로 커밋됐다는 증거는 아니라서, place 테이블을 직접 세어 보여준다
+    (전체 건수 + 업종(카테고리)별 분포 + 가장 최근에 생성된 샘플)."""
+    if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
+        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
+
+    filters = [Place.address.ilike(f"%{region}%")] if region else []
+
+    total = (await session.execute(select(func.count()).select_from(Place).where(*filters))).scalar_one()
+
+    # category_name은 "일반음식점 > 한식"처럼 "소스 라벨 > 세부업종"으로 저장되므로,
+    # 앞부분(소스 라벨)만 잘라서 묶어야 소스별 임포트 현황을 한눈에 볼 수 있다.
+    category_label = func.split_part(func.coalesce(Place.category_name, ""), " > ", 1).label("category")
+    by_category_stmt = (
+        select(category_label, func.count()).where(*filters).group_by(category_label).order_by(func.count().desc())
+    )
+    by_category = {
+        (row[0] or "(미분류)"): row[1] for row in (await session.execute(by_category_stmt)).all()
+    }
+
+    recent_stmt = (
+        select(Place.name, Place.address, Place.category_name, Place.created_at)
+        .where(*filters)
+        .order_by(Place.created_at.desc())
+        .limit(5)
+    )
+    recent_samples = [
+        {"name": r[0], "address": r[1], "category": r[2], "created_at": r[3].isoformat() if r[3] else None}
+        for r in (await session.execute(recent_stmt)).all()
+    ]
+
+    return {
+        "region_filter": region,
+        "total_places": total,
+        "by_category": by_category,
+        "recent_samples": recent_samples,
+    }
 
 
 @router.post("/import/good-price-csv")
