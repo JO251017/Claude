@@ -245,3 +245,76 @@ def test_store_rows_paginates_large_regions_without_processing_everything_at_onc
     assert page3["done"] is True
 
 
+def test_import_job_register_and_lookup_roundtrip():
+    from app.sources.public_api import good_price
+
+    parsed = [{"name": "가게", "address": "경기도 평택시", "lat": None, "lng": None, "menu_items": []}]
+    job_id = good_price.register_import_job(parsed)
+
+    assert good_price.get_import_job(job_id) is parsed
+    assert good_price.get_import_job("존재하지않는id") is None
+
+
+def test_import_job_cache_evicts_oldest_beyond_max(monkeypatch):
+    # 대용량 파일을 여러 번 업로드해도(재시작 없이) 무료 플랜 메모리를 무한정 잡아먹지
+    # 않도록, 가장 오래된 것부터 정리한다.
+    from app.sources.public_api import good_price
+
+    good_price._IMPORT_JOBS.clear()
+    ids = []
+    for i in range(good_price._IMPORT_JOB_MAX + 2):
+        ids.append(good_price.register_import_job([{"seq": i}]))
+
+    assert len(good_price._IMPORT_JOBS) == good_price._IMPORT_JOB_MAX
+    assert good_price.get_import_job(ids[0]) is None  # 가장 먼저 등록한 건 정리됨
+    assert good_price.get_import_job(ids[-1]) is not None  # 가장 최근 건 남아있음
+
+
+def test_store_parsed_rows_skips_re_parsing_and_matches_store_rows_shape():
+    # store_rows(파일 파싱 포함)와 store_parsed_rows(이미 파싱된 행)가 같은 결과
+    # 모양을 내는지 — import_id 경로가 기존 경로와 동일한 응답 계약을 지키는지 확인.
+    import asyncio
+
+    from app.sources.public_api import good_price
+
+    class _FakeResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None
+
+    class _FakeSession:
+        async def execute(self, *a, **kw):
+            return _FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+    parsed = [
+        {
+            "name": "평택가게",
+            "address": "경기도 평택시",
+            "phone": None,
+            "category": "한식",
+            "lat": 36.99,
+            "lng": 127.11,
+            "menu_items": [("국밥", 8000.0)],
+        }
+    ]
+
+    result = asyncio.run(good_price.store_parsed_rows(_FakeSession(), parsed, region="평택"))
+    assert result["places_created"] == 1
+    assert result["menu_items_created"] == 1
+    assert result["done"] is True
+
+

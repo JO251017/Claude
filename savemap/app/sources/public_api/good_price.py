@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import time
+import uuid
 
 import httpx
 from sqlalchemy import func, select
@@ -233,21 +235,58 @@ def _truncate(value: str | None, max_len: int) -> str | None:
     return value[:max_len] if len(value) > max_len else value
 
 
-async def store_rows(
+# 전국 단위 파일(1만 건 이상, 수십 MB)을 region×offset 조합으로 쪼개 여러 번 호출하는
+# 기존 방식(/import/good-price-csv)은 매 호출마다 파일 전체를 다시 업로드하고
+# xlrd/csv로 다시 파싱한다 — 17MB 파일에 청크 60~70번이면 업로드만 1GB 넘게 반복되고
+# 파싱 비용도 그만큼 누적돼 체감상 매우 느렸다(실제로 겪은 문제, 2026-08-11). 파일을
+# 한 번만 업로드해 파싱 결과를 잠깐 메모리에 캐시해두고, 이어지는 청크 호출은 이
+# import_id만 참조하게 해서 재업로드/재파싱을 없앤다. Render 무료 플랜은 재시작되면
+# 메모리가 날아가므로 오래 들고 있지 않고 개수/시간으로 정리한다 — 오래 걸리는
+# "정확성이 중요한 저장"은 여전히 DB(source of truth)에서 하고, 여긴 그 앞 단계
+# (업로드·파싱)의 중복 비용만 없애는 캐시일 뿐이다.
+_IMPORT_JOBS: dict[str, dict] = {}
+_IMPORT_JOB_TTL_SEC = 3 * 3600
+_IMPORT_JOB_MAX = 5
+
+
+def _prune_import_jobs() -> None:
+    now = time.time()
+    for key in [k for k, v in _IMPORT_JOBS.items() if now - v["created_at"] > _IMPORT_JOB_TTL_SEC]:
+        del _IMPORT_JOBS[key]
+    while len(_IMPORT_JOBS) > _IMPORT_JOB_MAX:
+        oldest_key = min(_IMPORT_JOBS, key=lambda k: _IMPORT_JOBS[k]["created_at"])
+        del _IMPORT_JOBS[oldest_key]
+
+
+def register_import_job(parsed_rows: list[dict]) -> str:
+    """이미 parse_row를 거친 행 목록을 캐시에 등록하고 import_id를 돌려준다.
+    정리(prune)는 등록 "후"에 해야 한다 — 등록 전에 하면 개수 상한 검사가 이번에
+    새로 넣을 항목을 반영 못 해서, 매번 한 개씩 상한을 넘긴 채로 남는다."""
+    job_id = uuid.uuid4().hex
+    _IMPORT_JOBS[job_id] = {"parsed_rows": parsed_rows, "created_at": time.time()}
+    _prune_import_jobs()
+    return job_id
+
+
+def get_import_job(job_id: str) -> list[dict] | None:
+    job = _IMPORT_JOBS.get(job_id)
+    return job["parsed_rows"] if job else None
+
+
+async def store_parsed_rows(
     session: AsyncSession,
-    raw_rows: list[dict],
+    parsed: list[dict],
     region: str | None = None,
     offset: int = 0,
     limit: int | None = None,
 ) -> dict:
-    """파싱→저장 공통 경로 (odcloud API 동기화, CSV/XLS 업로드가 함께 쓴다). 실제 정부
-    데이터는 컬럼 길이 초과 등 예상 못 한 행이 섞여 있을 수 있어(예: 전화번호 여러 개를
-    한 칸에 붙여쓴 경우), 행 하나가 실패해도 나머지 수천 건이 통째로 날아가지 않도록
-    행 단위로 격리해서 처리한다.
+    """이미 parse_row를 거친 행 목록을 받아 region 필터링 + offset/limit 슬라이스 +
+    지오코딩 + DB 저장을 수행한다 — store_rows의 파일 파싱 이후 로직과 동일하다.
+    import_id 캐시 경로(청크마다 파일을 다시 안 보내는 경로)와 기존 store_rows가
+    이 함수를 공유한다.
     offset/limit: 지역 하나(예: 서울 1,989건)조차 지오코딩+저장을 한 요청 안에서 다
     처리하면 배포 환경 타임아웃(502)에 걸린다 — 지역별 매칭 결과를 이 범위로 한 번 더
     잘라서, 호출하는 쪽(관리자 페이지)이 작은 묶음으로 여러 번 나눠 부를 수 있게 한다."""
-    parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
     if region:
         parsed = [p for p in parsed if p["address"] and region in p["address"]]
     total_matching = len(parsed)
@@ -341,3 +380,21 @@ async def store_rows(
         "next_offset": next_offset,
         "done": next_offset >= total_matching,
     }
+
+
+async def store_rows(
+    session: AsyncSession,
+    raw_rows: list[dict],
+    region: str | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> dict:
+    """파싱→저장 공통 경로 (odcloud API 동기화, 소용량 CSV/XLS 업로드가 함께 쓴다).
+    실제 정부 데이터는 컬럼 길이 초과 등 예상 못 한 행이 섞여 있을 수 있어(예: 전화번호
+    여러 개를 한 칸에 붙여쓴 경우), 행 하나가 실패해도 나머지 수천 건이 통째로 날아가지
+    않도록 store_parsed_rows가 행 단위로 격리해서 처리한다.
+    전국 단위 대용량 파일은 이 함수 대신 register_import_job + store_parsed_rows를
+    직접 써서(admin.py의 /import/good-price-file, -run) 매 청크마다 파일을 다시
+    파싱하는 비용을 피하는 게 훨씬 빠르다."""
+    parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
+    return await store_parsed_rows(session, parsed, region=region, offset=offset, limit=limit)

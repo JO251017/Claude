@@ -7,8 +7,12 @@ from app.core.config import settings
 from app.core.errors import AuthenticationRequiredError, InvalidCsvError
 from app.domain.place import Place
 from app.sources.public_api.good_price import (
+    get_import_job,
     parse_csv_bytes,
+    parse_row,
     parse_xls_bytes,
+    register_import_job,
+    store_parsed_rows,
     store_rows,
     sync_good_price_stores,
 )
@@ -150,8 +154,6 @@ async def import_good_price_csv(
         raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
 
     if dry_run:
-        from app.sources.public_api.good_price import parse_row
-
         parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
         if region:
             parsed = [p for p in parsed if p["address"] and region in p["address"]]
@@ -164,3 +166,77 @@ async def import_good_price_csv(
         }
 
     return await store_rows(session, raw_rows, region=region, offset=offset, limit=limit)
+
+
+@router.post("/import/good-price-file")
+async def upload_good_price_file(
+    file: UploadFile = File(...),
+    x_admin_key: str | None = Header(default=None),
+) -> dict:
+    """대용량 착한가격업소 파일(xls/csv, 전국 1만 건 이상)을 한 번만 업로드해서 파싱
+    결과를 서버 메모리에 잠깐 캐시해두고 import_id를 돌려준다. 기존
+    /import/good-price-csv는 region×offset 청크마다 파일 전체를 재업로드+재파싱해서,
+    큰 파일(17MB, 1만2천 행) 기준 청크 수십~수백 번이면 업로드 트래픽만 1GB를 넘고
+    파싱 시간도 그만큼 누적돼 체감상 매우 느렸다(실제로 겪은 문제, 2026-08-11).
+    이 import_id를 /import/good-price-run에 이어서 넣으면 파일을 다시 안 보내도 된다.
+    (Render 무료 플랜은 재시작되면 캐시가 날아간다 — 그때는 여기부터 다시 업로드)"""
+    if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
+        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
+
+    content = await file.read()
+    filename = (file.filename or "").lower()
+    try:
+        if filename.endswith(".xls") or filename.endswith(".xlsx"):
+            raw_rows = parse_xls_bytes(content)
+        else:
+            raw_rows = parse_csv_bytes(content)
+    except ValueError as exc:
+        raise InvalidCsvError(str(exc)) from exc
+    if not raw_rows:
+        raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
+
+    parsed = [p for p in (parse_row(r) for r in raw_rows) if p is not None]
+    import_id = register_import_job(parsed)
+    return {
+        "import_id": import_id,
+        "raw_rows": len(raw_rows),
+        "usable_rows": len(parsed),
+        "needs_geocoding": sum(1 for p in parsed if p["lat"] is None),
+    }
+
+
+@router.post("/import/good-price-run")
+async def run_good_price_import(
+    import_id: str = Query(..., description="/import/good-price-file 응답의 import_id"),
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="이 지역 매칭 결과 중 몇 번째부터 처리할지"),
+    limit: int | None = Query(
+        default=None, ge=1, description="한 번에 몇 건까지 처리할지 — 큰 지역은 이걸로 쪼개서 여러 번 호출"
+    ),
+    dry_run: bool = Query(default=False, description="true면 DB에 저장하지 않고 파싱 결과만 미리보기"),
+    x_admin_key: str | None = Header(default=None),
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """/import/good-price-file로 업로드해둔 import_id를 이어서 실행한다 — 파일을
+    다시 보내지도, 다시 파싱하지도 않는다(캐시된 파싱 결과를 그대로 재사용)."""
+    if not settings.admin_sync_key or x_admin_key != settings.admin_sync_key:
+        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
+
+    parsed = get_import_job(import_id)
+    if parsed is None:
+        raise InvalidCsvError(
+            "import_id를 찾을 수 없습니다 — 서버가 재시작됐거나 시간이 많이 지나 캐시가 "
+            "만료됐을 수 있어요. /import/good-price-file로 파일을 다시 업로드해주세요."
+        )
+
+    if dry_run:
+        filtered = [p for p in parsed if not region or (p["address"] and region in p["address"])]
+        return {
+            "dry_run": True,
+            "import_id": import_id,
+            "usable_rows": len(filtered),
+            "needs_geocoding": sum(1 for p in filtered if p["lat"] is None),
+            "preview": filtered[:10],
+        }
+
+    return await store_parsed_rows(session, parsed, region=region, offset=offset, limit=limit)

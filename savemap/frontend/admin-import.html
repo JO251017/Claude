@@ -17,7 +17,8 @@
 </head>
 <body>
   <h1>착한가격업소 데이터 가져오기</h1>
-  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용).</p>
+  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용).
+  파일은 처음 한 번만 업로드되고, 이후 지역별 호출은 서버에 캐시된 파싱 결과만 재사용합니다 — 매번 다시 올리지 않습니다.</p>
 
   <label for="key">ADMIN_SYNC_KEY</label>
   <input type="password" id="key" autocomplete="off" />
@@ -59,23 +60,50 @@ function log(msg) {
 }
 
 // 서울처럼 지역 하나가 커도(1,989건) 이 크기 단위로 더 쪼개서 여러 번 호출한다 —
-// 지역만으로 나누는 걸로는 배포 환경(Render) 타임아웃(502)을 못 피했다.
+// 지역만으로 나누는 걸로는 배포 환경(Render) 타임아웃(502)을 못 피했다. 이제 파일
+// 재업로드/재파싱은 없앴으니(아래 ensureUploaded), 이 크기는 순전히 지오코딩+DB
+// 저장 시간(요청 하나당 처리 시간)만 좌우한다.
 const CHUNK_SIZE = 200;
 
-async function callImport(file, region, dryRun, key, offset) {
+// 파일은 최초 1번만 /import/good-price-file로 업로드해서 서버 메모리에 파싱 결과를
+// 캐시해두고(import_id), 이후 지역×offset 조합은 그 import_id만 참조하는
+// /import/good-price-run을 호출한다 — 예전엔 청크마다(17MB 파일 기준 수십~수백 번)
+// 파일 전체를 다시 업로드하고 다시 파싱해서 체감상 매우 느렸다(실제로 겪은 문제,
+// 2026-08-11). 같은 파일이면 재업로드하지 않도록 시그니처로 캐시한다.
+let currentImportId = null;
+let currentFileSignature = null;
+
+async function ensureUploaded(file, key, force = false) {
+  const sig = `${file.name}|${file.size}|${file.lastModified}`;
+  if (!force && currentImportId && currentFileSignature === sig) return currentImportId;
+
+  log(force ? '파일 재업로드 중... (서버 캐시가 만료된 것 같습니다)' : '파일 업로드 중... (한 번만 업로드합니다)');
   const form = new FormData();
   form.append('file', file);
-  const params = new URLSearchParams();
+  const resp = await fetch('/v1/admin/import/good-price-file', {
+    method: 'POST',
+    headers: { 'X-Admin-Key': key },
+    body: form,
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  log(`업로드 완료: 원본 ${data.raw_rows}행 → 사용 가능 ${data.usable_rows}행 (지오코딩 필요 ${data.needs_geocoding}건)`);
+  currentImportId = data.import_id;
+  currentFileSignature = sig;
+  return currentImportId;
+}
+
+async function callImportRun(importId, region, dryRun, key, offset) {
+  const params = new URLSearchParams({ import_id: importId });
   if (region) params.set('region', region);
   if (dryRun) params.set('dry_run', 'true');
   else {
     params.set('offset', String(offset || 0));
     params.set('limit', String(CHUNK_SIZE));
   }
-  const resp = await fetch(`/v1/admin/import/good-price-csv?${params.toString()}`, {
+  const resp = await fetch(`/v1/admin/import/good-price-run?${params.toString()}`, {
     method: 'POST',
     headers: { 'X-Admin-Key': key },
-    body: form,
   });
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
@@ -100,6 +128,17 @@ async function runAll(dryRun) {
   document.getElementById('dryrun-btn').disabled = true;
   document.getElementById('run-btn').disabled = true;
   logEl.textContent = '';
+
+  let importId;
+  try {
+    importId = await ensureUploaded(file, key);
+  } catch (err) {
+    log(`업로드 오류: ${err.message}`);
+    document.getElementById('dryrun-btn').disabled = false;
+    document.getElementById('run-btn').disabled = false;
+    return;
+  }
+
   log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : `실제 저장, ${CHUNK_SIZE}건씩 나눠서`})`);
 
   const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0, failed_rows: 0 };
@@ -108,7 +147,7 @@ async function runAll(dryRun) {
     log(`\n▶ ${region || '전체'} 처리 중...`);
     if (dryRun) {
       try {
-        const result = await callImport(file, region, dryRun, key, 0);
+        const result = await callImportRun(importId, region, dryRun, key, 0);
         log(JSON.stringify(result, null, 2));
       } catch (err) {
         log(`오류: ${err.message}`);
@@ -122,7 +161,7 @@ async function runAll(dryRun) {
     let pageNum = 1;
     while (!done) {
       try {
-        const result = await callImport(file, region, dryRun, key, offset);
+        const result = await callImportRun(importId, region, dryRun, key, offset);
         log(`  [${pageNum}페이지, offset ${offset}] ${JSON.stringify(result)}`);
         for (const k of Object.keys(totals)) {
           if (typeof result[k] === 'number') totals[k] += result[k];
@@ -135,6 +174,17 @@ async function runAll(dryRun) {
         if (err.message.includes('HTTP 401')) {
           log('\n키 인증 실패라 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
           break outer;
+        }
+        if (err.message.includes('import_id')) {
+          // 서버(Render 무료 플랜)가 오래 쉬다가 재시작되면 메모리 캐시가 날아간다 —
+          // 그럴 땐 같은 파일을 다시 올려서(재업로드) 같은 offset부터 이어간다.
+          try {
+            importId = await ensureUploaded(file, key, true);
+            continue;
+          } catch (e2) {
+            log(`재업로드 실패: ${e2.message}`);
+            break outer;
+          }
         }
         log(`  이 페이지(offset ${offset})는 건너뛰고 다음 묶음으로 계속합니다...`);
         offset += CHUNK_SIZE; // 이 페이지는 포기하고 다음 구간으로 넘어가 전체가 멈추지 않게 함
