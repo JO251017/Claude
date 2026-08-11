@@ -767,7 +767,8 @@ async function confirmDiscoveredMenuReport(d) {
       const saved = await apiFetch('/places/menu-reports', {
         method: 'POST',
         body: JSON.stringify({
-          kakao_place_id: d.kakao_place_id,
+          place_id: d.place_id || null,
+          kakao_place_id: d.kakao_place_id || null,
           place_name: d.place_name,
           address: d.address || null,
           phone: d.phone || null,

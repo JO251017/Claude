@@ -18,10 +18,13 @@ class MenuPriceComparisonResponse(BaseModel):
 
 
 class MenuReportCreate(BaseModel):
-    """아직 SaveMap에 등록 안 된(카카오로만 발견된) 매장의 메뉴를 아무 사용자나 실제
-    사진으로 제보할 때 쓴다. kakao_place_id로 매장을 찾거나 없으면 새로 만든다."""
+    """아직 가격 정보가 없는 매장의 메뉴를 아무 사용자나 실제 사진으로 제보할 때 쓴다.
+    place_id가 있으면(=이미 SaveMap DB에 Place가 있는 경우, 예: 인허가 데이터로 미리
+    깔아둔 매장) 그 Place에 바로 붙이고, 없으면 kakao_place_id로 찾거나(카카오로만
+    발견된 매장) 그마저 없으면 새로 만든다."""
 
-    kakao_place_id: str
+    place_id: int | None = None
+    kakao_place_id: str | None = None
     place_name: str
     address: str | None = None
     phone: str | None = None

@@ -22,7 +22,7 @@ from app.engine.price_comparison import list_menu_items_by_place
 from app.engine.ranker import rank_candidates
 from app.engine.rule_filter import rule_filter
 from app.engine.savings_report import build_savings_report
-from app.engine.spatial_query import query_within_radius
+from app.engine.spatial_query import query_places_without_offer, query_within_radius
 from app.gamification.service import get_dining_counts
 from app.sources.store_visit.service import (
     get_discover_counts,
@@ -183,10 +183,39 @@ async def search(
             )
         )
 
+    # Offer가 아직 없어 위 results에는 못 들어간 SaveMap Place(인허가 데이터 등으로
+    # 미리 깔아둔 것) — 이것도 안 챙기면 DB에 Place가 있어도 지도 어디에도 안 뜬다.
+    no_offer_rows = await query_places_without_offer(session, lat, lng, radius)
+    no_offer_coords: list[tuple[float, float]] = []
+    no_offer_items: list[DiscoveredPlaceItem] = []
+    for place, distance_m in no_offer_rows:
+        point = to_shape(place.geom)
+        no_offer_coords.append((point.y, point.x))
+        no_offer_items.append(
+            DiscoveredPlaceItem(
+                place_id=place.id,
+                kakao_place_id=place.kakao_place_id,
+                place_name=place.name,
+                address=place.address,
+                category_name=place.category_name,
+                phone=place.phone,
+                distance_m=round(distance_m, 1),
+                lat=point.y,
+                lng=point.x,
+                kakao_url=(
+                    f"https://place.map.kakao.com/{place.kakao_place_id}"
+                    if place.kakao_place_id
+                    else f"https://map.kakao.com/link/search/{quote(place.name)}"
+                ),
+            )
+        )
+
+    # 카카오 실시간 검색은 위 두 소스(가격 있는 results + DB의 무가격 Place)와 겹치는
+    # 곳은 중복 표시하지 않도록 둘 다 existing_coords로 넘긴다.
     discovered = await discover_nearby_places(
-        lat, lng, radius, existing_coords=[(r.lat, r.lng) for r in results]
+        lat, lng, radius, existing_coords=[(r.lat, r.lng) for r in results] + no_offer_coords
     )
-    discovered_places = [
+    kakao_discovered_items = [
         DiscoveredPlaceItem(
             kakao_place_id=c.place.kakao_place_id,
             place_name=c.place.name,
@@ -200,6 +229,7 @@ async def search(
         )
         for c in discovered
     ]
+    discovered_places = no_offer_items + kakao_discovered_items
 
     return SearchResponse(
         count=len(results), radius_km=radius, results=results, discovered_places=discovered_places

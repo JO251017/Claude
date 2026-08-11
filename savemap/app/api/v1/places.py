@@ -68,6 +68,7 @@ async def create_menu_report(
     사업자 콘솔(RequireUserDep + 소유권 확인)과 달리 로그인만 하면 누구나 쓸 수 있다."""
     place = await find_or_create_place(
         session,
+        place_id=payload.place_id,
         kakao_place_id=payload.kakao_place_id,
         name=payload.place_name,
         address=payload.address,

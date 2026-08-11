@@ -57,10 +57,14 @@ class SearchResultItem(BaseModel):
 
 
 class DiscoveredPlaceItem(BaseModel):
-    """SaveMap에 아직 가격/절약 정보가 없는, 카카오 로컬 검색으로 발견한 주변 식당·카페.
-    콜드스타트 문제(초기에 아무도 매장을 등록 안 했을 때 지도가 텅 비는 것) 완화용."""
+    """SaveMap에 아직 가격/절약 정보(Offer)가 없는 주변 식당·카페. 두 소스에서 채워진다 —
+    (1) 카카오 로컬 검색으로 실시간 발견한 곳(place_id 없음), (2) 인허가 데이터 등으로
+    이미 SaveMap DB에 Place는 있지만 아직 Offer가 안 붙은 곳(place_id 있음, kakao_place_id는
+    없을 수 있음). place_id가 있으면 메뉴 제보 시 그 Place에 바로 붙여서 새 매장을
+    중복 생성하지 않는다. 콜드스타트 문제(지도가 텅 비는 것) 완화용."""
 
-    kakao_place_id: str
+    place_id: int | None = None
+    kakao_place_id: str | None = None
     place_name: str
     address: str | None = None
     category_name: str | None = None

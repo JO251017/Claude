@@ -21,19 +21,30 @@ from app.integrations.gemini import GeminiVisionClient
 
 async def find_or_create_place(
     session: AsyncSession,
-    kakao_place_id: str,
     name: str,
     address: str | None,
     phone: str | None,
     lat: float,
     lng: float,
     category_name: str | None = None,
+    place_id: int | None = None,
+    kakao_place_id: str | None = None,
 ) -> Place:
-    existing = (
-        await session.execute(select(Place).where(Place.kakao_place_id == kakao_place_id))
-    ).scalar_one_or_none()
-    if existing is not None:
-        return existing
+    # place_id가 있으면 최우선 — 인허가 데이터 등으로 이미 SaveMap DB에 있는 Place를
+    # kakao_place_id 없이(=None) 바로 붙여야 하는 경우라, kakao_place_id 조회보다 먼저
+    # 확인해야 한다. kakao_place_id는 nullable+unique라 None으로 조회하면 registry
+    # Place가 수천 건이라 여러 행이 걸려 MultipleResultsFound가 나므로, None일 땐
+    # 아예 조회하지 않는다.
+    if place_id is not None:
+        existing = await session.get(Place, place_id)
+        if existing is not None:
+            return existing
+    if kakao_place_id:
+        existing = (
+            await session.execute(select(Place).where(Place.kakao_place_id == kakao_place_id))
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
 
     place = Place(
         name=name,
