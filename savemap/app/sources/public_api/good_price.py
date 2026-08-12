@@ -13,6 +13,7 @@ from app.domain.enums import SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
+from app.integrations.gemini import GeminiVisionClient
 from app.integrations.kakao import KakaoClient
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,65 @@ async def _geocode_missing_coords(rows: list[dict]) -> None:
     await asyncio.gather(*(_geocode_one(row) for row in targets))
 
 
+# 착한가격업소 데이터는 품목명이 크게 겹친다("이용료", "커트", "짜장면" 등이 전국에서
+# 수백~수천 번 반복). 행 하나마다 Gemini를 부르면 13,000행 기준 13,000번 호출이 되어
+# 시간·비용이 그대로 폭발한다 — 청크 안의 "고유 품목명" 단위로만 한 번씩 물어보고,
+# 그 결과를 프로세스가 살아있는 동안(TTL) 재사용해 다음 청크·다음 지역이 같은
+# 품목명을 다시 물어보지 않게 한다.
+_TYPICAL_PRICE_CACHE: dict[str, tuple[float | None, float]] = {}
+_TYPICAL_PRICE_CACHE_TTL_SEC = 24 * 3600
+_TYPICAL_PRICE_CACHE_MAX = 2000
+_TYPICAL_PRICE_CONCURRENCY = 5
+
+
+def _prune_typical_price_cache() -> None:
+    now = time.time()
+    for key in [
+        k for k, (_, ts) in _TYPICAL_PRICE_CACHE.items() if now - ts > _TYPICAL_PRICE_CACHE_TTL_SEC
+    ]:
+        del _TYPICAL_PRICE_CACHE[key]
+    while len(_TYPICAL_PRICE_CACHE) > _TYPICAL_PRICE_CACHE_MAX:
+        oldest_key = min(_TYPICAL_PRICE_CACHE, key=lambda k: _TYPICAL_PRICE_CACHE[k][1])
+        del _TYPICAL_PRICE_CACHE[oldest_key]
+
+
+async def _estimate_typical_prices(item_names: set[str]) -> dict[str, float | None]:
+    """청크 안 고유 품목명별로 Gemini에게 통상 시세를 한 번씩만 물어보고 캐시한다.
+    GEMINI_API_KEY가 없으면(미설정) 아무것도 지어내지 않고 빈 dict를 돌려준다 —
+    이 경우 기존과 동일하게 ai_typical_price는 None으로 남고, 실측 비교만 쓰인다."""
+    if not settings.gemini_api_key or not item_names:
+        return {}
+
+    now = time.time()
+    results: dict[str, float | None] = {}
+    to_fetch: list[str] = []
+    for name in item_names:
+        cached = _TYPICAL_PRICE_CACHE.get(name)
+        if cached is not None and now - cached[1] <= _TYPICAL_PRICE_CACHE_TTL_SEC:
+            results[name] = cached[0]
+        else:
+            to_fetch.append(name)
+
+    if to_fetch:
+        client = GeminiVisionClient()
+        semaphore = asyncio.Semaphore(_TYPICAL_PRICE_CONCURRENCY)
+
+        async def _fetch_one(name: str) -> None:
+            async with semaphore:
+                try:
+                    price = await client.estimate_typical_price(name)
+                except Exception as exc:  # noqa: BLE001 - 한 품목 실패가 나머지를 막으면 안 됨
+                    logger.warning("착한가격업소 AI 통상가 추정 실패: %s: %s", name, exc)
+                    price = None
+                results[name] = price
+                _TYPICAL_PRICE_CACHE[name] = (price, time.time())
+
+        await asyncio.gather(*(_fetch_one(name) for name in to_fetch))
+        _prune_typical_price_cache()
+
+    return results
+
+
 def _truncate(value: str | None, max_len: int) -> str | None:
     """DB 컬럼 길이를 넘는 실데이터(전화번호 여러 개 붙여쓴 경우 등)가 와도 잘라서
     저장할 뿐, 행 전체를 실패시키지 않는다 — 잘못된 값을 지어내는 게 아니라 실제
@@ -300,6 +360,13 @@ async def store_parsed_rows(
     await _geocode_missing_coords(parsed)
     parsed = [p for p in parsed if p["lat"] is not None]  # 좌표 못 찾은 행은 지어내지 않고 버림
 
+    # 이 청크에 실제로 필요한 고유 품목명만 골라 한 번씩 AI 통상가를 물어본다 —
+    # 청크 크기(관리자 페이지가 보통 300~500행씩 보냄)를 넘는 비용은 안 든다.
+    unique_item_names = {
+        _truncate(name, 255) for row in parsed for name, _ in row["menu_items"]
+    }
+    typical_prices = await _estimate_typical_prices(unique_item_names)
+
     places_created = 0
     items_created = 0
     items_updated = 0
@@ -359,9 +426,9 @@ async def store_parsed_rows(
                         name=item_name,
                         price=price,
                         source=SourceType.S1_PUBLIC,
-                        # 대량 임포트라 AI 추정 통상가는 채우지 않는다 — 실측 데이터가
-                        # 수천 건 들어오면 지역 비교가 자연스럽게 가능해진다.
-                        ai_typical_price=None,
+                        # 실측(지역 실제 등록가) 비교가 항상 우선이라 표본이 쌓이면
+                        # 이 값은 자동으로 밀려난다 — 그전까지 콜드스타트 기준으로만 쓴다.
+                        ai_typical_price=typical_prices.get(item_name),
                     )
                     session.add(item)
                     await session.flush()

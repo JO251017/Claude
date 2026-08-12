@@ -48,6 +48,7 @@ async def sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -
                 title=title,
                 base_price=base_price,
                 store_discount=store_discount,
+                benchmark_source=cmp.benchmark_source if cheaper else None,
                 menu_item_id=item.id,
             )
         )
@@ -55,6 +56,7 @@ async def sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -
         existing_offer.title = title
         existing_offer.base_price = base_price
         existing_offer.store_discount = store_discount
+        existing_offer.benchmark_source = cmp.benchmark_source if cheaper else None
 
     await session.commit()
     return cmp

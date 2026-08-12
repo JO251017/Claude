@@ -47,6 +47,9 @@ class SearchResultItem(BaseModel):
     final_price: float
     total_savings: float
     savings_rate: float
+    # "region"=주변 매장 실측가와 비교, "ai"=Gemini 추정 통상가와 비교, None=비교 대상 없음.
+    # 프론트가 절약치를 실측처럼 오해하지 않고 출처를 그대로 밝힐 수 있게 한다.
+    savings_source: str | None = None
     expires_at: datetime | None = None
     trust_score: float
     verification_count: int = 0

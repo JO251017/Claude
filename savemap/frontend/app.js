@@ -479,10 +479,20 @@ function savingsReportHtml(r) {
   const icon = CONFIDENCE_ICONS[report.confidence_tier] || '⚪';
 
   if (report.confidence_tier === 'low' || report.score == null) {
+    // score(신뢰도 점수)는 실제 방문/인증 같은 사람 신호가 있어야만 매기지만, 가격
+    // 비교 자체(실측이든 AI 추정이든)는 이미 끝났을 수 있다 — 그 경우엔 "계산 중"으로
+    // 뭉개지 않고 실제로 나온 숫자를 출처와 함께 그대로 보여준다.
+    const hasEstimate = r.total_savings > 0;
+    const sourceLabel = r.savings_source === 'ai' ? 'AI(Gemini) 추정 통상가' : '주변 매장 실측가';
     return `
     <div class="ai-report ai-report--low">
       <div class="ai-report-title">💰 AI 절약 리포트</div>
-      <div class="ai-report-calc">절약 정보를 계산하는 중입니다.</div>
+      ${hasEstimate ? `
+      <div class="ai-report-hero ai-report-hero--estimate">
+        <div class="ai-report-rate">🤖 ${sourceLabel} 대비 <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
+        <div class="ai-report-amount">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>
+      </div>` : `
+      <div class="ai-report-calc">절약 정보를 계산하는 중입니다.</div>`}
       <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)}</div>
       ${report.reasons.length ? `
       <div class="report-reasons">
@@ -1021,6 +1031,10 @@ async function runSearch() {
         const shortCategory = r.category_name ? r.category_name.split(' > ').pop() : '';
         const statusLabel = STATUS_LABELS[r.business_status] || '';
         const hasScore = report && report.score != null;
+        // 신뢰도 점수는 없어도(실제 방문 신호 부족) 가격 비교 자체는 이미 끝난
+        // 경우가 흔하다 — 그걸 무조건 "계산 중"으로 뭉개지 않고, 있는 숫자는
+        // 출처(AI 추정 vs 실측)를 밝히고 보여준다.
+        const hasEstimate = !hasScore && r.total_savings > 0;
         return `
       <div class="result-card" data-idx="${i}">
         <div class="result-header">
@@ -1041,7 +1055,10 @@ async function runSearch() {
             ${r.total_savings > 0
               ? `<div class="card-savings-line">평균보다 <strong>${Math.round(r.savings_rate)}% 저렴</strong> · 예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>`
               : ''}`
-          : `<div class="card-score-line card-score-line--calc">⚪ 절약 정보를 계산하는 중입니다</div>`}
+          : hasEstimate
+            ? `<div class="card-score-line card-score-line--ai">🤖 ${r.savings_source === 'ai' ? 'AI 추정' : '실측 비교'} <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
+              <div class="card-savings-line">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong> · 방문 데이터가 쌓이면 신뢰도가 표시돼요</div>`
+            : `<div class="card-score-line card-score-line--calc">⚪ 절약 정보를 계산하는 중입니다</div>`}
         <div class="card-proof-line">👀 관심 ${r.discover_count} · 🔥 방문 인증 ${r.dining_count}${r.recommend_count ? ` · 👍 추천 ${r.recommend_count}` : ''}</div>
       </div>`;
       })

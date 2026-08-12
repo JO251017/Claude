@@ -79,10 +79,25 @@ def build_savings_report(
         reasons.append(f"최근 {FRESHNESS_WINDOW_DAYS}일 이내 데이터 반영")
     if benchmark_source == "region":
         reasons.append("주변 매장 실측 가격 데이터 반영")
+    elif benchmark_source == "ai":
+        reasons.append("AI(Gemini) 추정 통상가 대비 비교")
 
     if tier == "low":
+        has_estimate = savings_rate > 0 and benchmark_source is not None
         if not reasons:
             reasons = ["실제 방문 데이터 부족", "영수증 데이터 부족", "가격 데이터 부족"]
+        if has_estimate:
+            # 가격 비교 자체는 이미 됐다(실측이든 AI 추정이든) — 다만 "신뢰도 점수"는
+            # 실제 방문/인증처럼 사람이 남긴 신호가 있어야 매기므로 score/grade는 여전히
+            # None이다. 계산이 안 된 것처럼 "계산 중"이라고 뭉개지 않고, 무엇을
+            # 기준으로 얼마나 절약되는지는 있는 그대로 보여준다.
+            source_label = "AI 추정 통상가" if benchmark_source == "ai" else "주변 매장 실측가"
+            one_line = (
+                f"{source_label} 대비로는 저렴하지만, 아직 실제 방문/인증 데이터가 부족해 "
+                "신뢰도 점수는 매기지 않았어요."
+            )
+        else:
+            one_line = "아직 충분한 데이터가 쌓이지 않아 절약 정보를 계산 중이에요."
         return SavingsReport(
             score=None,
             grade=None,
@@ -90,7 +105,7 @@ def build_savings_report(
             confidence_stars=stars,
             confidence_label=label,
             reasons=reasons,
-            one_line="아직 충분한 데이터가 쌓이지 않아 절약 정보를 계산 중이에요.",
+            one_line=one_line,
         )
 
     score = 0.0

@@ -964,6 +964,12 @@ select:focus {
   margin: 6px 0;
 }
 
+/* 신뢰도 점수는 아직 없지만 가격 비교(실측/AI 추정)는 나온 상태 — 완전한 히어로
+   블록(.ai-report-hero)보다 톤을 낮춰서, 아직 등급/점수까지는 아니라는 걸 구분한다. */
+.ai-report-hero--estimate {
+  opacity: 0.85;
+}
+
 .status-tag {
   font-size: 0.7rem;
   font-weight: 800;
@@ -1020,6 +1026,13 @@ select:focus {
 
 .card-score-line--calc {
   color: var(--ink-soft);
+}
+
+/* 신뢰도 점수는 없지만(실제 방문 신호 부족) AI/실측 가격 비교는 이미 끝난 경우 —
+   완전한 "계산 중"과는 구분해서 톤을 살짝 낮춘 강조색으로 보여준다. */
+.card-score-line--ai {
+  color: var(--primary-dark, #0f766e);
+  font-weight: 700;
 }
 
 .card-score strong {

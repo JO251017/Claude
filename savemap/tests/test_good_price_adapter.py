@@ -324,6 +324,130 @@ def test_store_parsed_rows_skips_re_parsing_and_matches_store_rows_shape():
     assert result["done"] is True
 
 
+def test_estimate_typical_prices_skips_when_no_gemini_key(monkeypatch):
+    import asyncio
+
+    from app.sources.public_api import good_price
+
+    monkeypatch.setattr(good_price.settings, "gemini_api_key", "")
+    result = asyncio.run(good_price._estimate_typical_prices({"냉삼", "커트"}))
+    assert result == {}
+
+
+def test_estimate_typical_prices_calls_gemini_once_per_unique_name(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import good_price
+
+    good_price._TYPICAL_PRICE_CACHE.clear()
+    monkeypatch.setattr(good_price.settings, "gemini_api_key", "fake-key")
+
+    async def fake_estimate(self, name):
+        return {"냉삼": 9000.0, "커트": 12000.0}.get(name)
+
+    with patch(
+        "app.integrations.gemini.GeminiVisionClient.estimate_typical_price",
+        new=fake_estimate,
+    ):
+        result = asyncio.run(good_price._estimate_typical_prices({"냉삼", "커트"}))
+
+    assert result == {"냉삼": 9000.0, "커트": 12000.0}
+
+    # 같은 이름을 다시 물어보면 캐시에서 바로 나오고 Gemini를 다시 부르지 않는다.
+    with patch(
+        "app.integrations.gemini.GeminiVisionClient.estimate_typical_price",
+        new=AsyncMock(side_effect=AssertionError("캐시가 있으면 다시 호출하면 안 됨")),
+    ):
+        result2 = asyncio.run(good_price._estimate_typical_prices({"냉삼"}))
+    assert result2 == {"냉삼": 9000.0}
+
+
+def test_estimate_typical_prices_one_failure_does_not_block_others(monkeypatch):
+    import asyncio
+    from unittest.mock import patch
+
+    from app.sources.public_api import good_price
+
+    good_price._TYPICAL_PRICE_CACHE.clear()
+    monkeypatch.setattr(good_price.settings, "gemini_api_key", "fake-key")
+
+    async def flaky_estimate(self, name):
+        if name == "실패품목":
+            raise RuntimeError("Gemini 요청 실패")
+        return 5000.0
+
+    with patch(
+        "app.integrations.gemini.GeminiVisionClient.estimate_typical_price",
+        new=flaky_estimate,
+    ):
+        result = asyncio.run(good_price._estimate_typical_prices({"정상품목", "실패품목"}))
+
+    assert result["정상품목"] == 5000.0
+    assert result["실패품목"] is None
+
+
+def test_store_parsed_rows_fills_ai_typical_price_from_batched_estimate(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.sources.public_api import good_price
+
+    class _FakeResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None
+
+    class _FakeSession:
+        async def execute(self, *a, **kw):
+            return _FakeResult()
+
+        def add(self, obj):
+            pass
+
+        async def flush(self):
+            pass
+
+        async def refresh(self, obj):
+            pass
+
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr(good_price.settings, "gemini_api_key", "fake-key")
+    good_price._TYPICAL_PRICE_CACHE.clear()
+
+    captured_items = []
+
+    async def fake_sync_menu_offer(session, place, item):
+        captured_items.append(item)
+
+    parsed = [
+        {
+            "name": "평택가게", "address": "경기도 평택시", "phone": None, "category": "한식",
+            "lat": 36.99, "lng": 127.11, "menu_items": [("냉삼", 8000.0)],
+        }
+    ]
+
+    with (
+        patch(
+            "app.sources.public_api.good_price._estimate_typical_prices",
+            new=AsyncMock(return_value={"냉삼": 9000.0}),
+        ),
+        patch("app.sources.public_api.good_price.sync_menu_offer", new=fake_sync_menu_offer),
+    ):
+        result = asyncio.run(good_price.store_parsed_rows(_FakeSession(), parsed, region="평택"))
+
+    assert result["menu_items_created"] == 1
+    assert len(captured_items) == 1
+    assert captured_items[0].ai_typical_price == 9000.0
+
+
 def test_store_parsed_rows_refreshes_newly_created_place_before_syncing_offer():
     # flush 직후의 place.geom은 우리가 assign한 EWKT 문자열 그대로라, 그 상태로
     # sync_menu_offer(to_shape(place.geom) 호출)에 넘기면 geoalchemy2가

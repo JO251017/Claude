@@ -54,6 +54,7 @@ def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
         place_kakao_id=place.kakao_place_id,
         title=offer.title,
         menu_item_id=offer.menu_item_id,
+        benchmark_source=offer.benchmark_source,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,
@@ -128,7 +129,10 @@ async def search(
             recommend_count=c.recommend_count,
             verification_count=c.verification_count,
             last_verified_at=c.last_verified_at,
-            benchmark_source="region" if r.breakdown.total_savings > 0 else None,
+            # 이전엔 total_savings > 0이면 무조건 "region"으로 간주해서, AI 추정
+            # 통상가로 계산된 절약에도 "주변 매장 실측 가격 데이터 반영"이라고
+            # 잘못 말하는 문제가 있었다 — Offer에 저장된 실제 출처를 그대로 쓴다.
+            benchmark_source=c.benchmark_source,
         )
         status = latest_status.get(c.place_id)
         results.append(
@@ -168,6 +172,7 @@ async def search(
                 final_price=r.breakdown.final_price,
                 total_savings=r.breakdown.total_savings,
                 savings_rate=r.breakdown.savings_rate,
+                savings_source=c.benchmark_source,
                 expires_at=c.expires_at,
                 trust_score=c.trust_score,
                 verification_count=c.verification_count,
