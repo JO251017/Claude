@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260731a" />
+  <link rel="stylesheet" href="style.css?v=20260812a" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -31,6 +31,13 @@
           </div>
         </div>
         <div class="savings-hero glass" id="savings-hero">내 주변 절약 정보를 찾고 있어요</div>
+        <button type="button" id="ai-route-cta" class="ai-route-cta glass">
+          <span class="ai-route-cta-icon">🤖</span>
+          <span class="ai-route-cta-text">
+            <strong>AI 절약 플랜 만들기</strong>
+            <span class="ai-route-cta-sub">예산을 알려주면 오늘 뭘 아낄지 코스를 짜드려요</span>
+          </span>
+        </button>
         <div class="search-row">
           <button type="button" id="use-location-btn" class="pill-btn">
             <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
@@ -74,6 +81,15 @@
         <div class="detail-sheet glass">
           <button type="button" id="detail-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           <div id="detail-content"></div>
+        </div>
+      </div>
+
+      <!-- AI 절약 플랜: 예산을 넣으면 실제 후보 중에서 예산 안에 드는 코스를 짜서
+           "오늘 이 코스로 총 OO원 절약"을 구체적으로 보여준다. -->
+      <div id="route-plan-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="route-plan-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="route-plan-content"></div>
         </div>
       </div>
     </section>
@@ -423,6 +439,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260731a"></script>
+  <script src="app.js?v=20260812a"></script>
 </body>
 </html>

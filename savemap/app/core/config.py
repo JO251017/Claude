@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     rank_savings_weight: float = 0.7
     rank_trust_weight: float = 0.3
 
+    # AI 절약 플랜(/v1/route/suggest) — 예산 입력값 검증 범위와 코스에 담을 최대
+    # 스톱 수. 최대 스톱 수는 기획서 예시(무료주차→무료체험→할인카페→마감할인식당,
+    # 4곳) 규모를 그대로 따른다.
+    route_min_budget: float = 1000.0
+    route_max_budget: float = 500_000.0
+    route_max_stops: int = 4
+
 
 @lru_cache
 def get_settings() -> Settings:

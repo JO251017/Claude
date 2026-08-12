@@ -635,6 +635,136 @@ function openOfferDetail(r) {
   });
 }
 
+// --- AI 절약 플랜: 개별 매장을 나열만 하던 것과 별개로, 예산을 넣으면 실제 후보
+// 중에서 예산 안에 드는 코스를 짜서 "오늘 이 코스로 총 OO원 절약"을 구체적으로
+// 보여준다 (SaveMap 기획서의 원래 핵심 차별화 기능, 2026-08-12 구현). 각 스톱은
+// /search 결과와 똑같은 모양이라 기존 openOfferDetail을 그대로 재사용한다. ---
+const routePlanOverlay = document.getElementById('route-plan-overlay');
+const routePlanContent = document.getElementById('route-plan-content');
+let lastRouteStops = [];
+
+document.getElementById('ai-route-cta').addEventListener('click', openRoutePlanSheet);
+document.getElementById('route-plan-close-btn').addEventListener('click', () => {
+  routePlanOverlay.classList.add('hidden');
+});
+
+function routePlanFormHtml() {
+  return `
+    <h2 class="place-name">🤖 AI 절약 플랜</h2>
+    <div class="meta-line">예산과 인원을 알려주면 실제 후보 중에서 예산 안에 드는 코스를 짜드려요.</div>
+    <div class="form-group">
+      <label for="route-budget-input">예산 (원)</label>
+      <input type="number" id="route-budget-input" min="1000" step="1000" value="30000" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="route-party-input">인원</label>
+        <input type="number" id="route-party-input" min="1" max="20" value="1" />
+      </div>
+      <div class="form-group">
+        <label for="route-category-input">선호 카테고리</label>
+        <select id="route-category-input">
+          <option value="">전체</option>
+          <option value="free">무료</option>
+          <option value="discount">할인</option>
+          <option value="closing_soon">마감임박</option>
+          <option value="free_parking">무료주차</option>
+          <option value="local_benefit">지역혜택</option>
+        </select>
+      </div>
+    </div>
+    <button type="button" class="btn-primary" id="route-plan-submit-btn">코스 만들기</button>
+    <div id="route-plan-msg"></div>
+  `;
+}
+
+function openRoutePlanSheet() {
+  routePlanContent.innerHTML = routePlanFormHtml();
+  routePlanOverlay.classList.remove('hidden');
+  document.getElementById('route-plan-submit-btn').addEventListener('click', submitRoutePlan);
+}
+
+async function submitRoutePlan() {
+  const msgEl = document.getElementById('route-plan-msg');
+  const btn = document.getElementById('route-plan-submit-btn');
+  const budget = parseFloat(document.getElementById('route-budget-input').value);
+  const partySize = parseInt(document.getElementById('route-party-input').value, 10) || 1;
+  const category = document.getElementById('route-category-input').value;
+
+  if (!budget || budget <= 0) {
+    msgEl.innerHTML = '<p class="error-msg">예산을 입력해주세요.</p>';
+    return;
+  }
+
+  const lat = parseFloat(document.getElementById('s-lat').value);
+  const lng = parseFloat(document.getElementById('s-lng').value);
+
+  btn.disabled = true;
+  btn.textContent = '코스를 짜는 중...';
+  msgEl.innerHTML = '';
+
+  try {
+    const payload = { lat, lng, budget, party_size: partySize };
+    if (category) payload.category = category;
+    const data = await apiFetch('/route/suggest', { method: 'POST', body: JSON.stringify(payload) });
+    renderRoutePlanResult(data);
+  } catch (err) {
+    msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+    btn.disabled = false;
+    btn.textContent = '코스 만들기';
+  }
+}
+
+function renderRoutePlanResult(data) {
+  lastRouteStops = data.stops;
+
+  // 코스를 못 만들었으면(예산 안에 후보가 없음) 지어내지 않고 그 사실 그대로 안내한다
+  // (summary가 이미 route_planner의 결정론적 안내 문구를 담고 있다).
+  if (!data.fits_budget) {
+    routePlanContent.innerHTML = `
+      <h2 class="place-name">🤖 AI 절약 플랜</h2>
+      <p class="empty-msg">${escapeHtml(data.summary)}</p>
+      <button type="button" class="btn-secondary" id="route-plan-retry-btn">조건 바꿔서 다시 시도</button>
+    `;
+    document.getElementById('route-plan-retry-btn').addEventListener('click', openRoutePlanSheet);
+    return;
+  }
+
+  const stopsHtml = data.stops
+    .map((s, i) => {
+      const priceLabel = s.final_price > 0 ? formatWon(s.final_price) : '무료';
+      const savingsNote = s.savings_rate > 0 ? ` · 평균보다 ${Math.round(s.savings_rate)}% 저렴` : '';
+      return `
+      <div class="route-stop-card" data-idx="${i}">
+        <div class="route-stop-order">${s.order}</div>
+        <div class="route-stop-info">
+          <div class="route-stop-name">${escapeHtml(s.place_name)}</div>
+          <div class="route-stop-price">${priceLabel}${savingsNote}</div>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  routePlanContent.innerHTML = `
+    <h2 class="place-name">🤖 AI 절약 플랜</h2>
+    <div class="ai-report-hero">
+      <div class="ai-report-rate">오늘 이 코스로 총 <strong>${formatWon(data.total_savings)}</strong> 절약!</div>
+      <div class="ai-report-amount">총 지출 ${formatWon(data.total_spend)} · 예산 ${formatWon(data.budget)} 중 ${formatWon(data.remaining_budget)} 남음</div>
+    </div>
+    <p class="report-one-line">"${escapeHtml(data.summary)}"</p>
+    <div class="route-stop-list">${stopsHtml}</div>
+    <button type="button" class="btn-secondary" id="route-plan-retry-btn">조건 바꿔서 다시 만들기</button>
+  `;
+
+  document.getElementById('route-plan-retry-btn').addEventListener('click', openRoutePlanSheet);
+  routePlanContent.querySelectorAll('.route-stop-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      routePlanOverlay.classList.add('hidden');
+      openOfferDetail(lastRouteStops[Number(card.dataset.idx)]);
+    });
+  });
+}
+
 async function recommendPlace(r, btn) {
   const msgEl = document.getElementById('detail-recommend-msg');
   const token = await getAccessToken();

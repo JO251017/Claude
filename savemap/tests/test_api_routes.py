@@ -42,6 +42,21 @@ def test_search_rejects_radius_out_of_range(client):
     assert resp.json()["detail"]["code"] == "SM4002"
 
 
+def test_route_suggest_rejects_budget_out_of_range(client):
+    # 예산 검증도 DB 세션에 닿기 전에 일어나야 한다 (radius 검증과 같은 순서 원칙).
+    resp = client.post("/v1/route/suggest", json={"lat": 36.99, "lng": 127.11, "budget": 100})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "SM4003"
+
+
+def test_route_suggest_rejects_invalid_party_size(client):
+    resp = client.post(
+        "/v1/route/suggest",
+        json={"lat": 36.99, "lng": 127.11, "budget": 20000, "party_size": 0},
+    )
+    assert resp.status_code == 422
+
+
 def test_admin_sync_rejects_missing_key(client, monkeypatch):
     from app.core.config import settings
 

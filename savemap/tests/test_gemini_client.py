@@ -65,6 +65,48 @@ def _mock_gemini_reply(get_response, text: str):
     )
 
 
+_ROUTE_STOPS = [
+    {"place_name": "국밥집", "category": "discount", "final_price": 8000.0, "savings_rate": 20.0},
+]
+
+
+def test_summarize_route_returns_none_when_api_key_missing():
+    client = GeminiVisionClient(api_key="placeholder")
+    client._key = ""
+    result = asyncio.run(
+        client.summarize_route(_ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000)
+    )
+    assert result is None
+
+
+def test_summarize_route_returns_none_on_http_failure():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(503, request=post_request)
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+            )
+        )
+    assert result is None
+
+
+def test_summarize_route_returns_stripped_text_on_success():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "  국밥집에서 8,000원만 써요.  "}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+            )
+        )
+    assert result == "국밥집에서 8,000원만 써요."
+
+
 def test_extract_menu_items_parses_json_array_and_drops_incomplete_rows():
     get_request = httpx.Request("GET", "https://example.com/menu.jpg")
     get_response = httpx.Response(

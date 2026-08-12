@@ -44,6 +44,23 @@ def _typical_price_prompt(item_name: str) -> str:
     )
 
 
+def _route_summary_prompt(
+    stops: list[dict], budget: float, party_size: int, total_spend: float, total_savings: float
+) -> str:
+    lines = "\n".join(
+        f"{i + 1}. {s['place_name']} ({s['category']}) - {s['final_price']:,.0f}원"
+        + (f", 평균 대비 {s['savings_rate']:.0f}% 저렴" if s["savings_rate"] > 0 else "")
+        for i, s in enumerate(stops)
+    )
+    return (
+        "아래는 이미 계산이 끝난 절약 코스야. 새로운 숫자나 장소를 절대 만들어내지 말고, "
+        "주어진 숫자와 장소 이름만 그대로 사용해서 자연스러운 한국어 한 문단(3문장 이내, "
+        "친근한 말투)으로 설명해줘. JSON이 아니라 그냥 문장으로 답해.\n\n"
+        f"예산: {budget:,.0f}원 (인원 {party_size}명)\n코스:\n{lines}\n"
+        f"총 지출: {total_spend:,.0f}원\n총 절약: {total_savings:,.0f}원\n"
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     return match.group(0) if match else text
@@ -187,6 +204,28 @@ class GeminiVisionClient:
         if not isinstance(price, (int, float)) or price <= 0:
             return None
         return float(price)
+
+    async def summarize_route(
+        self,
+        stops: list[dict],
+        budget: float,
+        party_size: int,
+        total_spend: float,
+        total_savings: float,
+    ) -> str | None:
+        """이미 계산 끝난 절약 코스(장소/가격/절약률)를 자연어 한 문단으로 phrase만
+        한다 — 프롬프트에도 명시하지만, 숫자·장소 자체는 절대 여기서 새로 만들지
+        않는다(호출부가 이미 결정론적으로 계산해서 넘긴다). estimate_typical_price와
+        동일하게 실패 시 예외를 밖으로 던지지 않고 None으로 fail-soft — 호출부
+        (route_planner.generate_summary)가 결정론적 템플릿 문장으로 대체한다."""
+        try:
+            raw_text = await self._ask_text(
+                _route_summary_prompt(stops, budget, party_size, total_spend, total_savings)
+            )
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+        text = raw_text.strip()
+        return text or None
 
     async def extract_menu_items(self, image_url: str) -> list[MenuItemGuess]:
         """메뉴판 사진에서 메뉴명·가격 목록을 통째로 추출한다 (사장님이 하나씩

@@ -23,6 +23,12 @@ class RadiusOutOfRangeError(SaveMapError):
     message = "검색 반경이 허용 범위를 벗어났습니다"
 
 
+class BudgetOutOfRangeError(SaveMapError):
+    code = "SM4003"
+    http_status = status.HTTP_400_BAD_REQUEST
+    message = "예산이 허용 범위를 벗어났습니다"
+
+
 class MissingReportImageError(SaveMapError):
     code = "SM4221"
     http_status = status.HTTP_422_UNPROCESSABLE_CONTENT

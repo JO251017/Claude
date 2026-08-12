@@ -5,23 +5,17 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
-from app.api.schemas.search import (
-    DiscoveredPlaceItem,
-    SavingsReportItem,
-    SearchResponse,
-    SearchResultItem,
-    SignatureMenuItem,
-)
+from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
 from app.domain.enums import Category, PaymentMethodType
 from app.engine.benefit_combiner import combine
+from app.engine.candidate_builder import build_candidate
 from app.engine.discovery import discover_nearby_places
-from app.engine.models import OfferCandidate, PaymentBenefit
 from app.engine.price_comparison import list_menu_items_by_place
 from app.engine.ranker import dedupe_by_place, rank_candidates
+from app.engine.result_assembly import build_search_result_item
 from app.engine.rule_filter import rule_filter
-from app.engine.savings_report import build_savings_report
 from app.engine.spatial_query import query_places_without_offer, query_within_radius
 from app.gamification.service import get_dining_counts
 from app.sources.store_visit.service import (
@@ -32,38 +26,6 @@ from app.sources.store_visit.service import (
 from app.sources.user_verification.service import get_offer_trust_map
 
 router = APIRouter(tags=["search"])
-
-
-def _to_candidate(offer, place, distance_m: float) -> OfferCandidate:
-    point = to_shape(place.geom)
-    return OfferCandidate(
-        offer_id=offer.id,
-        place_id=place.id,
-        place_name=place.name,
-        category=offer.category,
-        layer=offer.layer,
-        distance_m=distance_m,
-        base_price=float(offer.base_price or 0.0),
-        lat=point.y,
-        lng=point.x,
-        store_discount=float(offer.store_discount or 0.0),
-        expires_at=offer.expires_at,
-        place_address=place.address,
-        place_phone=place.phone,
-        place_category_name=place.category_name,
-        place_kakao_id=place.kakao_place_id,
-        title=offer.title,
-        menu_item_id=offer.menu_item_id,
-        benchmark_source=offer.benchmark_source,
-        payment_benefits=[
-            PaymentBenefit(
-                method_type=b.method_type,
-                rate=float(b.benefit_rate or 0.0),
-                amount=float(b.benefit_amount or 0.0),
-            )
-            for b in offer.payment_benefits
-        ],
-    )
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -82,7 +44,7 @@ async def search(
     rows = await query_within_radius(session, lat, lng, radius, row_limit=settings.search_row_fetch_limit)
     rows = rule_filter(rows, category=category)
 
-    candidates = [_to_candidate(o, p, d) for o, p, d in rows]
+    candidates = [build_candidate(o, p, d) for o, p, d in rows]
 
     trust_map = await get_offer_trust_map(session, [c.offer_id for c in candidates])
     place_ids = [c.place_id for c in candidates]
@@ -114,74 +76,9 @@ async def search(
     # 없으면 표시하지 않는다 (지어내지 않기).
     menu_items_by_place = await list_menu_items_by_place(session, list(seen_places))
 
-    results = []
-    for r in deduped:
-        c = r.candidate
-        place_items = menu_items_by_place.get(c.place_id, [])
-        signature = next(
-            (item for item in place_items if item.id == c.menu_item_id),
-            place_items[0] if place_items else None,
-        )
-        report = build_savings_report(
-            savings_rate=r.breakdown.savings_rate,
-            discover_count=c.discover_count,
-            dining_count=c.dining_count,
-            recommend_count=c.recommend_count,
-            verification_count=c.verification_count,
-            last_verified_at=c.last_verified_at,
-            # 이전엔 total_savings > 0이면 무조건 "region"으로 간주해서, AI 추정
-            # 통상가로 계산된 절약에도 "주변 매장 실측 가격 데이터 반영"이라고
-            # 잘못 말하는 문제가 있었다 — Offer에 저장된 실제 출처를 그대로 쓴다.
-            benchmark_source=c.benchmark_source,
-        )
-        status = latest_status.get(c.place_id)
-        results.append(
-            SearchResultItem(
-                offer_id=c.offer_id,
-                place_id=c.place_id,
-                place_name=c.place_name,
-                category_name=c.place_category_name,
-                business_status=status.value if status else None,
-                report=SavingsReportItem(
-                    score=report.score,
-                    grade=report.grade,
-                    confidence_tier=report.confidence_tier,
-                    confidence_stars=report.confidence_stars,
-                    confidence_label=report.confidence_label,
-                    reasons=report.reasons,
-                    one_line=report.one_line,
-                ),
-                signature_menu=(
-                    SignatureMenuItem(name=signature.name, price=float(signature.price))
-                    if signature
-                    else None
-                ),
-                recommend_count=c.recommend_count,
-                kakao_url=(
-                    f"https://place.map.kakao.com/{c.place_kakao_id}"
-                    if c.place_kakao_id
-                    else f"https://map.kakao.com/link/search/{quote(c.place_name)}"
-                ),
-                address=c.place_address,
-                phone=c.place_phone,
-                category=c.category,
-                distance_m=round(c.distance_m, 1),
-                lat=c.lat,
-                lng=c.lng,
-                base_price=r.breakdown.base_price,
-                final_price=r.breakdown.final_price,
-                total_savings=r.breakdown.total_savings,
-                savings_rate=r.breakdown.savings_rate,
-                savings_source=c.benchmark_source,
-                expires_at=c.expires_at,
-                trust_score=c.trust_score,
-                verification_count=c.verification_count,
-                last_verified_at=c.last_verified_at,
-                discover_count=c.discover_count,
-                dining_count=c.dining_count,
-                score=round(r.score, 4),
-            )
-        )
+    results = [
+        build_search_result_item(r, menu_items_by_place, latest_status) for r in deduped
+    ]
 
     # Offer가 아직 없어 위 results에는 못 들어간 SaveMap Place(인허가 데이터 등으로
     # 미리 깔아둔 것) — 이것도 안 챙기면 DB에 Place가 있어도 지도 어디에도 안 뜬다.

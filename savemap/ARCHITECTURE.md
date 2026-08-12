@@ -48,6 +48,19 @@ GET /v1/search?lat&lng&radius_km&category&payment_methods
  → ranker          ④ 절약률(%) × 신뢰도 정렬
 ```
 
+## AI 절약 플랜 흐름 (동선 추천)
+개별 매장을 나열만 하는 것과 별개로, 예산을 넣으면 실제 후보 중에서 예산 안에
+들어오는 코스를 짜서 "총 얼마 절약"을 구체적으로 보여주는 기능 (2026-08-12 구현).
+```
+POST /v1/route/suggest {lat,lng,budget,party_size,category?}
+ → spatial_query + rule_filter + candidate_builder (검색과 동일 파이프라인 재사용)
+ → rank_candidates → dedupe_by_place
+ → route_planner.build_route()  결정론적 그리디 예산-맞춤 선택 (카테고리 다양성 우선
+   → 남은 예산/슬롯 채우기), 숫자는 전부 여기서 계산 — LLM은 관여하지 않음
+ → route_planner.generate_summary()  이미 계산된 코스를 Gemini가 문장으로만 설명
+   (실패/미설정 시 결정론적 템플릿 문장으로 대체, 절대 숫자를 지어내지 않음)
+```
+
 ## 절대 제약 (설계 반영)
 1. 경쟁사·C2C 직접 크롤링 없음 — 당근/뽐뿌/알구몬은 전부 `user_report`(사용자 제보)로만 유입
 2. 제보는 이미지에서 시작 — `user_report.image_url` NOT NULL
@@ -56,5 +69,6 @@ GET /v1/search?lat&lng&radius_km&category&payment_methods
 
 ## 후속 (스텁만 존재)
 - Layer3 실시간 Flash Deals 완전 활성화
-- 하이브리드 AI 동선 추천 (`engine/route_recommender.py`) — Rule 후보 → Gemini 맥락 조합
 - 게이미피케이션 (`gamification/` — 길드/랭킹보드/절약 던전 인증)
+- AI 절약 플랜의 목적(purpose)/시간대(time window) 입력 — `Place`/`Offer`에 영업시간
+  데이터가 아직 없어 v1은 예산/인원만 받는다

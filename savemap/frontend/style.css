@@ -637,6 +637,7 @@ label {
 }
 
 input[type='text'],
+input[type='number'],
 select {
   width: 100%;
   padding: 10px 12px;
@@ -763,6 +764,94 @@ select:focus {
   font-weight: 800;
   color: var(--primary-dark);
   text-align: center;
+}
+
+/* --- AI 절약 플랜 CTA (홈 화면 최상단) --- */
+.ai-route-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-route-cta:hover {
+  filter: brightness(1.03);
+}
+
+.ai-route-cta-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.ai-route-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ai-route-cta-text strong {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.ai-route-cta-sub {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* --- AI 절약 플랜 결과: 코스 스톱 목록 --- */
+.route-stop-list {
+  margin: 12px 0;
+}
+
+.route-stop-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.route-stop-card:last-child {
+  border-bottom: none;
+}
+
+.route-stop-order {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 0.76rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.route-stop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.route-stop-name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.route-stop-price {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  margin-top: 1px;
 }
 
 /* --- 정보 신뢰도(최신 상태) 표시 --- */
