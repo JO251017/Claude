@@ -494,10 +494,16 @@ function savingsReportHtml(r) {
       </div>` : `
       <div class="ai-report-calc">절약 정보를 계산하는 중입니다.</div>`}
       <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)}</div>
-      ${report.reasons.length ? `
+      ${
+        // 아직 아무 신호도 없는 완전 콜드스타트 상태에선 "부족한 것 3가지"를 줄줄이
+        // 나열해봤자 전부 같은 얘기("데이터가 없다")라 화면만 길어진다 — 이 경우엔
+        // one_line 한 줄로 충분하고, 실제로 뭔가 근거가 있을 때(AI/실측 추정 등)만
+        // 근거 목록을 보여준다.
+        hasEstimate && report.reasons.length ? `
       <div class="report-reasons">
         ${report.reasons.map((reason) => `<div class="report-reason">✓ ${escapeHtml(reason)}</div>`).join('')}
-      </div>` : ''}
+      </div>` : ''
+      }
       ${report.one_line ? `<p class="report-one-line">"${escapeHtml(report.one_line)}"</p>` : ''}
     </div>`;
   }
@@ -540,7 +546,20 @@ function openOfferDetail(r) {
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
     <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
-    ${r.signature_menu ? `<div class="signature-menu">대표메뉴 <strong>${escapeHtml(r.signature_menu.name)} ${Math.round(r.signature_menu.price).toLocaleString()}원</strong> <span class="signature-menu-note">실제 등록 가격 · 전체 메뉴는 카카오맵에서</span></div>` : ''}
+
+    ${r.signature_menu ? `
+    <div class="menu-highlight-card">
+      <div class="menu-highlight-label">대표메뉴 · 실제 등록 가격</div>
+      <div class="menu-highlight-row">
+        <span class="menu-highlight-name">${escapeHtml(r.signature_menu.name)}</span>
+        <span class="menu-highlight-price">${Math.round(r.signature_menu.price).toLocaleString()}원</span>
+      </div>
+      <button type="button" class="btn-primary menu-highlight-btn" id="detail-kakao-btn">카카오맵에서 전체 메뉴 보기</button>
+    </div>` : `
+    <div class="menu-highlight-card menu-highlight-card--empty">
+      <div class="menu-highlight-label">등록된 대표메뉴 없음</div>
+      <button type="button" class="btn-primary menu-highlight-btn" id="detail-kakao-btn">카카오맵에서 메뉴 확인하기</button>
+    </div>`}
 
     ${savingsReportHtml(r)}
 
@@ -551,7 +570,6 @@ function openOfferDetail(r) {
     </div>
 
     <div class="detail-actions">
-      <button type="button" class="btn-primary" id="detail-kakao-btn">카카오맵에서 메뉴 보기</button>
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
       <button type="button" class="btn-secondary" id="detail-recommend-btn">👍 추천</button>
     </div>
