@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260812a" />
+  <link rel="stylesheet" href="style.css?v=20260812b" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -20,7 +20,9 @@
       <div class="floating-topbar">
         <div class="topbar-row">
           <div class="brand-pill glass">SaveMap</div>
-          <div class="xp-badge glass" id="savings-badge">
+          <!-- RPG 요소(레벨/칭호) 잠시 비활성화 — 기본 베이스 구조 완성 후 다시 켠다
+               (사용자 지시, 2026-08-12). hidden만 떼면 바로 복구된다. -->
+          <div class="xp-badge glass hidden" id="savings-badge">
             <div class="xp-ring" id="savings-ring">
               <div class="xp-ring-inner" id="savings-level">Lv.1</div>
             </div>
@@ -191,16 +193,23 @@
             <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
           </div>
 
+          <!-- RPG 요소(캐릭터 아바타/레벨/칭호/배지) 잠시 비활성화 — 기본 베이스
+               구조 완성 후 다시 켠다(사용자 지시, 2026-08-12). "누적 절약"만 핵심
+               지표라 그대로 남겨둔다. hidden만 떼면 바로 복구된다. -->
           <div class="character-card glass">
-            <div class="character-avatar" id="character-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg></div>
-            <div class="character-level" id="my-level-badge">Lv.1</div>
-            <div class="character-title" id="my-title">절약 초보</div>
+            <div class="character-rpg-block hidden">
+              <div class="character-avatar" id="character-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg></div>
+              <div class="character-level" id="my-level-badge">Lv.1</div>
+              <div class="character-title" id="my-title">절약 초보</div>
+            </div>
             <div class="saving-amount">
               누적 절약<br />
               <span id="my-total-saved">₩0</span>
             </div>
-            <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
-            <div class="saving-next" id="my-next-level-text">다음 레벨까지 ₩10,000</div>
+            <div class="character-rpg-block hidden">
+              <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
+              <div class="saving-next" id="my-next-level-text">다음 레벨까지 ₩10,000</div>
+            </div>
           </div>
 
           <div class="stats-grid">
@@ -208,7 +217,7 @@
             <div class="stat-tile"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
           </div>
 
-          <div id="my-badges" class="badge-row"></div>
+          <div id="my-badges" class="badge-row hidden"></div>
 
           <div class="list-section-header"><h2>바로가기</h2></div>
           <button type="button" class="btn-secondary" data-goto="exchange">내 절약 자산 보기</button>
@@ -439,6 +448,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260812a"></script>
+  <script src="app.js?v=20260812b"></script>
 </body>
 </html>

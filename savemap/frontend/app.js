@@ -1,9 +1,8 @@
 const API_BASE = '/v1';
 
-// 백엔드 XP_REWARD(app/domain/enums.py)와 맞춰서 버튼에 보상을 미리 보여준다.
-const XP_DISCOVER = 5;
-const XP_RECEIPT = 15;
-const XP_MENU_REPORT = 10;
+// RPG 요소(레벨/칭호/XP 노출)는 잠시 비활성화 — 기본 베이스 구조 완성 후 다시
+// 입힌다(사용자 지시, 2026-08-12). 백엔드는 XP_REWARD(app/domain/enums.py)를
+// 그대로 계속 적립하고, 화면에서만 안 보여준다.
 
 const CATEGORY_LABELS = {
   free: '무료',
@@ -430,7 +429,9 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
 
     // 라벨의 핵심은 가격이 아니라 "AI 절약점수/절약률" — 데이터가 부족하면 지어내지
     // 않고 "계산 중"으로 표시한다.
-    const tier = getRarityTier(r.savings_rate);
+    // RPG 희귀도 색상(getRarityTier)은 잠시 비활성화 — 기본 베이스 구조 완성 후
+    // 다시 켠다(사용자 지시, 2026-08-12). tierCls를 안 넘기면 색상 없이 기본
+    // 스타일로만 표시된다.
     const hasScore = r.report && r.report.score != null;
     const savingsText =
       r.total_savings > 0
@@ -439,7 +440,7 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
           ? `AI 절약점수 ${r.report.score}점`
           : '절약 정보 계산 중';
     mapLabels.push(
-      createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), { tierCls: tier.cls, savingsText })
+      createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), { savingsText })
     );
   });
 
@@ -576,8 +577,8 @@ function openOfferDetail(r) {
     <div id="detail-recommend-msg"></div>
 
     <div class="visit-row">
-      <button type="button" class="btn-primary btn-discover" id="detail-discover-btn">📍 발견하기 (+${XP_DISCOVER} XP)</button>
-      <p class="subtitle">매장 반경 50m 이내에서만 가능해요. 한 매장당 최초 1회만 XP를 받아요.</p>
+      <button type="button" class="btn-primary btn-discover" id="detail-discover-btn">📍 발견하기</button>
+      <p class="subtitle">매장 반경 50m 이내에서만 가능해요. 한 매장당 최초 1회만 인정돼요.</p>
       <div id="detail-visit-msg"></div>
       <p class="interest-count" id="detail-interest-count"></p>
       <button type="button" class="btn-text" id="detail-report-closed-btn">혹시 휴무인가요?</button>
@@ -590,9 +591,9 @@ function openOfferDetail(r) {
     </div>
 
     <div class="certify-row">
-      <span class="verify-label">실제로 식사하셨나요? 영수증으로 인증하면 훨씬 더 많은 XP를 받아요.</span>
+      <span class="verify-label">실제로 식사하셨나요? 영수증으로 인증하면 신뢰도에 더 크게 반영돼요.</span>
       <div class="detail-actions">
-        <button type="button" class="btn-primary" id="detail-receipt-btn">🧾 영수증으로 인증 (+${XP_RECEIPT} XP)</button>
+        <button type="button" class="btn-primary" id="detail-receipt-btn">🧾 영수증으로 인증</button>
       </div>
       <input type="file" id="detail-receipt-input" accept="image/*" capture="environment" class="hidden" />
       <button type="button" class="btn-text" id="detail-simple-certify-btn">영수증 없이 직접 입력해서 인증</button>
@@ -807,7 +808,7 @@ function openDiscoveredDetail(d) {
       다른 사람들도 이 매장의 절약 정보를 바로 볼 수 있어요.
     </p>
     <div class="detail-actions">
-      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 찍어서 알려주기 (새 메뉴당 +${XP_MENU_REPORT} XP)</button>
+      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 찍어서 알려주기</button>
     </div>
     <input type="file" id="discovered-menu-input" accept="image/*" capture="environment" class="hidden" />
     <p id="discovered-menu-status" class="subtitle"></p>
@@ -945,10 +946,9 @@ async function confirmDiscoveredMenuReport(d) {
     }
   }
 
-  const xpText = totalXp > 0 ? ` +${totalXp} XP 획득!` : '';
   statusEl.textContent = listed
-    ? `${success}/${toSave.length}개 메뉴 제보 완료!${xpText} 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
-    : `${success}/${toSave.length}개 메뉴 제보 완료!${xpText} 감사합니다.`;
+    ? `${success}/${toSave.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
+    : `${success}/${toSave.length}개 메뉴 제보 완료! 감사합니다.`;
   document.getElementById('discovered-menu-results').innerHTML = '';
   if (totalXp > 0) loadSavingsBadge();
 }
@@ -988,9 +988,7 @@ async function submitStatusUpdate(r, status, btn) {
           }),
         });
         document.getElementById('detail-interest-count').textContent = `누적 발견 ${data.interest_count}회`;
-        msgEl.innerHTML = data.xp_awarded > 0
-          ? `<p class="empty-msg">${ICONS.check} 발견 완료! +${data.xp_awarded} XP</p>`
-          : `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
+        msgEl.innerHTML = `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
       } catch (err) {
         msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
       } finally {
@@ -1024,7 +1022,7 @@ async function verifyOffer(offerId, verdict, btn) {
 function certifyResultHtml(cert) {
   return `
     <p class="empty-msg">${ICONS.check} 인증 완료! +${Math.round(cert.amount).toLocaleString()}원 절약
-    · +${cert.xp_awarded} XP (누적 ${formatWon(cert.total_saved)}, Lv.${cert.level} ${escapeHtml(cert.title)})</p>`;
+    (누적 ${formatWon(cert.total_saved)})</p>`;
 }
 
 async function certifyOffer(r) {
@@ -1839,7 +1837,7 @@ function menuSavingsMessage(item) {
       : null;
 
   if (item.listed_on_map) {
-    return `메뉴 등록 완료! "${item.name}"이(가) ${basis}보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요. 방문 인증하면 손님이 XP를 받아요.`;
+    return `메뉴 등록 완료! "${item.name}"이(가) ${basis}보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요.`;
   }
   if (basis) {
     return `메뉴 등록 완료! 다만 ${basis}보다 저렴하진 않아서 아직 지도엔 절약 정보로 뜨지 않아요.`;
