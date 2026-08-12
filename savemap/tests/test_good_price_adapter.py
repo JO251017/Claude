@@ -41,6 +41,29 @@ def test_parse_row_full_with_numbered_columns():
     assert abs(parsed["lat"] - 36.9921) < 1e-6
 
 
+def test_parse_row_rejects_salon_categories():
+    # 미용실/이용업(이발소) 비활성화(사용자 지시, 2026-08-12) — 저장 전(파싱 단계)에서
+    # 걸러 지오코딩·AI 통상가 추정 비용을 아예 안 들인다.
+    salon = parse_row(
+        {"업소명": "동네미용실", "업종명": "미용업", "주요품목": "커트", "가격": "8000",
+         "위도": "36.99", "경도": "127.11"}
+    )
+    assert salon is None
+
+    barber = parse_row(
+        {"업소명": "이발소", "업종명": "이용업", "주요품목": "이용료", "가격": "7000",
+         "위도": "36.99", "경도": "127.11"}
+    )
+    assert barber is None
+
+    # 식당은 그대로 통과해야 한다 (과도하게 걸러지지 않는지 확인).
+    restaurant = parse_row(
+        {"업소명": "국밥집", "업종명": "한식", "주요품목": "국밥", "가격": "8000",
+         "위도": "36.99", "경도": "127.11"}
+    )
+    assert restaurant is not None
+
+
 def test_parse_row_matches_real_goodprice_go_kr_columns():
     # goodprice.go.kr에서 실제로 받은 다운로드 파일의 컬럼 그대로 (2026-07-31 확인).
     # 품목/가격이 번호 없이 단일 쌍이고, 좌표는 아예 없다.

@@ -13,6 +13,7 @@ from app.domain.enums import SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
+from app.engine.spatial_query import EXCLUDED_CATEGORY_KEYWORDS
 from app.integrations.gemini import GeminiVisionClient
 from app.integrations.kakao import KakaoClient
 
@@ -75,6 +76,14 @@ def parse_row(row: dict) -> dict | None:
     if not name:
         return None
 
+    category = _row_value(row, "업종명", "업종", "구분", "업소구분")
+    if category and any(kw in str(category) for kw in EXCLUDED_CATEGORY_KEYWORDS):
+        # 미용실/이발소 등은 SaveMap이 지금 다루는 음식점·카페 범위 밖이라 비활성화
+        # 상태다(사용자 지시, 2026-08-12) — 지오코딩·AI 통상가 추정 비용을 아예 안
+        # 들이도록 저장 전(파싱 단계)에서부터 걸러낸다. spatial_query의 검색 필터와
+        # 같은 키워드를 공유해 기준이 어긋나지 않게 한다.
+        return None
+
     lat = lng = None
     raw_lat, raw_lng = _row_value(row, "위도"), _row_value(row, "경도")
     if raw_lat not in (None, "") and raw_lng not in (None, ""):
@@ -104,7 +113,7 @@ def parse_row(row: dict) -> dict | None:
         "name": str(name).strip(),
         "address": _row_value(row, "주소", "소재지도로명주소", "소재지 도로명 주소", "소재지"),
         "phone": _row_value(row, "업소 전화번호", "전화번호", "연락처"),
-        "category": _row_value(row, "업종명", "업종", "구분", "업소구분"),
+        "category": category,
         "lat": lat,
         "lng": lng,
         "menu_items": menu_items,

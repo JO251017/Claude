@@ -1,6 +1,6 @@
 import asyncio
 
-from app.engine.spatial_query import query_within_radius
+from app.engine.spatial_query import query_places_without_offer, query_within_radius
 
 
 class _FakeResult:
@@ -34,3 +34,29 @@ def test_no_row_limit_by_default():
     session = _CapturingSession()
     asyncio.run(query_within_radius(session, 36.99, 127.11, 3.0))
     assert "LIMIT" not in session.compiled_sql.upper()
+
+
+class _LiteralCapturingSession(_CapturingSession):
+    """WHERE절에 들어간 실제 문자열 리터럴(카테고리 키워드 등)까지 확인해야 하는
+    테스트용 — 기본 캡처는 파라미터를 바인드플레이스홀더로만 남기므로 값 자체는
+    literal_binds=True로 다시 컴파일해야 보인다."""
+
+    async def execute(self, stmt, *a, **kw):
+        self.compiled_sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        return _FakeResult()
+
+
+def test_query_within_radius_excludes_salon_categories():
+    # 미용실/이용업(이발소) 비활성화(사용자 지시, 2026-08-12) — Place는 지우지 않고
+    # 검색 쿼리 단계에서 걸러낸다.
+    session = _LiteralCapturingSession()
+    asyncio.run(query_within_radius(session, 36.99, 127.11, 3.0))
+    assert "미용업" in session.compiled_sql
+    assert "이용업" in session.compiled_sql
+
+
+def test_query_places_without_offer_excludes_salon_categories():
+    session = _LiteralCapturingSession()
+    asyncio.run(query_places_without_offer(session, 36.99, 127.11, 3.0))
+    assert "미용업" in session.compiled_sql
+    assert "이용업" in session.compiled_sql

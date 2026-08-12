@@ -1,11 +1,23 @@
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func, select
+from sqlalchemy import and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.spatial import WGS84_SRID
 from app.domain.offer import Offer
 from app.domain.place import Place
+
+# 착한가격업소 데이터에는 식당/카페 외에 미용실·이발소 같은 서비스업종도 섞여 있다
+# (행안부 "착한가격업소" 제도가 요식업만이 아니라 이용업/미용업도 포함). SaveMap은
+# 음식점·카페 중심 서비스라 사용자 요청으로 일단 비활성화한다 — Place를 지우지 않고
+# (나중에 다시 켤 수 있게) 검색/발견 결과에서만 걸러낸다. 카테고리 없는(None) Place는
+# 걸러지면 안 되므로 coalesce로 빈 문자열 취급 후 검사한다.
+EXCLUDED_CATEGORY_KEYWORDS = ("미용업", "이용업")
+
+
+def _not_excluded_category(category_col):
+    name = func.coalesce(category_col, "")
+    return and_(*(~name.ilike(f"%{kw}%") for kw in EXCLUDED_CATEGORY_KEYWORDS))
 
 
 async def query_within_radius(
@@ -25,6 +37,7 @@ async def query_within_radius(
         .join(Place, Offer.place_id == Place.id)
         .options(selectinload(Offer.payment_benefits))
         .where(func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0))
+        .where(_not_excluded_category(Place.category_name))
         .order_by(distance)
     )
     if row_limit is not None:
@@ -48,6 +61,7 @@ async def query_places_without_offer(
         select(Place, distance)
         .where(~Place.offers.any())
         .where(func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0))
+        .where(_not_excluded_category(Place.category_name))
         .order_by(distance)
         .limit(limit)
     )
