@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # 비워두면(기본값) CORS 미들웨어 자체를 안 붙여서 지금 동작 그대로 유지한다.
     cors_allowed_origins: str = ""
 
+    # 지금까지 에러 트래킹(Sentry 등)이 전혀 없어서, 장애가 나면 Render 로그를
+    # 사람이 직접 뒤져야 했다. DSN을 넣어야만 켜지는 opt-in — 지금 당장은 값이
+    # 없으니(기본값) 아무 일도 안 하고, 나중에 DSN만 넣으면 바로 활성화된다.
+    sentry_dsn: str = ""
+
     search_default_radius_km: float = 3.0
     search_max_radius_km: float = 10.0
     # /search 응답에 실제로 담아 보낼 최대 매장 수 — 이게 없으면 착한가격업소 같은

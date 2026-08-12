@@ -19,6 +19,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3",
     "python-multipart>=0.0.9",
     "xlrd>=2.0",
+    "sentry-sdk[fastapi]>=2.0",
 ]
 
 [project.optional-dependencies]

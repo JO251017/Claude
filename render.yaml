@@ -36,6 +36,8 @@ services:
         sync: false
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+      - key: SENTRY_DSN
+        sync: false
       - key: REDIS_URL
         fromService:
           type: redis

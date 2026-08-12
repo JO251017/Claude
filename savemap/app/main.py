@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.db import engine
+from app.core.observability import configure_logging, configure_sentry
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.redis import redis_client
 
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
+    configure_logging()
+    configure_sentry()
+
     app = FastAPI(
         title="SaveMap API",
         version="0.1.0",
