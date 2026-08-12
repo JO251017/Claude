@@ -34,6 +34,16 @@ class Settings(BaseSettings):
 
     search_default_radius_km: float = 3.0
     search_max_radius_km: float = 10.0
+    # /search 응답에 실제로 담아 보낼 최대 매장 수 — 이게 없으면 착한가격업소 같은
+    # 소스가 밀집된 도심 반경에서 결과가 수백~수천 건까지 튀면서, 결과마다 도는
+    # trust_map/discover_count 등 추가 쿼리까지 같이 불어나 느려지는 실제 문제가
+    # 있었다(2026-08-12, 전국 착한가격업소 12,137건 적재 이후 확인).
+    search_max_results: int = 60
+    # DB에서 한 번에 끌어올 원본 offer×place 행 수 상한(정렬/중복제거 전 단계) — 이게
+    # 없으면 매장 하나가 오퍼 여러 개를 가진 경우 등으로 DB 자체가 무제한으로 행을
+    # 반환할 수 있다. search_max_results보다 넉넉하게 잡아서, 정렬 후 상위
+    # search_max_results개를 추릴 표본이 부족해지지 않게 한다.
+    search_row_fetch_limit: int = 500
     rank_savings_weight: float = 0.7
     rank_trust_weight: float = 0.3
 

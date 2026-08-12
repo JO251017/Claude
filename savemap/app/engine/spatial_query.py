@@ -9,8 +9,13 @@ from app.domain.place import Place
 
 
 async def query_within_radius(
-    session: AsyncSession, lat: float, lng: float, radius_km: float
+    session: AsyncSession, lat: float, lng: float, radius_km: float, row_limit: int | None = None
 ) -> list[tuple[Offer, Place, float]]:
+    """row_limit: 정렬(가까운 순) 후 원본 offer×place 행을 이만큼만 가져온다 — 안전판.
+    매장 하나가 오퍼를 여러 개 가질 수 있어 이 값은 "고유 매장 수"가 아니라 "행 수"
+    상한이다. 실제로 몇 개 매장을 응답에 담을지는 이 위에서 정렬·중복제거된 뒤 다시
+    한번 자른다(search_max_results) — 이건 그 전 단계에서 DB가 무제한으로 행을
+    반환하는 것만 막는 넉넉한 안전판이다."""
     point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), WGS84_SRID)
     place_geog = cast(Place.geom, Geography)
     point_geog = cast(point, Geography)
@@ -22,6 +27,8 @@ async def query_within_radius(
         .where(func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0))
         .order_by(distance)
     )
+    if row_limit is not None:
+        stmt = stmt.limit(row_limit)
     rows = (await session.execute(stmt)).all()
     return [(row[0], row[1], float(row[2])) for row in rows]
 

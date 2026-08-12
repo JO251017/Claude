@@ -19,7 +19,7 @@ from app.engine.benefit_combiner import combine
 from app.engine.discovery import discover_nearby_places
 from app.engine.models import OfferCandidate, PaymentBenefit
 from app.engine.price_comparison import list_menu_items_by_place
-from app.engine.ranker import rank_candidates
+from app.engine.ranker import dedupe_by_place, rank_candidates
 from app.engine.rule_filter import rule_filter
 from app.engine.savings_report import build_savings_report
 from app.engine.spatial_query import query_places_without_offer, query_within_radius
@@ -78,7 +78,7 @@ async def search(
     if radius <= 0 or radius > settings.search_max_radius_km:
         raise RadiusOutOfRangeError()
 
-    rows = await query_within_radius(session, lat, lng, radius)
+    rows = await query_within_radius(session, lat, lng, radius, row_limit=settings.search_row_fetch_limit)
     rows = rule_filter(rows, category=category)
 
     candidates = [_to_candidate(o, p, d) for o, p, d in rows]
@@ -102,16 +102,11 @@ async def search(
     combine(candidates, set(payment_methods))
     ranked = rank_candidates(candidates)
 
-    # 메뉴 하나 등록될 때마다 오퍼가 하나씩 생기므로, 여기서 걸러주지 않으면 매장 하나가
-    # 메뉴 개수만큼 마커/카드로 쪼개져서 뜬다 — SaveMap은 메뉴가 아니라 매장 단위 절약
-    # 리포트를 보여주는 서비스이므로, 매장당 가장 점수 높은 오퍼 하나만 대표로 남긴다.
-    seen_places: set[int] = set()
-    deduped = []
-    for r in ranked:
-        if r.candidate.place_id in seen_places:
-            continue
-        seen_places.add(r.candidate.place_id)
-        deduped.append(r)
+    # 매장 단위 중복 제거 + 응답 상한(search_max_results)까지 한 번에 적용한다 —
+    # 밀집 지역(착한가격업소 등으로 반경 안에 수백 곳이 잡히는 경우)에서 응답이
+    # 무한정 커지고 이 아래 메뉴 조회까지 그 수만큼 늘어나는 걸 막는다.
+    deduped = dedupe_by_place(ranked, max_results=settings.search_max_results)
+    seen_places = {r.candidate.place_id for r in deduped}
 
     # 대표메뉴: 실제 등록된 메뉴 가격에서만 뽑는다 — 대표 오퍼에 연결된 메뉴가 있으면
     # 그것(절약이 가장 큰 메뉴), 없으면 가장 먼저 등록된 메뉴. 등록된 메뉴가 하나도

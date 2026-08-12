@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 
 from app.core.spatial import haversine_m
@@ -6,6 +7,43 @@ from app.integrations.kakao import KakaoClient, KakaoPlace
 RESTAURANT_CAFE_CATEGORY_CODES = ("FD6", "CE7")  # 음식점, 카페
 DEDUPE_DISTANCE_M = 30.0
 MAX_DISCOVERED = 20
+
+# 같은(또는 근처) 위치를 여러 번 검색해도(사용자가 지도를 조금씩 움직이거나, 같은
+# 반경을 새로고침하는 경우) 카카오 API를 매번 실시간으로 다시 호출하고 있었다 —
+# 이 API 자체가 매 /search 요청마다 카테고리 2개씩 불려서, 검색이 잦아지면 그만큼
+# 레이턴시와 쿼터를 계속 갚아나가는 구조였다(2026-08-12). 어차피 이 결과는
+# "아직 가격 정보가 없는 매장 발견"용이라 몇 분 정도 오래돼도 문제 없으니, 좌표를
+# ~100m 격자로 반올림해 짧게 캐시해서 반복 호출을 줄인다.
+_CACHE_TTL_SEC = 300
+_CACHE_MAX = 500
+_kakao_cache: dict[tuple, dict] = {}
+
+
+def _cache_key(lat: float, lng: float, radius_m: int, code: str) -> tuple:
+    return (round(lat, 3), round(lng, 3), radius_m, code)
+
+
+def _prune_kakao_cache() -> None:
+    now = time.time()
+    for key in [k for k, v in _kakao_cache.items() if now - v["at"] > _CACHE_TTL_SEC]:
+        del _kakao_cache[key]
+    while len(_kakao_cache) > _CACHE_MAX:
+        oldest_key = min(_kakao_cache, key=lambda k: _kakao_cache[k]["at"])
+        del _kakao_cache[oldest_key]
+
+
+async def _search_category_cached(
+    client: KakaoClient, lat: float, lng: float, radius_m: int, code: str
+) -> list[KakaoPlace]:
+    key = _cache_key(lat, lng, radius_m, code)
+    cached = _kakao_cache.get(key)
+    now = time.time()
+    if cached is not None and now - cached["at"] < _CACHE_TTL_SEC:
+        return cached["places"]
+    places = await client.search_category(lat, lng, radius_m, code)
+    _kakao_cache[key] = {"places": places, "at": now}
+    _prune_kakao_cache()
+    return places
 
 
 @dataclass
@@ -30,7 +68,7 @@ async def discover_nearby_places(
     raw: list[KakaoPlace] = []
     for code in RESTAURANT_CAFE_CATEGORY_CODES:
         try:
-            raw.extend(await client.search_category(lat, lng, radius_m, code))
+            raw.extend(await _search_category_cached(client, lat, lng, radius_m, code))
         except Exception:
             continue  # 카카오 API가 실패해도 기존(가격 있는) 검색 결과는 그대로 반환돼야 한다
 
