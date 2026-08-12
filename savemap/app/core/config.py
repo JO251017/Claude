@@ -32,6 +32,13 @@ class Settings(BaseSettings):
 
     admin_sync_key: str = ""
 
+    # 지금까지 CORS 미들웨어가 아예 없었다 — 지금은 프론트가 이 API와 같은 도메인에서
+    # 서빙돼서 안 드러났지만(app/main.py가 frontend/를 "/"에 마운트), 모바일 앱
+    # webview나 다른 도메인 프론트가 이 API를 부르면 브라우저가 바로 막는다.
+    # 콤마로 구분된 허용 origin 목록(예: "https://app.example.com,https://m.example.com") —
+    # 비워두면(기본값) CORS 미들웨어 자체를 안 붙여서 지금 동작 그대로 유지한다.
+    cors_allowed_origins: str = ""
+
     search_default_radius_km: float = 3.0
     search_max_radius_km: float = 10.0
     # /search 응답에 실제로 담아 보낼 최대 매장 수 — 이게 없으면 착한가격업소 같은

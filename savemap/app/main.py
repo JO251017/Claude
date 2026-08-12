@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -81,9 +82,23 @@ def create_app() -> FastAPI:
                 response.headers["Cache-Control"] = "no-cache"
             return response
 
-    # 가장 나중에 추가해서(= 가장 바깥쪽에서 실행) 요청 제한에 걸린 요청이 라우트나
-    # 위 미들웨어까지 갈 필요 없이 빨리 끝나게 한다.
+    # 요청 제한(RateLimitMiddleware)보다 먼저 등록해서 더 안쪽에 둔다 — CORS는
+    # preflight(OPTIONS) 요청과 에러 응답(429 포함)에도 항상 CORS 헤더가 실려야
+    # 브라우저가 "CORS 실패"가 아니라 실제 에러(429 등)로 인식하기 때문에, 가장
+    # 나중에 추가해서(= 가장 바깥쪽) 어떤 안쪽 미들웨어가 요청을 막아도 CORS 헤더는
+    # 항상 붙게 한다. cors_allowed_origins가 비어있으면(기본값) 아예 안 붙여서
+    # 지금까지의 동작(같은 도메인 프론트만 호출 가능)을 그대로 유지한다.
     app.add_middleware(RateLimitMiddleware)
+
+    allowed_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    if allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allowed_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     return app
 

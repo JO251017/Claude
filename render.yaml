@@ -34,6 +34,8 @@ services:
         sync: false
       - key: ADMIN_SYNC_KEY
         sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
       - key: REDIS_URL
         fromService:
           type: redis
