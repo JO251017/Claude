@@ -46,10 +46,17 @@ class NullSession:
 
 @pytest.fixture
 def client():
+    from app.core import rate_limit
+
     async def _override_db_session():
         yield NullSession()
 
     app.dependency_overrides[db_session] = _override_db_session
+    # 레이트리밋 카운터는 모듈 전역이라 앱(싱글턴)을 감싸는 TestClient가 테스트마다
+    # 새로 생겨도 그대로 남는다 — 한 테스트가 채운 카운트를 다음 테스트가 이어받아
+    # 오염되지 않도록 매번 비운다.
+    rate_limit._buckets.clear()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    rate_limit._buckets.clear()

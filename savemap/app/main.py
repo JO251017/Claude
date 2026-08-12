@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.db import engine
+from app.core.rate_limit import RateLimitMiddleware
 from app.core.redis import redis_client
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -79,6 +80,10 @@ def create_app() -> FastAPI:
             if "text/html" in (response.headers.get("content-type") or ""):
                 response.headers["Cache-Control"] = "no-cache"
             return response
+
+    # 가장 나중에 추가해서(= 가장 바깥쪽에서 실행) 요청 제한에 걸린 요청이 라우트나
+    # 위 미들웨어까지 갈 필요 없이 빨리 끝나게 한다.
+    app.add_middleware(RateLimitMiddleware)
 
     return app
 
