@@ -922,30 +922,40 @@ function routePlanFormHtml() {
       `<button type="button" class="chip route-preference-chip${i === 0 ? ' active' : ''}" data-value="${p.value}">${p.label}</button>`
   ).join('');
 
+  // Step①/②/③이 굵은 라벨 텍스트로만 구분돼 있어 "조건별로 정리가 잘 안 된다"는
+  // 지적을 받았다(6번 항목, 2026-08-13) — 각 Step을 원형 번호 배지 + 테두리가 있는
+  // 카드(.route-step-card)로 감싸 시각적으로 명확히 분리한다.
   return `
     <h2 class="place-name">🤖 AI 절약 플랜</h2>
     <div class="meta-line">뭘 하고 싶은지 알려주면, 실제 후보 중에서 가장 절약되는 코스를 짜드려요.</div>
 
-    <div class="form-group">
-      <label>① 무엇을 할까요? (여러 개 선택 가능)</label>
+    <div class="route-step-card">
+      <div class="route-step-header">
+        <span class="route-step-number">1</span>
+        <span class="route-step-title">무엇을 할까요?</span>
+      </div>
       <div class="chip-group">${activityChips}</div>
-      <div class="field-hint">비워두면 모든 활동에서 찾아요. 지원 활동은 계속 늘려갈 예정이에요.</div>
+      <div class="field-hint">여러 개 선택 가능 · 비워두면 모든 활동에서 찾아요.</div>
     </div>
 
-    <div class="form-group">
-      <label>② 어떤 조건이 중요할까요?</label>
+    <div class="route-step-card">
+      <div class="route-step-header">
+        <span class="route-step-number">2</span>
+        <span class="route-step-title">어떤 조건이 중요할까요?</span>
+      </div>
       <div class="chip-group">${preferenceChips}</div>
+      <div class="field-hint" style="margin-top:10px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="route-parking-input" /> 🅿️ 무료주차 필요
+        </label>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" id="route-parking-input" /> 🅿️ 무료주차 필요
-      </label>
-      <div class="field-hint">실제로 무료주차 혜택이 등록된 곳만 찾아요 — 데이터가 없으면 결과가 적을 수 있어요.</div>
-    </div>
-
-    <div class="form-group">
-      <label>③ 예산 / 인원</label>
+    <div class="route-step-card">
+      <div class="route-step-header">
+        <span class="route-step-number">3</span>
+        <span class="route-step-title">예산 / 인원</span>
+      </div>
       <div class="form-row">
         <input type="number" id="route-budget-input" min="1000" step="1000" value="30000" aria-label="예산" />
         <input type="number" id="route-party-input" min="1" max="20" value="1" aria-label="인원" />
@@ -1010,7 +1020,9 @@ async function submitRoutePlan() {
     if (activities.length) payload.activities = activities;
     if (preference) payload.preference = preference;
     const data = await apiFetch('/route/suggest', { method: 'POST', body: JSON.stringify(payload) });
-    renderRoutePlanResult(data);
+    // 결과 화면에 "이 조건으로 만들었어요"를 다시 보여주기 위한 요약(6번 항목) —
+    // 백엔드가 이미 아는 값을 그대로 다시 조립할 뿐, 새 API 호출은 없다.
+    renderRoutePlanResult(data, routeConditionSummary({ activities, preference, freeParkingRequired, partySize }));
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
     btn.disabled = false;
@@ -1018,7 +1030,25 @@ async function submitRoutePlan() {
   }
 }
 
-function renderRoutePlanResult(data) {
+// "선택한 조건" 요약 문자열들(6번 항목) — 제출 시점의 activities/preference/
+// 무료주차/인원을 사람이 읽는 칩 문구로 조립한다. 백엔드 _build_context_note와
+// 비슷한 방식이지만 프론트에서 이미 갖고 있는 값으로 직접 만든다(새 API 불필요).
+function routeConditionSummary({ activities, preference, freeParkingRequired, partySize }) {
+  const chips = [];
+  if (activities.length) {
+    const labels = activities.map((v) => ROUTE_ACTIVITIES.find((a) => a.value === v)?.label || v);
+    chips.push(labels.join(' + '));
+  } else {
+    chips.push('모든 활동');
+  }
+  const prefLabel = ROUTE_PREFERENCES.find((p) => p.value === (preference || ''))?.label;
+  if (prefLabel) chips.push(prefLabel);
+  if (freeParkingRequired) chips.push('🅿️ 무료주차 필수');
+  chips.push(`👥 ${partySize}명`);
+  return chips;
+}
+
+function renderRoutePlanResult(data, conditionChips = []) {
   lastRouteStops = data.stops;
 
   // 코스를 못 만들었으면(예산 안에 후보가 없음) 지어내지 않고 그 사실 그대로 안내한다
@@ -1044,16 +1074,26 @@ function renderRoutePlanResult(data) {
         const sourceLabel = s.savings_source === 'ai' ? 'AI 추정' : '실측';
         savingsNote = ` · ${sourceLabel} 대비 ${Math.round(s.savings_rate)}% 저렴`;
       }
+      // 거리 + 실측/AI 출처 배지(6번 항목) — RouteStopItem에 이미 있던 필드를
+      // 결과 카드에 추가 노출("결과 카드가 얇다"는 지난 감사 지적과 직접 연결).
+      const sourceBadge = s.savings_source
+        ? `<span class="route-stop-source-badge route-stop-source-badge--${s.savings_source}">${s.savings_source === 'ai' ? '🤖 AI 추정' : '📊 실측'}</span>`
+        : '';
       return `
       <div class="route-stop-card" data-idx="${i}">
         <div class="route-stop-order">${s.order}</div>
         <div class="route-stop-info">
           <div class="route-stop-name">${escapeHtml(s.place_name)}</div>
           <div class="route-stop-price">${priceLabel}${savingsNote}</div>
+          <div class="route-stop-meta">📍 ${Math.round(s.distance_m)}m${sourceBadge}</div>
         </div>
       </div>`;
     })
     .join('');
+
+  const conditionSummaryHtml = conditionChips.length
+    ? `<div class="route-condition-summary">${conditionChips.map((c) => `<span class="route-condition-chip">${escapeHtml(c)}</span>`).join('')}</div>`
+    : '';
 
   routePlanContent.innerHTML = `
     <h2 class="place-name">🤖 AI 절약 플랜</h2>
@@ -1061,6 +1101,7 @@ function renderRoutePlanResult(data) {
       <div class="ai-report-rate">오늘 이 코스로 총 <strong>${formatWon(data.total_savings)}</strong> 절약!</div>
       <div class="ai-report-amount">총 지출 ${formatWon(data.total_spend)} · 예산 ${formatWon(data.budget)} 중 ${formatWon(data.remaining_budget)} 남음</div>
     </div>
+    ${conditionSummaryHtml}
     <p class="report-one-line">"${escapeHtml(data.summary)}"</p>
     <div class="route-stop-list">${stopsHtml}</div>
     <button type="button" class="btn-secondary" id="route-plan-retry-btn">조건 바꿔서 다시 만들기</button>
