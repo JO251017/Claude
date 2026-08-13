@@ -19,6 +19,9 @@ def _asset_response(asset: SavingsAsset) -> AssetResponse:
         expires_at=asset.expires_at,
         status=asset.status,
         created_at=asset.created_at,
+        offer_id=asset.offer_id,
+        place_id=asset.place_id,
+        place_name=asset.place_name,
     )
 
 
@@ -36,6 +39,9 @@ async def create_asset(
         condition_text=payload.condition_text,
         estimated_value=payload.estimated_value,
         expires_at=payload.expires_at,
+        offer_id=payload.offer_id,
+        place_id=payload.place_id,
+        place_name=payload.place_name,
     )
     return _asset_response(asset)
 

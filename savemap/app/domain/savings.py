@@ -49,5 +49,15 @@ class SavingsAsset(Base, TimestampMixin):
     status: Mapped[AssetStatus] = mapped_column(
         SAEnum(AssetStatus, name="asset_status"), default=AssetStatus.AVAILABLE
     )
+    # EXCHANGE 재도입(SaveMap 구조 재설계 제안서 §07, 2026-08-13) — 오퍼 상세
+    # "저장하기"로 만든 자산과 기존 자유입력 자산이 같은 테이블에 공존하므로 셋 다
+    # nullable. offer_id만으로는 오퍼가 삭제/변경돼도 매장 연결이 끊기므로
+    # place_id/place_name을 SavingsCertification과 같은 패턴으로 같이 들고 있는다.
+    offer_id: Mapped[int | None] = mapped_column(ForeignKey("offer.id", ondelete="SET NULL"))
+    place_id: Mapped[int | None] = mapped_column(ForeignKey("place.id", ondelete="SET NULL"))
+    place_name: Mapped[str | None] = mapped_column(String(255))
 
-    __table_args__ = (Index("ix_savings_asset_owner_user_id", "owner_user_id"),)
+    __table_args__ = (
+        Index("ix_savings_asset_owner_user_id", "owner_user_id"),
+        Index("ix_savings_asset_place_id", "place_id"),
+    )

@@ -916,6 +916,7 @@ function openOfferDetail(r) {
 
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
+      <button type="button" class="btn-secondary" id="detail-save-asset-btn">저장하기</button>
     </div>
 
     <!-- 현장 인증 통합(10번 항목, 2026-08-13) — 예전엔 "발견하기"(관심 표시)와
@@ -972,6 +973,7 @@ function openOfferDetail(r) {
     window.open(`https://map.kakao.com/link/to/${encodeURIComponent(r.place_name)},${r.lat},${r.lng}`, '_blank');
   });
   document.getElementById('detail-recommend-btn').addEventListener('click', (e) => recommendPlace(r, e.currentTarget));
+  document.getElementById('detail-save-asset-btn').addEventListener('click', (e) => saveOfferAsAsset(r, e.currentTarget));
 
   document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.currentTarget));
   document.getElementById('detail-report-closed-btn').addEventListener('click', () => {
@@ -988,6 +990,43 @@ function openOfferDetail(r) {
   detailContent.querySelectorAll('#detail-closed-row .btn-visit').forEach((btn) => {
     btn.addEventListener('click', () => submitStatusUpdate(r, btn.dataset.status, btn));
   });
+}
+
+// EXCHANGE 재도입(SaveMap 구조 재설계 제안서 §07, 2026-08-13) — 오퍼 상세에서
+// "저장하기"로 발견→저장 흐름만 우선 연결한다. 실제 사용자 간 거래(교환 요청)는
+// 계속 범위 밖 — assetCard()의 "교환 요청 (준비 중)" 버튼은 그대로 비활성 유지.
+async function saveOfferAsAsset(r, btn) {
+  const token = await getAccessToken();
+  if (!token) {
+    alert('저장은 로그인 후 이용할 수 있어요. MY 탭에서 로그인해주세요.');
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await apiFetch('/exchange/assets', {
+      method: 'POST',
+      body: JSON.stringify({
+        // Category(free/discount/...)와 AssetCreate.category(cafe/food/...)
+        // taxonomy가 겹치지 않아 억지 매핑 대신 기존 'etc' 사용 — 실제 구분은
+        // place_name 존재 여부로 카드 렌더링(assetCard)에서 처리한다.
+        category: 'etc',
+        title: r.place_name,
+        condition_text: r.signature_menu
+          ? `${r.signature_menu.name} ${Math.round(r.signature_menu.price).toLocaleString()}원`
+          : null,
+        estimated_value: r.total_savings > 0 ? r.total_savings : null,
+        expires_at: r.expires_at || null,
+        offer_id: r.offer_id,
+        place_id: r.place_id,
+        place_name: r.place_name,
+      }),
+    });
+    btn.textContent = '저장됨 ✓';
+    loadMyProfile();
+  } catch (err) {
+    alert(`저장 실패: ${err.message}`);
+    btn.disabled = false;
+  }
 }
 
 // --- AI 절약 플랜: 개별 매장을 나열만 하던 것과 별개로, 예산을 넣으면 실제 후보
@@ -1922,13 +1961,18 @@ document.getElementById('asset-form').addEventListener('submit', async (e) => {
 
 function assetCard(a, { own } = {}) {
   const expiresText = a.expires_at ? `사용기한 ${new Date(a.expires_at).toLocaleDateString()}` : '기한 없음';
+  // EXCHANGE 재도입(2026-08-13) — place_name이 있으면 오퍼 상세 "저장하기"로 만든
+  // 자산, 없으면 기존 자유입력 자산. 둘이 같은 테이블/카드를 공유하므로 뱃지와
+  // 대표 텍스트만 다르게 렌더링한다.
+  const linked = !!a.place_name;
   return `
     <div class="result-card">
       <div class="result-header">
-        <span class="badge">${ASSET_CATEGORY_LABELS[a.category] || a.category}</span>
+        <span class="badge">${linked ? '📍 저장한 오퍼' : (ASSET_CATEGORY_LABELS[a.category] || a.category)}</span>
         ${a.estimated_value ? `<span class="distance">예상 절약 ${formatWon(a.estimated_value)}</span>` : ''}
       </div>
-      <div class="place-name">${escapeHtml(a.title)}</div>
+      <div class="place-name">${escapeHtml(linked ? a.place_name : a.title)}</div>
+      ${linked ? `<div class="meta-line">${escapeHtml(a.title)}</div>` : ''}
       ${a.condition_text ? `<div class="meta-line">${escapeHtml(a.condition_text)}</div>` : ''}
       <div class="meta-line">${expiresText}</div>
       ${

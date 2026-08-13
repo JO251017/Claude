@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813x" />
+  <link rel="stylesheet" href="style.css?v=20260813y" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -89,11 +89,12 @@
       </div>
     </section>
 
-    <!-- EXCHANGE: 절약 자산 교환 — 기본 틀(검색/AI 절약 플랜)부터 다진 후 다시 켠다
-         (사용자 지시, 2026-08-13). 하단 네비 진입점만 hidden 처리 — 백엔드
-         (app/api/v1/exchange.py, app/exchange/service.py)와 이 화면 자체는 그대로
-         남겨둔다. hidden만 떼면 바로 복구된다. -->
-    <section id="screen-exchange" class="screen hidden">
+    <!-- EXCHANGE: 절약 자산 교환 — SaveMap 구조 재설계 제안서 §07에 따라 재도입
+         (사용자 지시, 2026-08-13). offer_id/place_id FK 연결(마이그레이션 0014) +
+         오퍼 상세 "저장하기" 버튼으로 발견→저장 흐름만 연결했다. 실제 사용자 간
+         거래(교환 요청)는 계속 범위 밖 — assetCard()의 "교환 요청 (준비 중)"
+         버튼은 그대로 비활성 유지. -->
+    <section id="screen-exchange" class="screen">
       <header class="screen-header">
         <h1>절약 교환소</h1>
         <p class="subtitle">내가 사용하지 않는 절약 기회를 다른 사람이 필요한 절약 기회로 바꿔보세요.</p>
@@ -261,14 +262,13 @@
 
           <div class="stats-grid">
             <div class="stat-tile"><span id="my-cert-count">0</span><label>절약 인증</label></div>
-            <!-- EXCHANGE 비활성화 동안 진입 경로가 없는 통계라 같이 숨긴다 -->
-            <div class="stat-tile hidden"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
+            <div class="stat-tile"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
           </div>
 
           <div id="my-badges" class="badge-row hidden"></div>
 
           <div class="list-section-header"><h2>바로가기</h2></div>
-          <button type="button" class="btn-secondary hidden" data-goto="exchange">내 절약 자산 보기</button>
+          <button type="button" class="btn-secondary" data-goto="exchange">내 절약 자산 보기</button>
           <!-- 사업자 인증된 사용자에게만 노출(2-3, 2026-08-13) — 기본은 숨김, loadMyProfile()이
                /users/me/merchant-status를 확인해서 조건부로 hidden을 뗀다. 서버도
                require_merchant_verified로 실제 접근을 막으므로 이 hidden은 UX용일 뿐이다. -->
@@ -278,8 +278,9 @@
     </section>
 
     <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 — 기본 틀(검색/
-         AI 절약 플랜/MY)부터 다진 후 다시 켠다(사용자 지시, 2026-08-13). EXCHANGE와
-         정확히 같은 패턴 — 하단 네비 진입점만 hidden 처리, 백엔드
+         AI 절약 플랜/MY)부터 다진 후 다시 켠다(사용자 지시, 2026-08-13). EXCHANGE는
+         구조 재설계 제안서 §07에 따라 먼저 재도입됐고(2026-08-13), COMMUNITY는
+         아직 이 패턴 그대로 — 하단 네비 진입점만 hidden 처리, 백엔드
          (app/api/v1/reports.py 등)와 이 화면 자체는 그대로 남겨둔다. data-goto로
          이 화면에 들어오는 다른 진입점은 없다(확인 완료). hidden만 떼면 바로
          복구된다. -->
@@ -492,7 +493,7 @@
       <button class="nav-btn active" data-screen="map">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg></span><span class="nav-label">MAP</span>
       </button>
-      <button class="nav-btn hidden" data-screen="exchange">
+      <button class="nav-btn" data-screen="exchange">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg></span><span class="nav-label">EXCHANGE</span>
       </button>
       <button class="nav-btn" data-screen="my">
@@ -504,6 +505,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813x"></script>
+  <script src="app.js?v=20260813y"></script>
 </body>
 </html>

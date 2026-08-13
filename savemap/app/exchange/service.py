@@ -16,6 +16,9 @@ async def create_asset(
     condition_text: str | None,
     estimated_value: float | None,
     expires_at: datetime | None,
+    offer_id: int | None = None,
+    place_id: int | None = None,
+    place_name: str | None = None,
 ) -> SavingsAsset:
     asset = SavingsAsset(
         owner_user_id=owner_user_id,
@@ -25,6 +28,9 @@ async def create_asset(
         estimated_value=estimated_value,
         expires_at=expires_at,
         status=AssetStatus.AVAILABLE,
+        offer_id=offer_id,
+        place_id=place_id,
+        place_name=place_name,
     )
     session.add(asset)
     await session.commit()
