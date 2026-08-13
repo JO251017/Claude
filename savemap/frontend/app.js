@@ -344,6 +344,7 @@ useLocationBtn.addEventListener('click', () => {
       if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
       useLocationBtn.disabled = false;
       useLocationLabel.textContent = originalLabel;
+      usedFallbackLocation = false;
       runSearch();
     },
     (err) => {
@@ -1267,6 +1268,13 @@ async function runSearch() {
   const countEl = document.getElementById('sheet-count');
   resultsEl.innerHTML = '<p class="empty-msg">주변 절약 기회를 찾는 중...</p>';
 
+  // 자동 위치 확인이 실패/거부돼 하드코딩된 평택시청 좌표로 대체된 경우에만 —
+  // 왜 이 위치가 나왔는지 숨기지 않는다. 위치가 바뀌면(내 위치 버튼, 주소검색,
+  // 지도 재검색) usedFallbackLocation을 그때그때 해제해서 한 번만 보이게 한다.
+  const fallbackNoticeHtml = usedFallbackLocation
+    ? '<p class="location-fallback-notice">📍 위치 권한이 없어 평택시청 기준으로 보여드려요</p>'
+    : '';
+
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
     lastResults = data.results;
@@ -1275,7 +1283,7 @@ async function runSearch() {
 
     if (data.results.length === 0 && lastDiscovered.length === 0) {
       countEl.textContent = '주변에 절약 기회가 없어요';
-      resultsEl.innerHTML = '<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>';
+      resultsEl.innerHTML = `${fallbackNoticeHtml}<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>`;
       return;
     }
 
@@ -1346,7 +1354,7 @@ async function runSearch() {
       </div>`
       : '';
 
-    resultsEl.innerHTML = offerCardsHtml + discoveredHtml;
+    resultsEl.innerHTML = fallbackNoticeHtml + offerCardsHtml + discoveredHtml;
 
     resultsEl.querySelectorAll('.result-card').forEach((card) => {
       card.addEventListener('click', () => openOfferDetail(lastResults[Number(card.dataset.idx)]));
@@ -1361,8 +1369,56 @@ async function runSearch() {
   }
 }
 
-initMap(36.9925, 127.113);
-runSearch();
+// --- 첫 로드: GPS로 실제 위치를 자동으로 잡는다 (2026-08-13) ---
+// 기존엔 "내 위치" 버튼을 눌러야만 geolocation을 물어봐서, 안 누르면 항상
+// 하드코딩된 평택시청 좌표로만 보였다(사용자 리포트: "자꾸 평택시청으로만 나옴").
+// 로딩 화면이 가려주는 동안 위치 확인을 먼저 시도하고, 실패/거부/타임아웃일 때만
+// 평택시청으로 폴백한다 — 그 사실을 숨기지 않고 결과 목록 위에 짧게 알린다.
+const PYEONGTAEK_FALLBACK = { lat: 36.9925, lng: 127.113 };
+let usedFallbackLocation = false;
+
+function getGeolocationOnce(timeoutMs) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: timeoutMs }
+    );
+  });
+}
+
+function dismissAppLoading() {
+  const el = document.getElementById('app-loading');
+  if (!el) return;
+  el.classList.add('fade-out');
+  setTimeout(() => el.classList.add('hidden'), 400);
+}
+
+async function initialLoad() {
+  // 위치 확인 자체에 5초, 전체 로딩 화면은 최대 6초만 기다린다 — 그 이상 걸리면
+  // 폴백 좌표로라도 화면을 띄운다(무한 로딩 방지).
+  const APP_LOAD_HARD_CAP_MS = 6000;
+  const hardCap = new Promise((resolve) => setTimeout(() => resolve(null), APP_LOAD_HARD_CAP_MS));
+
+  const located = await Promise.race([getGeolocationOnce(5000), hardCap]);
+  const { lat, lng } = located || PYEONGTAEK_FALLBACK;
+  usedFallbackLocation = !located;
+
+  if (located) {
+    document.getElementById('s-lat').value = lat.toFixed(6);
+    document.getElementById('s-lng').value = lng.toFixed(6);
+  }
+
+  initMap(lat, lng);
+  await runSearch().catch(() => {});
+  dismissAppLoading();
+}
+
+initialLoad();
 
 // --- COMMUNITY: 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록) ---
 let reportImageUrl = null;

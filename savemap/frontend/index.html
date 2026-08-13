@@ -4,13 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813j" />
+  <link rel="stylesheet" href="style.css?v=20260813k" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="/config.js"></script>
 </head>
 <body>
+  <!-- 로딩 화면(2026-08-13) — 페이지가 뜨자마자 지도가 텅 빈 채로 잠깐 보이던 걸
+       가린다. 그 아래에서는 실제로 위치 확인(GPS)·로그인 세션 확인·첫 검색이
+       병렬로 진행되고 있다(꾸며낸 대기가 아니라 실제 작업 시간) — app.js가
+       전부 끝나면(또는 최대 대기시간을 넘기면) hidden을 붙여서 치운다. -->
+  <div id="app-loading">
+    <div class="app-loading-mark">SaveMap</div>
+    <div class="app-loading-spinner" aria-hidden="true"></div>
+    <p class="app-loading-text">오늘의 절약을 준비하고 있어요</p>
+  </div>
+
   <div class="app-shell">
 
     <!-- MAP: 어디서 아낄 수 있는가 -->
@@ -452,6 +462,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813j"></script>
+  <script src="app.js?v=20260813k"></script>
 </body>
 </html>
