@@ -141,3 +141,16 @@ class InvalidCsvError(SaveMapError):
     code = "SM4225"
     http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
     message = "올바른 CSV 파일이 아닙니다"
+
+
+class PlaceMenuAlreadyRegisteredError(SaveMapError):
+    """오픈된 커뮤니티 메뉴 제보 경로(/places/menu-reports)는 사업자 인증 없이 로그인만
+    하면 누구나 쓸 수 있다 — 그래서 한 매장은 최초 1건만 등록되게 막는다(사용자 지시,
+    2026-08-13: "한번 등록되면 일단 추가 등록은 안되게해"). 프론트가 이미 가격 정보
+    없는 매장에서만 이 흐름을 보여주므로 보통 걸릴 일은 없고, 두 사용자가 거의 동시에
+    같은 매장을 제보하는 경쟁 상황을 막는 서버 사이드 안전장치 역할이 크다. 사업자
+    콘솔(소유권 확인된 경로)은 이 제한과 무관하다."""
+
+    code = "SM4227"
+    http_status = status.HTTP_409_CONFLICT
+    message = "이미 메뉴 정보가 등록된 매장이에요. 사업자이시면 사업자 콘솔에서 수정해주세요"

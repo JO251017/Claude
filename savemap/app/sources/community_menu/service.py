@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import PlaceMenuAlreadyRegisteredError
 from app.core.spatial import ewkt_point, to_h3
 from app.domain.enums import SourceType, XpReason
 from app.domain.menu_item import MenuItem
@@ -62,36 +63,33 @@ async def find_or_create_place(
     return place
 
 
-async def submit_menu_report(
+async def submit_menu_report_batch(
     session: AsyncSession,
     user_id: str,
     place: Place,
-    name: str,
-    price: float,
-    source_url: str | None = None,
-) -> tuple[MenuItem, MenuPriceComparison, int]:
-    """메뉴판 사진 제보 저장. 같은 매장에 같은 이름의 메뉴가 이미 있으면 중복 행을
-    만들지 않고 가격만 최신으로 갱신한다. XP는 그 매장에 "새로운" 메뉴 정보를 더했을
-    때만 지급 — 같은 메뉴를 반복 제보해서 XP를 캐는 걸 막기 위함."""
-    existing = (
-        await session.execute(
-            select(MenuItem).where(
-                MenuItem.place_id == place.id,
-                func.lower(func.trim(MenuItem.name)) == name.strip().lower(),
-            )
-        )
-    ).scalars().first()
+    items: list[tuple[str, float, str | None]],
+) -> list[tuple[MenuItem, MenuPriceComparison, int]]:
+    """메뉴판 사진 제보 저장. 한 매장은 이 오픈된(사업자 인증 불필요, 로그인만
+    필요) 제보 경로로 최초 1회만 등록할 수 있다 — 이미 메뉴가 하나라도 있으면
+    배치 전체를 거부한다(사용자 지시, 2026-08-13: "한번 등록되면 일단 추가 등록은
+    안되게해"). 프론트가 애초에 가격 정보 없는 매장에서만 이 흐름을 보여주므로
+    보통은 걸릴 일이 없고, 두 사용자가 거의 동시에 같은 매장을 제보하는 경쟁 상황을
+    막는 서버 사이드 안전장치 역할이 크다. 사업자 콘솔(소유권 확인된 별도
+    엔드포인트)은 이 제한과 무관하게 계속 자유롭게 수정 가능.
 
-    xp_awarded = 0
-    if existing is not None:
-        item = existing
-        item.price = price
-        item.verified_at = datetime.now(timezone.utc)
-        if source_url:
-            item.source_url = source_url
-        await session.commit()
-        await session.refresh(item)
-    else:
+    사진 한 장에서 메뉴 여러 개가 한 번에 인식되는 게 정상 흐름이라(예: 아메리카노
+    +라떼+...) items를 배치로 받고, "이미 등록됨" 판정은 배치 시작 전 딱 한 번만
+    한다 — 항목마다 확인하면 같은 배치의 두 번째 항목부터 스스로를 막아버린다."""
+    already_registered = (
+        await session.execute(
+            select(func.count()).select_from(MenuItem).where(MenuItem.place_id == place.id)
+        )
+    ).scalar_one()
+    if already_registered > 0:
+        raise PlaceMenuAlreadyRegisteredError()
+
+    results: list[tuple[MenuItem, MenuPriceComparison, int]] = []
+    for name, price, source_url in items:
         item = MenuItem(
             place_id=place.id,
             name=name,
@@ -105,6 +103,7 @@ async def submit_menu_report(
         await session.commit()
         await session.refresh(item)
         xp_awarded = await award_xp(session, user_id, XpReason.MENU_REPORT)
+        cmp = await sync_menu_offer(session, place, item)
+        results.append((item, cmp, xp_awarded))
 
-    cmp = await sync_menu_offer(session, place, item)
-    return item, cmp, xp_awarded
+    return results

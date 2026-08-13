@@ -241,3 +241,58 @@ def test_merchant_route_rejects_authenticated_but_unverified_user(client):
 
     assert resp.status_code == 403
     assert resp.json()["detail"]["code"] == "SM4032"
+
+
+def test_menu_report_analyze_requires_login(client):
+    resp = client.post("/v1/places/menu-reports/analyze")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_menu_report_create_requires_login(client):
+    resp = client.post("/v1/places/menu-reports", json={})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_menu_report_analyze_does_not_require_merchant_verification(client, monkeypatch):
+    # 예전엔 발견된 매장 사진 분석이 사업자 콘솔 전용 엔드포인트(/merchant/menu-items
+    # /analyze, RequireMerchantVerifiedDep)를 재사용해서, 사업자 인증 접근 제어(2-3)가
+    # 걸리면서 일반 사용자가 막히는 회귀가 생겼었다(사용자 지시, 2026-08-13: "메뉴판
+    # 등록은... 사용자들이 등록하도록 바꿔"). /places/menu-reports/analyze는
+    # RequireUserDep만 써야 한다 — merchant_route 테스트와 똑같은 "로그인은 됐지만
+    # 사업자 인증은 안 된" 오버라이드를 걸어도 403(SM4032)이 나오면 안 된다.
+    from unittest.mock import AsyncMock
+
+    from app.api.deps import db_session, require_user_id
+    from app.integrations.gemini import GeminiVisionClient
+    from app.integrations.supabase_storage import SupabaseStorageClient
+    from app.main import app
+
+    class _UnverifiedSession:
+        async def execute(self, *a, **kw):
+            raise NotImplementedError("analyze는 DB를 안 건드려야 한다")
+
+    async def _fake_user_id() -> str:
+        return "user-unverified"
+
+    async def _fake_db_session():
+        yield _UnverifiedSession()
+
+    monkeypatch.setattr(SupabaseStorageClient, "upload", AsyncMock(return_value="https://example.com/x.jpg"))
+    monkeypatch.setattr(GeminiVisionClient, "extract_menu_items", AsyncMock(return_value=[]))
+
+    app.dependency_overrides[require_user_id] = _fake_user_id
+    app.dependency_overrides[db_session] = _fake_db_session
+    try:
+        resp = client.post(
+            "/v1/places/menu-reports/analyze",
+            files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")},
+        )
+    finally:
+        app.dependency_overrides.pop(require_user_id, None)
+        app.dependency_overrides.pop(db_session, None)
+
+    assert resp.status_code != 403
+    assert resp.status_code == 200
+    assert resp.json() == {"image_url": "https://example.com/x.jpg", "items": []}

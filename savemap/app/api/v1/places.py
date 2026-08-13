@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
-from app.api.schemas.merchant import MenuItemResponse
+from app.api.schemas.merchant import MenuItemAnalyzeResponse, MenuItemResponse
 from app.api.schemas.place import (
     MenuPriceComparisonResponse,
-    MenuReportCreate,
+    MenuReportBatchCreate,
     RecommendationResponse,
     StatusUpdateCreate,
     StatusUpdateResponse,
@@ -14,8 +14,9 @@ from app.api.schemas.place import (
 from app.core.errors import PlacePublicNotFoundError
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
+from app.engine.menu_photo_analysis import analyze_menu_photo_upload
 from app.engine.price_comparison import compare_menu_item
-from app.sources.community_menu.service import find_or_create_place, submit_menu_report
+from app.sources.community_menu.service import find_or_create_place, submit_menu_report_batch
 from app.sources.store_visit.service import submit_recommendation, submit_status_update
 
 router = APIRouter(tags=["places"], prefix="/places")
@@ -57,15 +58,33 @@ async def list_place_menu_items(
     ]
 
 
-@router.post("/menu-reports", response_model=MenuItemResponse, status_code=201)
+@router.post("/menu-reports/analyze", response_model=MenuItemAnalyzeResponse)
+async def analyze_menu_report_photo(
+    image: UploadFile = File(...),
+    user_id: str = RequireUserDep,
+) -> MenuItemAnalyzeResponse:
+    """발견된(아직 가격 정보 없는) 매장의 메뉴판 사진을 실제로 본 사용자가 분석
+    요청한다. 사업자 인증 불필요 — create_menu_report와 같은 인증 수준(로그인만).
+    예전엔 프론트가 이 목적으로 사업자 콘솔 전용 엔드포인트(/merchant/menu-items/
+    analyze)를 재사용했는데, 사업자 인증 접근 제어(2026-08-13, require_merchant_
+    verified)가 그 엔드포인트에 걸리면서 일반 사용자가 막히는 회귀가 생겼다 —
+    이 전용 엔드포인트로 분리해서 고친다(사용자 지시: "메뉴판등록은... 사용자들이
+    등록하도록 바꿔"). DB 저장은 안 함(확인 전 단계) — 저장은 아래
+    /menu-reports를 별도 호출."""
+    return await analyze_menu_photo_upload(image)
+
+
+@router.post("/menu-reports", response_model=list[MenuItemResponse], status_code=201)
 async def create_menu_report(
-    payload: MenuReportCreate,
+    payload: MenuReportBatchCreate,
     user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
-) -> MenuItemResponse:
+) -> list[MenuItemResponse]:
     """카카오맵으로만 발견된(아직 SaveMap에 없는) 매장의 메뉴를, 실제로 그 메뉴판을
-    본 사용자가 사진으로 제보한다. 제보자가 그 매장의 사업자가 되는 게 아니므로
-    사업자 콘솔(RequireUserDep + 소유권 확인)과 달리 로그인만 하면 누구나 쓸 수 있다."""
+    본 사용자가 사진으로 제보한다. 사진 한 장에서 메뉴가 여럿 나올 수 있어 배치로
+    받는다. 제보자가 그 매장의 사업자가 되는 게 아니므로 사업자 콘솔(소유권 확인)과
+    달리 로그인만 하면 누구나 쓸 수 있다 — 대신 매장당 이 배치 전체가 최초 1회만
+    허용된다(사용자 지시, 2026-08-13)."""
     place = await find_or_create_place(
         session,
         place_id=payload.place_id,
@@ -77,26 +96,29 @@ async def create_menu_report(
         lng=payload.lng,
         category_name=payload.category_name,
     )
-    item, cmp, xp_awarded = await submit_menu_report(
-        session, user_id, place, name=payload.name, price=payload.price, source_url=payload.source_url
+    results = await submit_menu_report_batch(
+        session, user_id, place, [(i.name, i.price, i.source_url) for i in payload.items]
     )
-    return MenuItemResponse(
-        id=item.id,
-        place_id=item.place_id,
-        name=item.name,
-        price=float(item.price),
-        source_url=item.source_url,
-        verified_at=item.verified_at,
-        region_median=cmp.region_median,
-        sample_count=cmp.sample_count,
-        savings_amount=cmp.savings_amount,
-        savings_rate=cmp.savings_rate,
-        reliable=cmp.reliable,
-        benchmark_source=cmp.benchmark_source,
-        benchmark_price=cmp.benchmark_price,
-        listed_on_map=bool(cmp.savings_amount and cmp.savings_amount > 0),
-        xp_awarded=xp_awarded,
-    )
+    return [
+        MenuItemResponse(
+            id=item.id,
+            place_id=item.place_id,
+            name=item.name,
+            price=float(item.price),
+            source_url=item.source_url,
+            verified_at=item.verified_at,
+            region_median=cmp.region_median,
+            sample_count=cmp.sample_count,
+            savings_amount=cmp.savings_amount,
+            savings_rate=cmp.savings_rate,
+            reliable=cmp.reliable,
+            benchmark_source=cmp.benchmark_source,
+            benchmark_price=cmp.benchmark_price,
+            listed_on_map=bool(cmp.savings_amount and cmp.savings_amount > 0),
+            xp_awarded=xp_awarded,
+        )
+        for item, cmp, xp_awarded in results
+    ]
 
 
 @router.post("/{place_id}/recommendations", response_model=RecommendationResponse, status_code=201)

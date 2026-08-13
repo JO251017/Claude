@@ -1304,9 +1304,11 @@ function openDiscoveredDetail(d) {
   document.getElementById('discovered-menu-input').addEventListener('change', (e) => analyzeDiscoveredMenuPhoto(d, e.target));
 }
 
-// --- 발견된 매장의 메뉴판 사진을 아무 사용자나 올려서 제보. 사진 한 장에서 여러 메뉴를
-// 한 번에 인식하는 기존 사업자용 AI(/merchant/menu-items/analyze, 소유권 확인 없음 —
-// 로그인만 필요)를 그대로 재사용하고, 저장만 제보 전용 엔드포인트로 나눈다. ---
+// --- 발견된 매장의 메뉴판 사진을 아무 사용자나 올려서 제보. 예전엔 사업자 콘솔
+// 전용 AI 분석 엔드포인트(/merchant/menu-items/analyze)를 그대로 재사용했는데,
+// 사업자 인증 접근 제어(2026-08-13)가 그 엔드포인트에 걸리면서 일반 사용자가
+// 막히는 회귀가 생겼다 — /places/menu-reports/analyze(로그인만 필요, 사업자 인증
+// 불필요)로 분리했다(사용자 지시: "메뉴판등록은... 사용자들이 등록하도록 바꿔"). ---
 async function analyzeDiscoveredMenuPhoto(d, fileInput) {
   const file = fileInput.files[0];
   if (!file) return;
@@ -1327,7 +1329,7 @@ async function analyzeDiscoveredMenuPhoto(d, fileInput) {
   const headers = { Authorization: `Bearer ${token}` };
 
   try {
-    const resp = await fetch(`${API_BASE}/merchant/menu-items/analyze`, { method: 'POST', headers, body: form });
+    const resp = await fetch(`${API_BASE}/places/menu-reports/analyze`, { method: 'POST', headers, body: form });
     const data = await resp.json().catch(() => null);
     if (!resp.ok) {
       throw new Error(data?.detail?.message || data?.detail || `분석 실패 (${resp.status})`);
@@ -1387,39 +1389,35 @@ async function confirmDiscoveredMenuReport(d) {
   }
 
   statusEl.textContent = '제보 중...';
-  let success = 0;
-  let listed = 0;
-  let totalXp = 0;
-  for (const item of toSave) {
-    try {
-      const saved = await apiFetch('/places/menu-reports', {
-        method: 'POST',
-        body: JSON.stringify({
-          place_id: d.place_id || null,
-          kakao_place_id: d.kakao_place_id || null,
-          place_name: d.place_name,
-          address: d.address || null,
-          phone: d.phone || null,
-          category_name: d.category_name || null,
-          lat: d.lat,
-          lng: d.lng,
-          name: item.name,
-          price: item.price,
-        }),
-      });
-      success++;
-      if (saved.listed_on_map) listed++;
-      totalXp += saved.xp_awarded || 0;
-    } catch {
-      // 개별 실패는 건너뛰고 계속 진행, 완료 후 성공 개수로 안내
-    }
+  try {
+    // 사진 한 장에서 메뉴가 여럿 나올 수 있어 한 번에 배치로 제보한다 — 매장당
+    // 최초 1회만 허용되므로(2026-08-13, "한번 등록되면 추가 등록은 안되게해")
+    // 항목마다 따로 보내면 두 번째 항목부터 "이미 등록됨"으로 막힌다.
+    const saved = await apiFetch('/places/menu-reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        place_id: d.place_id || null,
+        kakao_place_id: d.kakao_place_id || null,
+        place_name: d.place_name,
+        address: d.address || null,
+        phone: d.phone || null,
+        category_name: d.category_name || null,
+        lat: d.lat,
+        lng: d.lng,
+        items: toSave,
+      }),
+    });
+    const listed = saved.filter((s) => s.listed_on_map).length;
+    const totalXp = saved.reduce((sum, s) => sum + (s.xp_awarded || 0), 0);
+    statusEl.textContent = listed
+      ? `${saved.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
+      : `${saved.length}개 메뉴 제보 완료! 감사합니다.`;
+    document.getElementById('discovered-menu-results').innerHTML = '';
+    if (totalXp > 0) loadSavingsBadge();
+  } catch (err) {
+    statusEl.textContent = `제보 실패: ${err.message}`;
+    confirmBtn.disabled = false;
   }
-
-  statusEl.textContent = listed
-    ? `${success}/${toSave.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
-    : `${success}/${toSave.length}개 메뉴 제보 완료! 감사합니다.`;
-  document.getElementById('discovered-menu-results').innerHTML = '';
-  if (totalXp > 0) loadSavingsBadge();
 }
 
 function prefillMerchantPlace(d) {
