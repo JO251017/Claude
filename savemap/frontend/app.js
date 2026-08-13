@@ -425,30 +425,52 @@ let mapLabels = [];
 let originMarker = null;
 const researchBtn = document.getElementById('research-btn');
 
-// --- 줌 레벨 기반 반경 (7번 항목, 2026-08-13) ---
+// --- 줌 레벨 기반 반경 (7번 항목, 2026-08-13 / 세분화 2026-08-13 추가 지시) ---
 // 드롭다운으로 반경을 고르는 대신, 지도를 줌인/줌아웃하면 카카오 지도의 레벨
-// (숫자가 작을수록 확대)을 읽어 대략적인 km로 매핑해 runSearch가 그 값을 쓴다.
+// (숫자가 작을수록 확대)을 읽어 km로 매핑해 옆 배지에 보여준다. 처음엔 기존
+// 드롭다운(1/3/5/10km)과 똑같은 큰 단위로 매핑했더니 "기존과 똑같은 숫자로
+// 표현하면 이상하다"는 지적을 받았다 — 촘촘한 줌 레벨에서 큰 숫자가 계단식으로
+// 튀어 보였기 때문. 저배율 구간은 1km씩 촘촘하게 늘리고, 완전히 축소하면
+// 대한민국 국토 전체(남북 약 500km)가 다 보일 만큼 큰 값까지 확장한다.
 // 정확한 레벨 구간은 실제 배포 후(이 샌드박스는 Kakao SDK 실행 환경이 없어
-// 실측 불가) 조정이 필요할 수 있다. settings.search_max_radius_km(10km) 이내로
-// clamp한다.
+// 실측 불가) 조정이 필요할 수 있다.
+//
+// 이 배지는 순수하게 "지금 지도가 보여주는 범위"를 알려주는 시각적 지표다 —
+// 실제 /search에 보내는 반경(currentRadiusKm)은 백엔드
+// settings.search_max_radius_km(10km)를 넘을 수 없어 별도로 clamp한다(그렇지
+// 않으면 국토 전체를 보는 줌에서 재검색이 400 에러로 실패한다).
+const MAX_SEARCH_RADIUS_KM = 10; // app/core/config.py settings.search_max_radius_km과 일치
 const ZOOM_LEVEL_TO_KM = [
-  { maxLevel: 3, km: 1 },
-  { maxLevel: 5, km: 3 },
-  { maxLevel: 7, km: 5 },
-  { maxLevel: 99, km: 10 },
+  { maxLevel: 1, km: 1 },
+  { maxLevel: 2, km: 1 },
+  { maxLevel: 3, km: 2 },
+  { maxLevel: 4, km: 3 },
+  { maxLevel: 5, km: 4 },
+  { maxLevel: 6, km: 5 },
+  { maxLevel: 7, km: 6 },
+  { maxLevel: 8, km: 8 },
+  { maxLevel: 9, km: 10 },
+  { maxLevel: 10, km: 20 },
+  { maxLevel: 11, km: 50 },
+  { maxLevel: 12, km: 100 },
+  { maxLevel: 13, km: 250 },
+  { maxLevel: 99, km: 500 }, // 완전 축소 — 대한민국 국토 전체가 보이는 수준
 ];
-let currentRadiusKm = 3;
+let currentRadiusKm = 3; // /search 호출용 (clamp됨)
+let currentZoomDisplayKm = 3; // 배지 표시용 (clamp 안 됨, 실제 지도 축척)
 const zoomRadiusBadge = document.getElementById('zoom-radius-badge');
+const MAX_MAP_LEVEL = 14; // 이 레벨까지는 축소해도 재검색 반경 표시가 국토 전체 스케일까지 따라간다
 
 function radiusKmForZoomLevel(level) {
   const match = ZOOM_LEVEL_TO_KM.find((row) => level <= row.maxLevel);
-  return match ? match.km : 10;
+  return match ? match.km : 500;
 }
 
 function updateZoomRadiusBadge() {
   if (!kakaoMap) return;
-  currentRadiusKm = radiusKmForZoomLevel(kakaoMap.getLevel());
-  zoomRadiusBadge.textContent = `🔍 ${currentRadiusKm}km`;
+  currentZoomDisplayKm = radiusKmForZoomLevel(kakaoMap.getLevel());
+  currentRadiusKm = Math.min(currentZoomDisplayKm, MAX_SEARCH_RADIUS_KM);
+  zoomRadiusBadge.textContent = `🔍 ${currentZoomDisplayKm}km`;
 }
 
 function initMap(lat, lng) {
@@ -461,6 +483,9 @@ function initMap(lat, lng) {
     center: new kakao.maps.LatLng(lat, lng),
     level: 5,
   });
+  // 기본 최대 축소 레벨이 국토 전체를 못 보여줄 수 있어 명시적으로 늘려준다
+  // ("최대한 대한민국 국토가 보이도록 땡겨도 맞춰서" 사용자 지시).
+  if (kakaoMap.setMaxLevel) kakaoMap.setMaxLevel(MAX_MAP_LEVEL);
   updateZoomRadiusBadge();
 
   kakao.maps.event.addListener(kakaoMap, 'dragend', () => researchBtn.classList.remove('hidden'));
