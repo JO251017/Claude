@@ -413,7 +413,13 @@ useLocationBtn.addEventListener('click', () => {
       const lng = pos.coords.longitude;
       document.getElementById('s-lat').value = lat.toFixed(6);
       document.getElementById('s-lng').value = lng.toFixed(6);
-      if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+      if (kakaoMap) {
+        kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+        // "내 위치로 찾기"를 누르면 1km 이내로 보이도록 확대한다(사용자 지시,
+        // 2026-08-13) — ZOOM_LEVEL_TO_KM에서 레벨 2가 1km에 해당한다.
+        kakaoMap.setLevel(2);
+        updateZoomRadiusBadge();
+      }
       useLocationBtn.disabled = false;
       useLocationLabel.textContent = originalLabel;
       usedFallbackLocation = false;
@@ -625,12 +631,16 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
   const originPos = new kakao.maps.LatLng(originLat, originLng);
   bounds.extend(originPos);
 
+  // 내 위치(검색 기준점)는 파란 마커로 표현한다(사용자 지시, 2026-08-13) — 결과/
+  // 발견 마커와 확실히 구분되도록. 검색이 다시 실행될 때마다(내 위치 버튼, 주소
+  // 검색, 재검색 등 위치가 바뀔 때마다) 이 함수가 다시 그려서 항상 최신 위치를
+  // 따라간다.
   originMarker = new kakao.maps.Marker({
     map: kakaoMap,
     position: originPos,
     image: new kakao.maps.MarkerImage(
       'data:image/svg+xml;base64,' +
-        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="#0d9488" stroke="white" stroke-width="3"/></svg>'),
+        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="#2563eb" stroke="white" stroke-width="3"/></svg>'),
       new kakao.maps.Size(22, 22)
     ),
   });
