@@ -235,7 +235,12 @@ async function loadMyProfile() {
     document.getElementById('character-avatar').innerHTML = characterAvatarFor(s.level);
     document.getElementById('my-level-badge').textContent = `Lv.${s.level}`;
     document.getElementById('my-title').textContent = s.title;
-    document.getElementById('my-total-saved').textContent = formatWon(s.total_saved);
+    // 절약 요약 재구조화(2-1, 2026-08-13) — all-time 누적 하나 대신 오늘 누적을
+    // 메인으로, 주간/한달/연간을 나란히 보여준다.
+    document.getElementById('my-today-saved').textContent = formatWon(s.today_saved);
+    document.getElementById('my-weekly-saved').textContent = formatWon(s.weekly_saved);
+    document.getElementById('my-monthly-saved').textContent = formatWon(s.monthly_saved);
+    document.getElementById('my-yearly-saved').textContent = formatWon(s.yearly_saved);
     document.getElementById('my-saving-bar').style.width = `${s.progress_pct}%`;
     document.getElementById('my-next-level-text').textContent =
       s.next_threshold == null
@@ -243,13 +248,23 @@ async function loadMyProfile() {
         : `다음 레벨까지 ${formatWon(s.remaining_to_next)}`;
     document.getElementById('my-cert-count').textContent = s.certification_count;
 
-    // 탐험가 칭호(2026-08-13, 방문한 서로 다른 매장 수 기반) — 절약금액 레벨과
-    // 독립된 축이라 별도 필드(explorer_*)로 채운다.
+    // 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 레벨과 독립된 축이라
+    // 별도 필드(explorer_*/visit_*/recommend_*)로 채운다. 셋 다 같은 문구 패턴
+    // ("N / 다음까지 M")으로 통일해서 사용자가 세 지표를 한눈에 비교하게 한다.
+    const titleProgressText = (count, unit, remaining) =>
+      remaining == null ? `${count}${unit} · 최고 칭호` : `${count}${unit} · 다음까지 ${remaining}${unit}`;
     document.getElementById('my-explorer-title').textContent = s.explorer_title;
-    document.getElementById('my-explorer-count').textContent =
-      s.explorer_remaining_to_next == null
-        ? `방문한 곳 ${s.discovered_place_count}곳 · 최고 칭호 달성`
-        : `방문한 곳 ${s.discovered_place_count}곳 · 다음 칭호까지 ${s.explorer_remaining_to_next}곳`;
+    document.getElementById('my-explorer-count').textContent = titleProgressText(
+      s.discovered_place_count, '곳', s.explorer_remaining_to_next
+    );
+    document.getElementById('my-visit-title').textContent = s.visit_title;
+    document.getElementById('my-visit-count').textContent = titleProgressText(
+      s.visit_count, '회', s.visit_remaining_to_next
+    );
+    document.getElementById('my-recommend-title').textContent = s.recommend_title;
+    document.getElementById('my-recommend-count').textContent = titleProgressText(
+      s.recommend_count, '회', s.recommend_remaining_to_next
+    );
 
     const badges = [];
     if (s.certification_count >= 1) badges.push('첫 절약 인증');

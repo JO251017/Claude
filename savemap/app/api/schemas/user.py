@@ -10,6 +10,11 @@ class SavingsSummaryResponse(BaseModel):
     progress_pct: float
     certification_count: int
     monthly_saved: float = 0.0
+    # MY 탭 절약 요약 재구조화(2-1, 2026-08-13): 오늘 누적 절약을 메인으로,
+    # 주간/한달(monthly_saved)/연간을 나란히 보여준다.
+    today_saved: float = 0.0
+    weekly_saved: float = 0.0
+    yearly_saved: float = 0.0
     # 탐험가 칭호(2026-08-13) — 절약금액이 아니라 실제 방문 인증한 서로 다른 매장
     # 수 기반. 위 level/title(절약금액 기준)과는 독립된 축이라 explorer_ 접두어로
     # 스키마에서부터 확실히 구분한다("레벨 시스템 두 벌" 혼선을 반복하지 않기 위함).
@@ -17,3 +22,15 @@ class SavingsSummaryResponse(BaseModel):
     explorer_title: str
     explorer_next_threshold: int | None
     explorer_remaining_to_next: int | None
+    # 방문 횟수 칭호(2-2, 2026-08-13) — certification_count(영수증/직접입력 인증
+    # 건수)를 그대로 재사용한 칭호 사다리. 기존 .certify-row UI는 숨기고 이 값을
+    # "방문 인증" 진행도로 노출한다(사용자 확정).
+    visit_count: int
+    visit_title: str
+    visit_next_threshold: int | None
+    visit_remaining_to_next: int | None
+    # 추천 횟수 칭호(2-2, 2026-08-13)
+    recommend_count: int
+    recommend_title: str
+    recommend_next_threshold: int | None
+    recommend_remaining_to_next: int | None

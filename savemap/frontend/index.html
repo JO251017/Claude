@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813l" />
+  <link rel="stylesheet" href="style.css?v=20260813m" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -208,9 +208,27 @@
               <div class="character-level" id="my-level-badge">Lv.1</div>
               <div class="character-title" id="my-title">절약 초보</div>
             </div>
+            <!-- 절약 요약 재구조화(2-1, 2026-08-13) — 예전엔 all-time 누적 절약
+                 하나만 보여줬다. "오늘 얼마나 아꼈는지"가 매일 다시 켜고 싶어지는
+                 이유가 되도록 오늘 누적을 메인 숫자로 올리고, 그 아래 주간/한달/
+                 연간을 나란히 보여준다(사용자가 준 구조 그대로). -->
             <div class="saving-amount">
-              누적 절약<br />
-              <span id="my-total-saved">₩0</span>
+              오늘 누적 절약<br />
+              <span id="my-today-saved">₩0</span>
+            </div>
+            <div class="saving-period-row">
+              <div class="saving-period-tile">
+                <span id="my-weekly-saved">₩0</span>
+                <label>주간 절약</label>
+              </div>
+              <div class="saving-period-tile">
+                <span id="my-monthly-saved">₩0</span>
+                <label>한달 절약</label>
+              </div>
+              <div class="saving-period-tile">
+                <span id="my-yearly-saved">₩0</span>
+                <label>연간 절약</label>
+              </div>
             </div>
             <div class="character-rpg-block hidden">
               <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
@@ -218,13 +236,25 @@
             </div>
           </div>
 
-          <!-- 탐험가 칭호(방문한 서로 다른 매장 수 기반, 2026-08-13) — 위 절약금액
-               기반 레벨/캐릭터와는 독립된 축이라 hidden 처리하지 않고 먼저 노출한다
-               (사용자와 논의 후 확정한 방향). "현장 활동 유도 기획안"의 연장 —
-               발견하기를 할수록 칭호가 올라가는 걸 직접 보여준다. -->
-          <div class="explorer-badge glass">
-            <span class="explorer-title" id="my-explorer-title">동네 초보</span>
-            <span class="explorer-count" id="my-explorer-count">방문한 곳 0곳</span>
+          <!-- 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 기반 레벨/캐릭터와
+               독립된 축이라 hidden 처리하지 않고 먼저 노출한다. 셋 다 "실제 현장
+               행동을 더 하면 칭호가 오른다"는 같은 유도 구조라 나란히 묶었다. -->
+          <div class="title-badge-row">
+            <div class="title-badge-tile glass">
+              <span class="title-badge-icon" aria-hidden="true">🧭</span>
+              <span class="title-badge-name" id="my-explorer-title">동네 초보</span>
+              <span class="title-badge-progress" id="my-explorer-count">0곳</span>
+            </div>
+            <div class="title-badge-tile glass">
+              <span class="title-badge-icon" aria-hidden="true">🔥</span>
+              <span class="title-badge-name" id="my-visit-title">방문 새내기</span>
+              <span class="title-badge-progress" id="my-visit-count">0회</span>
+            </div>
+            <div class="title-badge-tile glass">
+              <span class="title-badge-icon" aria-hidden="true">👍</span>
+              <span class="title-badge-name" id="my-recommend-title">추천 새내기</span>
+              <span class="title-badge-progress" id="my-recommend-count">0회</span>
+            </div>
           </div>
 
           <div class="stats-grid">
@@ -464,6 +494,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813l"></script>
+  <script src="app.js?v=20260813m"></script>
 </body>
 </html>

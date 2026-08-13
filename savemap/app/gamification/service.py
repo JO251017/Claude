@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import XP_REWARD, XpReason
 from app.domain.savings import SavingsCertification
-from app.domain.store_visit import StoreInterest
+from app.domain.store_visit import PlaceRecommendation, StoreInterest
 from app.domain.xp import XpLedger
 
 # 예전엔 여기에 XP 총량 기반 레벨링(compute_level/XP_PER_LEVEL/LEVEL_TITLES)이
@@ -66,6 +66,11 @@ class SavingsSummary:
     progress_pct: float
     certification_count: int
     monthly_saved: float = 0.0
+    # MY 탭 절약 요약 재구조화(2-1, 2026-08-13): "오늘 누적 절약"을 메인으로,
+    # 주간/한달(기존 monthly_saved)/연간을 나란히 보여주기 위한 기간별 합계.
+    today_saved: float = 0.0
+    weekly_saved: float = 0.0
+    yearly_saved: float = 0.0
 
 
 def compute_savings_level(
@@ -119,19 +124,41 @@ async def get_savings_summary(session: AsyncSession, user_id: str) -> SavingsSum
     ).one()
     total, count = row
 
-    month_start = datetime.now(timezone.utc).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
+    # 오늘/이번 주/이번 달/올해 절약 합계 — MY 탭 재구조화(2-1)에서 "오늘 누적
+    # 절약"을 메인 숫자로 쓰고, 그 아래 주간/한달/연간을 나란히 보여준다. 네
+    # 기간 모두 같은 SavingsCertification 테이블에서 조건부 합계로 한 번에
+    # 구해서 왕복 쿼리를 늘리지 않는다.
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
     )
-    monthly_total = (
-        await session.execute(
-            select(func.coalesce(func.sum(SavingsCertification.amount), 0)).where(
-                SavingsCertification.user_id == user_id,
-                SavingsCertification.created_at >= month_start,
-            )
-        )
-    ).scalar_one()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    return compute_savings_level(float(total), int(count), float(monthly_total))
+    def _sum_since(start: datetime):
+        return func.coalesce(
+            func.sum(case((SavingsCertification.created_at >= start, SavingsCertification.amount), else_=0)),
+            0,
+        )
+
+    period_row = (
+        await session.execute(
+            select(
+                _sum_since(today_start),
+                _sum_since(week_start),
+                _sum_since(month_start),
+                _sum_since(year_start),
+            ).where(SavingsCertification.user_id == user_id)
+        )
+    ).one()
+    today_total, weekly_total, monthly_total, yearly_total = period_row
+
+    summary = compute_savings_level(float(total), int(count), float(monthly_total))
+    summary.today_saved = float(today_total)
+    summary.weekly_saved = float(weekly_total)
+    summary.yearly_saved = float(yearly_total)
+    return summary
 
 
 class LeaderboardService:
@@ -158,6 +185,24 @@ EXPLORER_TITLE_THRESHOLDS: list[tuple[int, str]] = [
 ]
 
 
+def _walk_count_thresholds(
+    count: int, thresholds: list[tuple[int, str]]
+) -> tuple[str, int | None, int | None]:
+    """(칭호명, 다음 임계값, 다음까지 남은 수) — 발견/방문/추천 칭호 3종(2-2)이 모두
+    "누적 카운트 임계값 사다리"라는 같은 모양이라 공용 로직으로 뽑았다."""
+    count = max(count, 0)
+    title = thresholds[0][1]
+    next_threshold: int | None = None
+    for i, (amount, name) in enumerate(thresholds):
+        if count >= amount:
+            title = name
+            next_threshold = thresholds[i + 1][0] if i + 1 < len(thresholds) else None
+        else:
+            break
+    remaining = None if next_threshold is None else max(next_threshold - count, 0)
+    return title, next_threshold, remaining
+
+
 @dataclass
 class ExplorerSummary:
     discovered_place_count: int
@@ -168,21 +213,9 @@ class ExplorerSummary:
 
 def compute_explorer_title(discovered_place_count: int) -> ExplorerSummary:
     discovered_place_count = max(discovered_place_count, 0)
-    title = EXPLORER_TITLE_THRESHOLDS[0][1]
-    next_threshold: int | None = None
-    for i, (amount, name) in enumerate(EXPLORER_TITLE_THRESHOLDS):
-        if discovered_place_count >= amount:
-            title = name
-            next_threshold = (
-                EXPLORER_TITLE_THRESHOLDS[i + 1][0]
-                if i + 1 < len(EXPLORER_TITLE_THRESHOLDS)
-                else None
-            )
-        else:
-            break
-
-    remaining = None if next_threshold is None else max(next_threshold - discovered_place_count, 0)
-
+    title, next_threshold, remaining = _walk_count_thresholds(
+        discovered_place_count, EXPLORER_TITLE_THRESHOLDS
+    )
     return ExplorerSummary(
         discovered_place_count=discovered_place_count,
         title=title,
@@ -202,3 +235,85 @@ async def get_discovered_place_count(session: AsyncSession, user_id: str) -> int
 async def get_explorer_summary(session: AsyncSession, user_id: str) -> ExplorerSummary:
     count = await get_discovered_place_count(session, user_id)
     return compute_explorer_title(int(count))
+
+
+# --- 방문 횟수 칭호 (2-2, 2026-08-13) --- 사용자 확정: "영수증 인증을 방문횟수로
+# 해, 기존 영수증 인증은 숨기고 방문횟수에서 참고하도록". 즉 새 카운트 쿼리를
+# 만들지 않고 이미 get_savings_summary가 계산해 두는 certification_count(실제
+# 영수증/직접입력 인증 건수)를 그대로 칭호 사다리에 태운다.
+VISIT_TITLE_THRESHOLDS: list[tuple[int, str]] = [
+    (0, "방문 새내기"),
+    (5, "단골 새싹"),
+    (10, "동네 단골"),
+    (30, "찐단골"),
+    (50, "방문왕"),
+    (100, "SaveMap 터줏대감"),
+]
+
+
+@dataclass
+class VisitSummary:
+    visit_count: int
+    title: str
+    next_threshold: int | None
+    remaining_to_next: int | None
+
+
+def compute_visit_title(visit_count: int) -> VisitSummary:
+    visit_count = max(visit_count, 0)
+    title, next_threshold, remaining = _walk_count_thresholds(visit_count, VISIT_TITLE_THRESHOLDS)
+    return VisitSummary(
+        visit_count=visit_count,
+        title=title,
+        next_threshold=next_threshold,
+        remaining_to_next=remaining,
+    )
+
+
+# --- 추천 횟수 칭호 (2-2, 2026-08-13) --- PlaceRecommendation은 지금까지 매장별
+# 카운트(그 매장이 몇 번 추천됐는지)만 쓰였고, 사용자별 누적 추천 수를 세는
+# 쿼리는 없었다 — 새로 추가한다.
+RECOMMEND_TITLE_THRESHOLDS: list[tuple[int, str]] = [
+    (0, "추천 새내기"),
+    (5, "입소문 메이커"),
+    (10, "찐추천러"),
+    (30, "추천왕"),
+    (50, "SaveMap 인플루언서"),
+    (100, "추천의 신"),
+]
+
+
+@dataclass
+class RecommendSummary:
+    recommend_count: int
+    title: str
+    next_threshold: int | None
+    remaining_to_next: int | None
+
+
+def compute_recommend_title(recommend_count: int) -> RecommendSummary:
+    recommend_count = max(recommend_count, 0)
+    title, next_threshold, remaining = _walk_count_thresholds(
+        recommend_count, RECOMMEND_TITLE_THRESHOLDS
+    )
+    return RecommendSummary(
+        recommend_count=recommend_count,
+        title=title,
+        next_threshold=next_threshold,
+        remaining_to_next=remaining,
+    )
+
+
+async def get_recommended_place_count(session: AsyncSession, user_id: str) -> int:
+    return (
+        await session.execute(
+            select(func.count())
+            .select_from(PlaceRecommendation)
+            .where(PlaceRecommendation.user_id == user_id)
+        )
+    ).scalar_one()
+
+
+async def get_recommend_summary(session: AsyncSession, user_id: str) -> RecommendSummary:
+    count = await get_recommended_place_count(session, user_id)
+    return compute_recommend_title(int(count))

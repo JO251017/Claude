@@ -2,8 +2,14 @@ import asyncio
 
 from app.gamification.service import (
     EXPLORER_TITLE_THRESHOLDS,
+    RECOMMEND_TITLE_THRESHOLDS,
+    VISIT_TITLE_THRESHOLDS,
     compute_explorer_title,
+    compute_recommend_title,
+    compute_visit_title,
     get_discovered_place_count,
+    get_recommended_place_count,
+    get_savings_summary,
 )
 
 
@@ -89,3 +95,90 @@ def test_get_discovered_place_count_returns_session_scalar():
     session = _FakeSession(count=7)
     result = asyncio.run(get_discovered_place_count(session, "user-1"))
     assert result == 7
+
+
+# --- 방문 횟수 칭호 (2-2) --- compute_explorer_title과 같은 사다리 로직
+# (_walk_count_thresholds)을 공유하므로 경계값 검증은 얇게만 둔다.
+def test_visit_title_starts_at_base():
+    s = compute_visit_title(0)
+    assert s.title == "방문 새내기"
+    assert s.next_threshold == 5
+
+
+def test_visit_title_mid_and_max_tier():
+    assert compute_visit_title(10).title == "동네 단골"
+    assert compute_visit_title(29).title == "동네 단골"
+    assert compute_visit_title(100).title == "SaveMap 터줏대감"
+    assert compute_visit_title(100).next_threshold is None
+
+
+def test_visit_title_negative_clamped_to_zero():
+    s = compute_visit_title(-5)
+    assert s.visit_count == 0
+    assert s.title == "방문 새내기"
+
+
+def test_visit_thresholds_sorted_ascending():
+    amounts = [amount for amount, _ in VISIT_TITLE_THRESHOLDS]
+    assert amounts == sorted(amounts)
+
+
+# --- 추천 횟수 칭호 (2-2) ---
+def test_recommend_title_starts_at_base():
+    s = compute_recommend_title(0)
+    assert s.title == "추천 새내기"
+    assert s.next_threshold == 5
+
+
+def test_recommend_title_mid_and_max_tier():
+    assert compute_recommend_title(30).title == "추천왕"
+    assert compute_recommend_title(100).title == "추천의 신"
+    assert compute_recommend_title(100).next_threshold is None
+
+
+def test_recommend_thresholds_sorted_ascending():
+    amounts = [amount for amount, _ in RECOMMEND_TITLE_THRESHOLDS]
+    assert amounts == sorted(amounts)
+
+
+def test_get_recommended_place_count_returns_session_scalar():
+    session = _FakeSession(count=12)
+    result = asyncio.run(get_recommended_place_count(session, "user-1"))
+    assert result == 12
+
+
+# --- get_savings_summary 기간별 합계 (2-1) --- 두 번의 execute 호출(총합/건수 →
+# 기간별 조건부 합계)을 순서대로 다른 값으로 응답하는 FakeSession으로 today/
+# weekly/monthly/yearly가 응답 필드에 그대로 실리는지만 확인한다(SQL 조건 자체의
+# 날짜 경계 정확성은 SQLite/Postgres 없는 이 샌드박스에서 검증 불가 — 값 전달
+# 경로만 검증).
+class _FakeOneResult:
+    def __init__(self, value):
+        self._value = value
+
+    def one(self):
+        return self._value
+
+
+class _FakeSummarySession:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    async def execute(self, *a, **kw):
+        return _FakeOneResult(self._rows.pop(0))
+
+
+def test_get_savings_summary_carries_period_totals_through():
+    session = _FakeSummarySession(
+        rows=[
+            (100_000, 6),  # 총합, 건수
+            (1_000, 5_000, 20_000, 80_000),  # today, weekly, monthly, yearly
+        ]
+    )
+    summary = asyncio.run(get_savings_summary(session, "user-1"))
+    assert summary.total_saved == 100_000.0
+    assert summary.certification_count == 6
+    assert summary.today_saved == 1_000.0
+    assert summary.weekly_saved == 5_000.0
+    assert summary.monthly_saved == 20_000.0
+    assert summary.yearly_saved == 80_000.0

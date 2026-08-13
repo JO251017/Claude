@@ -1627,6 +1627,36 @@ select:focus {
   font-weight: 900;
 }
 
+/* 절약 요약 재구조화(2-1, 2026-08-13) — 오늘 누적 절약(메인) 아래 주간/한달/
+   연간을 3칸으로 나란히 보여준다. .stat-tile과 톤을 맞추되 카드 안에 들어가는
+   3분할이라 더 작고 촘촘하게 잡았다. */
+.saving-period-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.saving-period-tile {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 4px;
+}
+
+.saving-period-tile span {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+}
+
+.saving-period-tile label {
+  font-size: 0.62rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
 .saving-bar-track {
   height: 10px;
   border-radius: 999px;
@@ -1649,27 +1679,41 @@ select:focus {
   font-weight: 700;
 }
 
-/* 탐험가 칭호(방문 매장 수 기반, 2026-08-13) — character-card와 달리 hidden이
-   아니라 항상 보인다. .badge-pill과 같은 금색 계열로 "발견하기"를 계속 하고
-   싶어지게 만든다. */
-.explorer-badge {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
+/* 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 예전엔 탐험가 칭호 하나만 가로
+   배지였다. 세 축을 나란히 두면 "이건 채웠는데 저건 아직이네"가 한눈에 보여서
+   각 행동(발견하기/방문 인증/추천)을 더 하고 싶어지게 만든다(사용자 지시:
+   "사용자 유도를 더 할 수 있도록"). .badge-pill과 같은 금색 계열 톤 유지. */
+.title-badge-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
-.explorer-title {
-  font-size: 0.92rem;
+.title-badge-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  text-align: center;
+}
+
+.title-badge-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.title-badge-name {
+  font-size: 0.76rem;
   font-weight: 800;
   color: var(--gold, #d97706);
 }
 
-.explorer-count {
-  font-size: 0.74rem;
+.title-badge-progress {
+  font-size: 0.64rem;
   color: var(--ink-soft);
   font-weight: 700;
 }
