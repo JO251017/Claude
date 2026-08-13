@@ -472,6 +472,19 @@ body {
   font-weight: 600;
 }
 
+/* 발견/방문 인증이 0건인 매장 — treasure 마커의 금색 테마는 유지하되 점선
+   테두리로 "아직 비어있음"을 표시한다(현장 활동 유도 기획안 §3-A, 2026-08-13).
+   discovered(카카오로만 발견, 절약 정보 자체가 없음)와는 다르다 — 이쪽은 절약
+   정보는 있고 방문 인증만 없는 상태. */
+.map-label--unverified {
+  border-style: dashed;
+  border-color: var(--gold, #d97706);
+}
+
+.map-label--unverified .map-label-savings {
+  color: var(--gold, #d97706);
+}
+
 /* --- 아직 절약 정보 없는 발견된 매장 (카카오 로컬 검색, 콜드스타트 대응) --- */
 .discovered-section {
   margin-top: 16px;
@@ -618,6 +631,12 @@ body {
   text-align: center;
   padding: 24px 0;
   font-size: 0.88rem;
+}
+
+.empty-msg--first {
+  color: var(--gold, #d97706);
+  font-weight: 800;
+  padding-bottom: 2px;
 }
 
 .error-msg {
@@ -1048,6 +1067,11 @@ select:focus {
   margin: 6px 0;
 }
 
+.ai-report--low .ai-report-calc--invite {
+  color: var(--gold, #d97706);
+  font-weight: 700;
+}
+
 /* 신뢰도 점수는 아직 없지만 가격 비교(실측/AI 추정)는 나온 상태 — 완전한 히어로
    블록(.ai-report-hero)보다 톤을 낮춰서, 아직 등급/점수까지는 아니라는 걸 구분한다. */
 .ai-report-hero--estimate {
@@ -1165,6 +1189,14 @@ select:focus {
 
 .card-score-line--calc {
   color: var(--ink-soft);
+}
+
+/* 발견/방문 인증이 0건인 완전 콜드스타트 매장 — "계산 중"(회색, 수동적)과 달리
+   방문을 요청하는 문구라 "보물찾기" 마커(treasure, 금색)와 톤을 맞춘다
+   (현장 활동 유도 기획안 §3-B, 2026-08-13). */
+.card-score-line--unverified {
+  color: var(--gold, #d97706);
+  font-weight: 700;
 }
 
 /* 신뢰도 점수는 없지만(실제 방문 신호 부족) AI/실측 가격 비교는 이미 끝난 경우 —
