@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813i" />
+  <link rel="stylesheet" href="style.css?v=20260813j" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -204,6 +204,15 @@
               <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
               <div class="saving-next" id="my-next-level-text">다음 레벨까지 ₩10,000</div>
             </div>
+          </div>
+
+          <!-- 탐험가 칭호(방문한 서로 다른 매장 수 기반, 2026-08-13) — 위 절약금액
+               기반 레벨/캐릭터와는 독립된 축이라 hidden 처리하지 않고 먼저 노출한다
+               (사용자와 논의 후 확정한 방향). "현장 활동 유도 기획안"의 연장 —
+               발견하기를 할수록 칭호가 올라가는 걸 직접 보여준다. -->
+          <div class="explorer-badge glass">
+            <span class="explorer-title" id="my-explorer-title">동네 초보</span>
+            <span class="explorer-count" id="my-explorer-count">방문한 곳 0곳</span>
           </div>
 
           <div class="stats-grid">
@@ -443,6 +452,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813i"></script>
+  <script src="app.js?v=20260813j"></script>
 </body>
 </html>

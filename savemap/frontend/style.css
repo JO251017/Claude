@@ -1485,6 +1485,31 @@ select:focus {
   font-weight: 700;
 }
 
+/* 탐험가 칭호(방문 매장 수 기반, 2026-08-13) — character-card와 달리 hidden이
+   아니라 항상 보인다. .badge-pill과 같은 금색 계열로 "발견하기"를 계속 하고
+   싶어지게 만든다. */
+.explorer-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.explorer-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--gold, #d97706);
+}
+
+.explorer-count {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
 from app.api.schemas.user import SavingsSummaryResponse
-from app.gamification.service import get_savings_summary
+from app.gamification.service import get_explorer_summary, get_savings_summary
 
 router = APIRouter(tags=["users"], prefix="/users")
 
@@ -14,6 +14,7 @@ async def my_savings_summary(
     session: AsyncSession = SessionDep,
 ) -> SavingsSummaryResponse:
     summary = await get_savings_summary(session, user_id)
+    explorer = await get_explorer_summary(session, user_id)
     return SavingsSummaryResponse(
         total_saved=summary.total_saved,
         level=summary.level,
@@ -23,4 +24,8 @@ async def my_savings_summary(
         progress_pct=summary.progress_pct,
         certification_count=summary.certification_count,
         monthly_saved=summary.monthly_saved,
+        discovered_place_count=explorer.discovered_place_count,
+        explorer_title=explorer.title,
+        explorer_next_threshold=explorer.next_threshold,
+        explorer_remaining_to_next=explorer.remaining_to_next,
     )

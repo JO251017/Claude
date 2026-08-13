@@ -153,6 +153,15 @@ def test_admin_endpoints_disabled_when_key_not_configured(client, monkeypatch):
     assert resp.status_code == 401
 
 
+def test_savings_summary_requires_auth(client):
+    # 탐험가 칭호(2026-08-13)를 이 응답에 합쳐 넣었다 — 로그인 없이 호출되면
+    # DB 세션에 닿기 전에 401로 걸려야 한다(NullSession이 실행을 막아둔 상태에서도
+    # 401이 나면 인증이 먼저라는 뜻, 다른 보호된 엔드포인트들과 동일한 순서 원칙).
+    resp = client.get("/v1/users/me/savings-summary")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
 def test_merchant_create_place_requires_auth(client):
     resp = client.post(
         "/v1/merchant/places",

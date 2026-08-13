@@ -243,6 +243,14 @@ async function loadMyProfile() {
         : `다음 레벨까지 ${formatWon(s.remaining_to_next)}`;
     document.getElementById('my-cert-count').textContent = s.certification_count;
 
+    // 탐험가 칭호(2026-08-13, 방문한 서로 다른 매장 수 기반) — 절약금액 레벨과
+    // 독립된 축이라 별도 필드(explorer_*)로 채운다.
+    document.getElementById('my-explorer-title').textContent = s.explorer_title;
+    document.getElementById('my-explorer-count').textContent =
+      s.explorer_remaining_to_next == null
+        ? `방문한 곳 ${s.discovered_place_count}곳 · 최고 칭호 달성`
+        : `방문한 곳 ${s.discovered_place_count}곳 · 다음 칭호까지 ${s.explorer_remaining_to_next}곳`;
+
     const badges = [];
     if (s.certification_count >= 1) badges.push('첫 절약 인증');
     if (s.total_saved >= 100_000) badges.push('10만원 절약 달성');
