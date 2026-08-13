@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813q" />
+  <link rel="stylesheet" href="style.css?v=20260813r" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -272,8 +272,13 @@
       </div>
     </section>
 
-    <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 -->
-    <section id="screen-community" class="screen">
+    <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 — 기본 틀(검색/
+         AI 절약 플랜/MY)부터 다진 후 다시 켠다(사용자 지시, 2026-08-13). EXCHANGE와
+         정확히 같은 패턴 — 하단 네비 진입점만 hidden 처리, 백엔드
+         (app/api/v1/reports.py 등)와 이 화면 자체는 그대로 남겨둔다. data-goto로
+         이 화면에 들어오는 다른 진입점은 없다(확인 완료). hidden만 떼면 바로
+         복구된다. -->
+    <section id="screen-community" class="screen hidden">
       <header class="screen-header">
         <h1>COMMUNITY</h1>
         <p class="subtitle">제보와 검증으로 우리 지역 절약 데이터를 함께 만들어요</p>
@@ -488,12 +493,12 @@
       <button class="nav-btn" data-screen="my">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg></span><span class="nav-label">MY</span>
       </button>
-      <button class="nav-btn" data-screen="community">
+      <button class="nav-btn hidden" data-screen="community">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg></span><span class="nav-label">COMMUNITY</span>
       </button>
     </nav>
   </div>
 
-  <script src="app.js?v=20260813q"></script>
+  <script src="app.js?v=20260813r"></script>
 </body>
 </html>
