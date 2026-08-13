@@ -50,61 +50,6 @@ body {
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.12);
 }
 
-/* --- 앱 로딩 화면(2026-08-13) — 위치 확인/로그인 세션 확인/첫 검색이 실제로
-   끝날 때까지 가려준다. app.js가 hidden을 붙이면 사라진다. --- */
-#app-loading {
-  position: fixed;
-  inset: 0;
-  max-width: 480px;
-  margin: 0 auto;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  background: linear-gradient(180deg, #eef2f9 0%, #e6ecf5 100%);
-  transition: opacity 0.35s ease;
-}
-
-/* .hidden(전역, display:none !important)을 바로 붙이면 트랜지션이 씹히므로,
-   app.js는 먼저 .fade-out으로 살짝 사라지게 한 다음 트랜지션이 끝나면 .hidden을
-   붙여 완전히 제거한다. */
-#app-loading.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.app-loading-mark {
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: var(--primary-dark);
-  letter-spacing: -0.01em;
-}
-
-.app-loading-spinner {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 3px solid rgba(13, 148, 136, 0.18);
-  border-top-color: var(--primary);
-  animation: app-loading-spin 0.8s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-loading-spinner { animation: none; }
-}
-
-@keyframes app-loading-spin {
-  to { transform: rotate(360deg); }
-}
-
-.app-loading-text {
-  font-size: 0.85rem;
-  color: var(--ink-soft);
-  font-weight: 600;
-}
-
 /* --- Glass base --- */
 .glass {
   background: var(--glass-bg);

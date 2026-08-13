@@ -1447,8 +1447,8 @@ async function runSearch() {
 // --- 첫 로드: GPS로 실제 위치를 자동으로 잡는다 (2026-08-13) ---
 // 기존엔 "내 위치" 버튼을 눌러야만 geolocation을 물어봐서, 안 누르면 항상
 // 하드코딩된 평택시청 좌표로만 보였다(사용자 리포트: "자꾸 평택시청으로만 나옴").
-// 로딩 화면이 가려주는 동안 위치 확인을 먼저 시도하고, 실패/거부/타임아웃일 때만
-// 평택시청으로 폴백한다 — 그 사실을 숨기지 않고 결과 목록 위에 짧게 알린다.
+// 페이지 로드 시 위치 확인을 먼저 시도하고, 실패/거부/타임아웃일 때만 평택시청
+// 으로 폴백한다 — 그 사실을 숨기지 않고 결과 목록 위에 짧게 알린다.
 const PYEONGTAEK_FALLBACK = { lat: 36.9925, lng: 127.113 };
 let usedFallbackLocation = false;
 
@@ -1466,18 +1466,11 @@ function getGeolocationOnce(timeoutMs) {
   });
 }
 
-function dismissAppLoading() {
-  const el = document.getElementById('app-loading');
-  if (!el) return;
-  el.classList.add('fade-out');
-  setTimeout(() => el.classList.add('hidden'), 400);
-}
-
 async function initialLoad() {
-  // 위치 확인 자체에 5초, 전체 로딩 화면은 최대 6초만 기다린다 — 그 이상 걸리면
-  // 폴백 좌표로라도 화면을 띄운다(무한 로딩 방지).
-  const APP_LOAD_HARD_CAP_MS = 6000;
-  const hardCap = new Promise((resolve) => setTimeout(() => resolve(null), APP_LOAD_HARD_CAP_MS));
+  // 위치 확인은 최대 6초까지만 기다린다 — 그 이상 걸리면 폴백 좌표로라도
+  // 화면을 띄운다(무한 대기 방지).
+  const GEOLOCATION_HARD_CAP_MS = 6000;
+  const hardCap = new Promise((resolve) => setTimeout(() => resolve(null), GEOLOCATION_HARD_CAP_MS));
 
   const located = await Promise.race([getGeolocationOnce(5000), hardCap]);
   const { lat, lng } = located || PYEONGTAEK_FALLBACK;
@@ -1490,7 +1483,6 @@ async function initialLoad() {
 
   initMap(lat, lng);
   await runSearch().catch(() => {});
-  dismissAppLoading();
 }
 
 initialLoad();
