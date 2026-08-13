@@ -1312,20 +1312,6 @@ async function runSearch() {
 initMap(36.9925, 127.113);
 runSearch();
 
-// 첫 방문 온보딩: AI 절약 플랜을 지도보다 먼저 보여준다 — "SaveMap 구조 재설계
-// 제안서"(2026-08-13) §4 추천안 "지금은 A(현행 topbar 진입) 보강" 반영. 하단
-// 탭/topbar 구조는 그대로 두고 첫인상만 바꾸는 최소 비용 개선이다. 두 번째
-// 방문부터는 지금처럼 topbar의 "AI 추천" 버튼으로만 진입한다.
-try {
-  const ONBOARDING_KEY = 'savemap_ai_plan_onboarded_v1';
-  if (!localStorage.getItem(ONBOARDING_KEY)) {
-    localStorage.setItem(ONBOARDING_KEY, '1');
-    openRoutePlanSheet();
-  }
-} catch {
-  // localStorage 접근 불가(프라이빗 모드 등) — 온보딩 노출을 못 해도 앱 사용엔 지장 없음
-}
-
 // --- COMMUNITY: 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록) ---
 let reportImageUrl = null;
 let reportLat = null;
