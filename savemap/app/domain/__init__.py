@@ -1,5 +1,6 @@
 from app.domain.base import Base
 from app.domain.menu_item import MenuItem
+from app.domain.merchant_verification import MerchantVerification
 from app.domain.offer import Offer, OfferPaymentBenefit
 from app.domain.offer_verification import OfferVerification
 from app.domain.payment_method import PaymentMethodDerived
@@ -27,4 +28,5 @@ __all__ = [
     "MenuItem",
     "StoreStatusUpdate",
     "StoreInterest",
+    "MerchantVerification",
 ]

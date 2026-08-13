@@ -59,6 +59,12 @@ class UnverifiedPaymentMethodError(SaveMapError):
     message = "인증되지 않은 결제수단입니다"
 
 
+class MerchantNotVerifiedError(SaveMapError):
+    code = "SM4032"
+    http_status = status.HTTP_403_FORBIDDEN
+    message = "사업자 인증이 필요한 기능입니다"
+
+
 class PartnerCircuitOpenError(SaveMapError):
     code = "SM5031"
     http_status = status.HTTP_503_SERVICE_UNAVAILABLE

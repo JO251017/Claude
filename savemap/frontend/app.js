@@ -283,6 +283,16 @@ async function loadMyProfile() {
   } catch {
     // 자산 개수는 부가 정보라 실패해도 무시
   }
+
+  // 사업자 콘솔 바로가기는 인증된 사용자에게만 보인다(2-3, 2026-08-13) — 서버도
+  // require_merchant_verified로 실제 접근을 막지만, 인증 안 된 사용자가 버튼을
+  // 눌렀다가 403을 만나는 것보단 애초에 안 보이는 게 낫다.
+  try {
+    const status = await apiFetch('/users/me/merchant-status');
+    document.getElementById('merchant-console-btn').classList.toggle('hidden', !status.is_verified_merchant);
+  } catch {
+    // 조회 실패 시엔 안전하게 숨긴 상태를 유지
+  }
 }
 
 // --- 바텀시트: 드래그로 높이를 자유롭게 조절 (기존엔 탭으로 두 단계만 토글되는

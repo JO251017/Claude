@@ -8,6 +8,7 @@ from app.core.errors import MenuItemNotFoundError, OfferNotFoundError, PlaceNotF
 from app.core.spatial import ewkt_point, to_h3
 from app.domain.enums import Category, Layer, SourceType
 from app.domain.menu_item import MenuItem
+from app.domain.merchant_verification import MerchantVerification
 from app.domain.offer import Offer
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
@@ -230,3 +231,47 @@ async def delete_menu_item(session: AsyncSession, owner_user_id: str, menu_item_
     item = await _get_owned_menu_item(session, owner_user_id, menu_item_id)
     await session.delete(item)
     await session.commit()
+
+
+# --- 사업자 인증 (2-3, 2026-08-13) ---
+async def is_merchant_verified(session: AsyncSession, user_id: str) -> bool:
+    row = (
+        await session.execute(
+            select(MerchantVerification.id).where(MerchantVerification.user_id == user_id)
+        )
+    ).first()
+    return row is not None
+
+
+async def grant_merchant_verification(
+    session: AsyncSession, user_id: str, note: str | None = None
+) -> MerchantVerification:
+    """이미 인증돼 있으면 note만 갱신(upsert) — 관리자가 실수로 두 번 눌러도 안전하다."""
+    existing = (
+        await session.execute(
+            select(MerchantVerification).where(MerchantVerification.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.note = note
+        await session.commit()
+        await session.refresh(existing)
+        return existing
+    row = MerchantVerification(user_id=user_id, note=note)
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+async def revoke_merchant_verification(session: AsyncSession, user_id: str) -> bool:
+    existing = (
+        await session.execute(
+            select(MerchantVerification).where(MerchantVerification.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return False
+    await session.delete(existing)
+    await session.commit()
+    return True

@@ -3,8 +3,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireAdminDep, SessionDep
+from app.api.schemas.merchant import MerchantVerificationGrant, MerchantVerificationResponse
 from app.core.errors import InvalidCsvError
 from app.domain.place import Place
+from app.sources.merchant_console.service import (
+    grant_merchant_verification,
+    revoke_merchant_verification,
+)
 from app.sources.public_api.good_price import (
     get_import_job,
     parse_csv_bytes,
@@ -19,6 +24,28 @@ from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
 router = APIRouter(tags=["admin"], prefix="/admin")
+
+
+@router.post("/merchant-verifications", response_model=MerchantVerificationResponse, status_code=201)
+async def grant_merchant_verification_endpoint(
+    payload: MerchantVerificationGrant,
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> MerchantVerificationResponse:
+    """특정 사용자에게 사업자 콘솔 접근 권한을 부여한다(2-3, 2026-08-13). 자동 심사는
+    이번 최소 기능 범위에 없다 — 관리자가 사업자등록증 등을 오프라인으로 확인한 뒤
+    이 엔드포인트로 수동 부여한다. 이미 인증돼 있으면 note만 갱신(upsert)한다."""
+    row = await grant_merchant_verification(session, payload.user_id, note=payload.note)
+    return MerchantVerificationResponse(user_id=row.user_id, note=row.note, verified_at=row.created_at)
+
+
+@router.delete("/merchant-verifications/{user_id}", status_code=204)
+async def revoke_merchant_verification_endpoint(
+    user_id: str,
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> None:
+    await revoke_merchant_verification(session, user_id)
 
 
 @router.post("/sync/public-data")

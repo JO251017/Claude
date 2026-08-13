@@ -2,15 +2,28 @@ from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
-from app.api.schemas.user import SavingsSummaryResponse
+from app.api.schemas.user import MerchantStatusResponse, SavingsSummaryResponse
 from app.gamification.service import (
     compute_visit_title,
     get_explorer_summary,
     get_recommend_summary,
     get_savings_summary,
 )
+from app.sources.merchant_console.service import is_merchant_verified
 
 router = APIRouter(tags=["users"], prefix="/users")
+
+
+@router.get("/me/merchant-status", response_model=MerchantStatusResponse)
+async def my_merchant_status(
+    user_id: str = RequireUserDep,
+    session: AsyncSession = SessionDep,
+) -> MerchantStatusResponse:
+    """MY 탭이 "사업자 콘솔" 바로가기를 보여줄지 결정하려고 호출한다(2-3,
+    2026-08-13). savings-summary에 필드를 더 얹는 대신 별도 엔드포인트로 분리했다
+    — savings-summary가 이미 필드가 많아지고 있어서."""
+    verified = await is_merchant_verified(session, user_id)
+    return MerchantStatusResponse(is_verified_merchant=verified)
 
 
 @router.get("/me/savings-summary", response_model=SavingsSummaryResponse)

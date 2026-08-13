@@ -5,6 +5,19 @@ from pydantic import BaseModel
 from app.domain.enums import Category, Layer
 
 
+class MerchantVerificationGrant(BaseModel):
+    """관리자가 특정 사용자에게 사업자 인증을 부여할 때 쓰는 요청 바디(2-3, 2026-08-13)."""
+
+    user_id: str
+    note: str | None = None
+
+
+class MerchantVerificationResponse(BaseModel):
+    user_id: str
+    note: str | None = None
+    verified_at: datetime
+
+
 class PlaceCreate(BaseModel):
     name: str
     address: str | None = None

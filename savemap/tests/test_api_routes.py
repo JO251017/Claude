@@ -183,3 +183,61 @@ def test_merchant_create_place_rejects_invalid_body_with_auth_header_present(cli
 def test_unknown_route_returns_404_not_500(client):
     resp = client.get("/v1/this-route-does-not-exist")
     assert resp.status_code == 404
+
+
+def test_grant_merchant_verification_requires_admin_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/merchant-verifications", json={"user_id": "user-1"})
+    assert resp.status_code == 401
+
+
+def test_revoke_merchant_verification_requires_admin_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.delete("/v1/admin/merchant-verifications/user-1")
+    assert resp.status_code == 401
+
+
+def test_merchant_status_requires_auth(client):
+    resp = client.get("/v1/users/me/merchant-status")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_merchant_route_rejects_authenticated_but_unverified_user(client):
+    # 로그인은 됐지만(require_user_id 통과) merchant_verification에 행이 없는
+    # 사용자는 403(SM4032)으로 막혀야 한다 — 사업자 콘솔 접근 제어(2-3)가 실제
+    # 라우트 의존성 체인에 제대로 물려 있는지 end-to-end로 확인한다.
+    from app.api.deps import db_session, require_user_id
+    from app.main import app
+
+    class _EmptyVerificationResult:
+        def first(self):
+            return None
+
+    class _UnverifiedSession:
+        async def execute(self, *a, **kw):
+            return _EmptyVerificationResult()
+
+    async def _fake_user_id() -> str:
+        return "user-unverified"
+
+    async def _fake_db_session():
+        yield _UnverifiedSession()
+
+    app.dependency_overrides[require_user_id] = _fake_user_id
+    app.dependency_overrides[db_session] = _fake_db_session
+    try:
+        resp = client.post(
+            "/v1/merchant/places",
+            json={"name": "가게", "lat": 36.99, "lng": 127.11},
+        )
+    finally:
+        app.dependency_overrides.pop(require_user_id, None)
+        app.dependency_overrides.pop(db_session, None)
+
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "SM4032"

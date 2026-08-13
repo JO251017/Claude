@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_session
-from app.core.errors import AuthenticationRequiredError
+from app.core.errors import AuthenticationRequiredError, MerchantNotVerifiedError
 from app.core.security import decode_supabase_jwt
+from app.sources.merchant_console.service import is_merchant_verified
 
 
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -37,6 +38,20 @@ async def require_user_id(authorization: str | None = Header(default=None)) -> s
     return user_id
 
 
+async def require_merchant_verified(
+    user_id: str = Depends(require_user_id),
+    session: AsyncSession = Depends(db_session),
+) -> str:
+    """사업자 콘솔 접근 제어(2-3, 2026-08-13) — 로그인만으론 부족하고
+    merchant_verification에 이 user_id 행이 있어야 통과한다. "사업자 콘솔은
+    추후에 사업자 증명된 사용자만 보이도록"(사용자 지시) — 프론트에서 버튼을
+    숨기는 것과 별개로, 숨긴 버튼을 안 눌러도 API를 직접 두드리면 뚫리지 않도록
+    서버에서도 실제로 막는다."""
+    if not await is_merchant_verified(session, user_id):
+        raise MerchantNotVerifiedError()
+    return user_id
+
+
 async def require_admin_key(x_admin_key: str | None = Header(default=None)) -> None:
     """관리자 전용 엔드포인트 공통 인증 — ADMIN_SYNC_KEY가 설정 안 돼 있으면 어떤 키를
     보내도 항상 거부한다. 단순 `!=` 문자열 비교는 일치하는 접두 길이에 따라 비교
@@ -53,3 +68,4 @@ SessionDep = Depends(db_session)
 UserDep = Depends(current_user_id)
 RequireUserDep = Depends(require_user_id)
 RequireAdminDep = Depends(require_admin_key)
+RequireMerchantVerifiedDep = Depends(require_merchant_verified)

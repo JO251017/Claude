@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequireUserDep, SessionDep
+from app.api.deps import RequireMerchantVerifiedDep, SessionDep
 from app.api.schemas.merchant import (
     MenuItemAnalyzeResponse,
     MenuItemCreate,
@@ -73,7 +73,7 @@ def _offer_response(offer: Offer) -> OfferResponse:
 @router.post("/places", response_model=PlaceResponse, status_code=201)
 async def create_place(
     payload: PlaceCreate,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> PlaceResponse:
     place = await service.create_place(
@@ -91,7 +91,7 @@ async def create_place(
 
 @router.get("/places", response_model=list[PlaceResponse])
 async def list_places(
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> list[PlaceResponse]:
     places = await service.list_places(session, user_id)
@@ -101,7 +101,7 @@ async def list_places(
 @router.post("/offers", response_model=OfferResponse, status_code=201)
 async def create_offer(
     payload: OfferCreate,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.create_offer(
@@ -121,7 +121,7 @@ async def create_offer(
 
 @router.get("/offers", response_model=list[OfferResponse])
 async def list_offers(
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> list[OfferResponse]:
     offers = await service.list_offers(session, user_id)
@@ -131,7 +131,7 @@ async def list_offers(
 @router.get("/offers/{offer_id}", response_model=OfferResponse)
 async def get_offer(
     offer_id: int,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.get_offer(session, user_id, offer_id)
@@ -142,7 +142,7 @@ async def get_offer(
 async def update_offer(
     offer_id: int,
     payload: OfferUpdate,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> OfferResponse:
     offer = await service.update_offer(
@@ -161,7 +161,7 @@ async def update_offer(
 @router.delete("/offers/{offer_id}", status_code=204)
 async def delete_offer(
     offer_id: int,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> None:
     await service.delete_offer(session, user_id, offer_id)
@@ -170,7 +170,7 @@ async def delete_offer(
 @router.post("/menu-items/analyze", response_model=MenuItemAnalyzeResponse)
 async def analyze_menu_photo(
     image: UploadFile = File(...),
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
 ) -> MenuItemAnalyzeResponse:
     """메뉴판 사진 한 장에서 AI가 메뉴명·가격을 통째로 읽어온다. DB에는 저장하지
     않고(사용자 확인 전 단계), 확인 후에는 기존 메뉴 등록 API로 하나씩 저장한다."""
@@ -197,7 +197,7 @@ async def analyze_menu_photo(
 @router.post("/menu-items", response_model=MenuItemResponse, status_code=201)
 async def create_menu_item(
     payload: MenuItemCreate,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> MenuItemResponse:
     item, cmp = await service.create_menu_item(
@@ -214,7 +214,7 @@ async def create_menu_item(
 @router.get("/places/{place_id}/menu-items", response_model=list[MenuItemResponse])
 async def list_menu_items(
     place_id: int,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> list[MenuItemResponse]:
     items = await service.list_menu_items_for_owner(session, user_id, place_id)
@@ -225,7 +225,7 @@ async def list_menu_items(
 async def update_menu_item(
     menu_item_id: int,
     payload: MenuItemUpdate,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> MenuItemResponse:
     item, cmp = await service.update_menu_item(
@@ -237,7 +237,7 @@ async def update_menu_item(
 @router.delete("/menu-items/{menu_item_id}", status_code=204)
 async def delete_menu_item(
     menu_item_id: int,
-    user_id: str = RequireUserDep,
+    user_id: str = RequireMerchantVerifiedDep,
     session: AsyncSession = SessionDep,
 ) -> None:
     await service.delete_menu_item(session, user_id, menu_item_id)

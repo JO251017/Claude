@@ -1,6 +1,12 @@
 from pydantic import BaseModel
 
 
+class MerchantStatusResponse(BaseModel):
+    """MY 탭 "사업자 콘솔" 바로가기를 조건부로 보여줄지 판단하는 용도(2-3, 2026-08-13)."""
+
+    is_verified_merchant: bool
+
+
 class SavingsSummaryResponse(BaseModel):
     total_saved: float
     level: int
