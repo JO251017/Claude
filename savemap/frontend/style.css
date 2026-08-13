@@ -1508,13 +1508,33 @@ select:focus {
   align-items: flex-end;
 }
 
+/* 시트에 높이 제한이 없어서, 내용이 길어지면(리포트+대표메뉴+코스 목록 등)
+   시트 자체가 화면 위로 넘쳐 올라가 상단의 닫기(X) 버튼이 뷰포트 밖으로
+   밀려나 눌리지 않는 실제 버그가 있었다(사용자 리포트, 2026-08-13) —
+   "닫기/지도 조작이 안 된다"는 증상은 사실 닫기 버튼에 손이 안 닿는 것이었다.
+   시트 높이를 뷰포트로 캡핑하고, 스크롤은 내용 쪽(#detail-content/
+   #route-plan-content)에서만 일어나게 해서 닫기 버튼은 항상 같은 자리에 고정한다. */
 .detail-sheet {
   position: relative;
   width: 100%;
   max-width: 480px;
+  max-height: 88vh;
   margin: 0 auto;
   border-radius: 24px 24px 0 0;
   padding: 22px 18px 28px;
+  display: flex;
+  flex-direction: column;
+}
+
+#detail-content,
+#route-plan-content {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* flex 컬럼 안에서 min-height의 기본값(auto)은 내용 크기만큼 안 줄어들려고
+     해서 overflow:auto가 무시되는 흔한 함정이 있다 — 0으로 명시해야 실제로
+     시트 높이 안에서 스크롤된다. */
+  flex: 1;
+  min-height: 0;
 }
 
 .detail-close {
@@ -1526,6 +1546,7 @@ select:focus {
   color: var(--ink-soft);
   cursor: pointer;
   display: flex;
+  z-index: 1;
 }
 
 .detail-close svg {
