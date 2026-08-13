@@ -75,26 +75,34 @@ function avatarGrowthStageFor(growthScore) {
 // --- 아바타 스프라이트: 귀여운 강아지, 도트(픽셀아트) 스타일 (사용자 지시,
 // 2026-08-13) --- 예전엔 성장 단계마다 서로 다른 라인아이콘(새싹→나침반→...→
 // 왕관)으로 아예 바뀌었다. 다마고치는 "같은 아이가 자란다"는 감각이 핵심이라,
-// 이제는 강아지 하나를 11x11 도트 그리드로 그리고 성장 단계에 따라 목줄/리본
-// 같은 장식만 덧그린다. 좌우 대칭 패턴이라 절반만 손으로 그리지 않고 그대로
-// 다 적었다 — 한 줄이 11칸이면 다 맞는지 눈으로도 세기 쉽다.
+// 이제는 강아지 하나를 도트 그리드로 그리고 성장 단계에 따라 목줄/리본 같은
+// 장식만 덧그린다. 처음엔 얼굴(머리)만 그렸더니 "프로필 사진처럼 보인다"는
+// 지적을 받아, 목/가슴/앞발/꼬리까지 있는 전신(13x16)으로 다시 그렸다 —
+// 좌우 대칭 패턴이라 절반만 손으로 그리지 않고 그대로 다 적었다(한 줄이 13칸인지
+// 눈으로도 세기 쉽게).
 const DOG_PIXEL_ROWS = [
-  '..ee...ee..',
-  '.eee...eee.',
-  'eeeeeeeeeee',
-  'ehhhhhhhhhe',
-  'hhhhhhhhhhh',
-  'hhkhhhhhkhh',
-  'hhhhhhhhhhh',
-  'hhhwwwwwhhh',
-  'hhwwkkkwwhh',
-  'hhhwwwwwhhh',
-  '.hhhhhhhhh.',
-].map((row) => row.slice(0, 11)); // 각 행이 반드시 11칸이 되도록 안전장치
+  '...ee...ee...', // 귀 끝
+  '..eee...eee..',
+  '.eeeeeeeeeee.',
+  '.ehhhhhhhhhe.', // 머리
+  '.hhhhhhhhhhh.',
+  '.hhkhhhhhkhh.', // 눈
+  '.hhhhhhhhhhh.',
+  '.hhhwwwwwhhh.', // 주둥이 시작
+  '.hhwwkkkwwhh.', // 코
+  '.hhhwwwwwhhh.',
+  '..hhhhhhhhh..', // 턱
+  '....hhhhh....', // 목 (좁아짐 — 목줄이 여기 얹힌다)
+  '..hhhhhhhhh..', // 어깨/가슴
+  '.hhhhwwwhhhh.', // 가슴 흰 무늬
+  '.hhhww.wwhhh.', // 앞발 두 개
+  '....ww.ww....', // 앞발 바닥
+].map((row) => row.slice(0, 13)); // 각 행이 반드시 13칸이 되도록 안전장치
 const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
 
 function pixelDogSvg({ collar = false, bandana = false } = {}) {
-  const size = DOG_PIXEL_ROWS.length;
+  const width = DOG_PIXEL_ROWS[0].length;
+  const height = DOG_PIXEL_ROWS.length;
   const rects = [];
   DOG_PIXEL_ROWS.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) {
@@ -103,19 +111,22 @@ function pixelDogSvg({ collar = false, bandana = false } = {}) {
       rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${DOG_PALETTE[ch]}"/>`);
     }
   });
-  // 목줄(3단계 이상) — 턱 아래 마지막 줄을 포인트 컬러로 덧그린다.
+  // 꼬리 — 몸통 오른쪽에 항상 붙어 있는 기본 파츠(성장 단계와 무관).
+  rects.push(`<rect x="${width - 1}" y="12" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
+  rects.push(`<rect x="${width - 1}" y="13" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
+  // 목줄(3단계 이상) — 목(좁아지는 줄, row 11) 색을 포인트 컬러로 덧그린다.
   if (collar) {
-    for (let x = 1; x <= 9; x++) {
-      rects.push(`<rect x="${x}" y="${size - 1}" width="1" height="1" fill="#ef6f6f"/>`);
+    for (let x = 4; x <= 8; x++) {
+      rects.push(`<rect x="${x}" y="11" width="1" height="1" fill="#ef6f6f"/>`);
     }
   }
   // 리본(5단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
   if (bandana) {
-    for (let x = 4; x <= 6; x++) {
+    for (let x = 5; x <= 7; x++) {
       rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="#7c3aed"/>`);
     }
   }
-  return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
 }
 
 // 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
