@@ -143,6 +143,12 @@ body {
   gap: 8px;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .brand-pill {
   display: flex;
   align-items: center;
@@ -787,43 +793,22 @@ select:focus {
   padding: 4px 10px;
 }
 
-/* --- AI 절약 플랜 CTA (홈 화면 최상단) --- */
-.ai-route-cta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 14px;
-  border: none;
-  border-radius: var(--radius-sm);
-  text-align: left;
+/* --- AI 절약 플랜 진입 버튼 (로고 옆 작은 알약형, 2026-08-13) --- */
+/* .brand-pill을 그대로 이어받고, 클릭 가능하다는 걸 알 수 있게 포인트 색만 얹는다
+   — 새 비주얼 시스템을 만들지 않고 기존 SaveMap 로고 pill 디자인을 재사용한다. */
+.ai-recommend-pill {
+  border: 1px solid rgba(13, 148, 136, 0.35);
+  color: var(--primary-dark);
   cursor: pointer;
 }
 
-.ai-route-cta:hover {
+.ai-recommend-pill:hover {
   filter: brightness(1.03);
 }
 
 .ai-route-cta-icon {
-  font-size: 1.3rem;
-  flex-shrink: 0;
-}
-
-.ai-route-cta-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.ai-route-cta-text strong {
-  font-size: 0.86rem;
-  color: var(--ink);
-}
-
-.ai-route-cta-sub {
-  font-size: 0.7rem;
-  color: var(--ink-soft);
-  font-weight: 600;
+  font-size: 1rem;
+  margin-right: 2px;
 }
 
 /* --- AI 절약 플랜 결과: 코스 스톱 목록 --- */
