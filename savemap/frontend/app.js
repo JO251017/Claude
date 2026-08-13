@@ -112,6 +112,22 @@ function formatWon(amount) {
   return `₩${Math.round(amount || 0).toLocaleString()}`;
 }
 
+// --- 절약 토스트(5번 항목, 2026-08-13) ---
+// 발견/추천/인증 성공 직후 "지금 절약하고 있다"는 걸 짧게 체감시킨다. 문구에는
+// 항상 실제 응답값만 쓴다(지어낸 숫자 없음) — 인증 성공 시 amount는 서버가 계산한
+// 실제 절약액이고, 발견/추천은 금액이 없는 행동이라 금액 없이 완료만 알린다.
+function showSavingsToast(text) {
+  const toast = document.createElement('div');
+  toast.className = 'savings-toast';
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('savings-toast--show'));
+  setTimeout(() => {
+    toast.classList.remove('savings-toast--show');
+    setTimeout(() => toast.remove(), 300);
+  }, 1800);
+}
+
 async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
   const token = await getAccessToken();
@@ -778,18 +794,51 @@ function savingsReportHtml(r) {
 
 const STATUS_LABELS = { open: '🟢 영업중', closed: '🔴 휴무', temp_closed: '🟠 임시 휴무' };
 
+// 사람이 읽는 상대시간("3일 전 확인됨") — last_verified_at을 그대로 노출하지
+// 않고 변환만 한다(10번 항목, 2026-08-13). 지어낸 값 아님, ISO 문자열 그대로 계산.
+function relativeTimeFromNow(isoString) {
+  if (!isoString) return null;
+  const then = new Date(isoString).getTime();
+  if (Number.isNaN(then)) return null;
+  const diffMin = Math.floor((Date.now() - then) / 60000);
+  if (diffMin < 1) return '방금 확인됨';
+  if (diffMin < 60) return `${diffMin}분 전 확인됨`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}시간 전 확인됨`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 30) return `${diffDay}일 전 확인됨`;
+  return `${Math.floor(diffDay / 30)}개월 전 확인됨`;
+}
+
 function openOfferDetail(r) {
   const shortCategory = r.category_name ? r.category_name.split(' > ').pop() : '';
   const kakaoUrl = r.kakao_url || `https://map.kakao.com/link/search/${encodeURIComponent(r.place_name)}`;
   const statusLabel = STATUS_LABELS[r.business_status] || '';
+  // 무료주차 배지(10번 항목) — offer.category가 free_parking일 때만, 실제 등록된
+  // 조건 그대로.
+  const freeParkingBadge = r.category === 'free_parking' ? '<span class="badge badge--parking">🅿️ 무료주차</span>' : '';
+  // 기준가 vs 실제가 숫자 나란히 표시(10번 항목) — 둘 다 있고 서로 다를 때만.
+  const priceCompareHtml =
+    r.base_price > 0 && r.final_price > 0 && r.base_price !== r.final_price
+      ? `<div class="price-compare-row">
+          <span class="price-compare-base">기준가 ${Math.round(r.base_price).toLocaleString()}원</span>
+          <span class="price-compare-arrow">→</span>
+          <span class="price-compare-final">실제가 ${Math.round(r.final_price).toLocaleString()}원</span>
+        </div>`
+      : '';
+  const lastVerifiedText = relativeTimeFromNow(r.last_verified_at);
+
   detailContent.innerHTML = `
     <div class="badge-group">
       <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
       ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
+      ${freeParkingBadge}
     </div>
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
     <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
+    ${lastVerifiedText ? `<div class="last-verified-line">🕐 ${lastVerifiedText}</div>` : ''}
+    ${priceCompareHtml}
 
     ${r.signature_menu ? `
     <div class="menu-highlight-card">
@@ -815,13 +864,30 @@ function openOfferDetail(r) {
 
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
-      <button type="button" class="btn-secondary" id="detail-recommend-btn">👍 추천</button>
     </div>
-    <div id="detail-recommend-msg"></div>
 
-    <div class="visit-row">
-      <button type="button" class="btn-primary btn-discover" id="detail-discover-btn">📍 발견하기</button>
-      <p class="subtitle">매장 반경 50m 이내에서만 가능해요. 한 매장당 최초 1회만 인정돼요.</p>
+    <!-- 현장 인증 통합(10번 항목, 2026-08-13) — 예전엔 "발견하기"(관심 표시)와
+         "영수증/직접 인증"이 서로 다른 섹션으로, 추천은 위 detail-actions에
+         따로 있었다. 사용자 확정(2-2): "영수증 인증을 방문횟수로 해, 기존
+         영수증 인증은 숨기고 방문횟수에서 참고하도록" — 발견/추천/인증 세
+         행동을 "현장에서 할 수 있는 3가지 행동" 하나의 흐름으로 묶는다.
+         백엔드 API(submit_status_update/certify 계열)는 변경 없음, 호출
+         순서와 문구만 재구성했다. -->
+    <div class="onsite-verify-section">
+      <div class="onsite-verify-title">📍 현장에서 할 수 있는 3가지 행동</div>
+      <div class="onsite-actions-row">
+        <button type="button" class="onsite-action-btn" id="detail-discover-btn">
+          <span class="onsite-action-icon">📍</span><span>발견하기</span>
+        </button>
+        <button type="button" class="onsite-action-btn" id="detail-recommend-btn">
+          <span class="onsite-action-icon">👍</span><span>추천</span>
+        </button>
+        <button type="button" class="onsite-action-btn" id="detail-receipt-btn">
+          <span class="onsite-action-icon">🧾</span><span>인증</span>
+        </button>
+      </div>
+      <p class="subtitle onsite-verify-hint">발견하기는 매장 반경 50m 이내에서만, 한 매장당 최초 1회만 인정돼요.</p>
+      <div id="detail-recommend-msg"></div>
       <div id="detail-visit-msg"></div>
       <p class="interest-count" id="detail-interest-count"></p>
       <button type="button" class="btn-text" id="detail-report-closed-btn">혹시 휴무인가요?</button>
@@ -830,13 +896,6 @@ function openOfferDetail(r) {
           <button type="button" class="btn-visit" data-status="closed">휴무</button>
           <button type="button" class="btn-visit" data-status="temp_closed">임시 휴무</button>
         </div>
-      </div>
-    </div>
-
-    <div class="certify-row">
-      <span class="verify-label">실제로 식사하셨나요? 영수증으로 인증하면 신뢰도에 더 크게 반영돼요.</span>
-      <div class="detail-actions">
-        <button type="button" class="btn-primary" id="detail-receipt-btn">🧾 영수증으로 인증</button>
       </div>
       <input type="file" id="detail-receipt-input" accept="image/*" capture="environment" class="hidden" />
       <button type="button" class="btn-text" id="detail-simple-certify-btn">영수증 없이 직접 입력해서 인증</button>
@@ -860,9 +919,9 @@ function openOfferDetail(r) {
   document.getElementById('detail-directions-btn').addEventListener('click', () => {
     window.open(`https://map.kakao.com/link/to/${encodeURIComponent(r.place_name)},${r.lat},${r.lng}`, '_blank');
   });
-  document.getElementById('detail-recommend-btn').addEventListener('click', (e) => recommendPlace(r, e.target));
+  document.getElementById('detail-recommend-btn').addEventListener('click', (e) => recommendPlace(r, e.currentTarget));
 
-  document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.target));
+  document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.currentTarget));
   document.getElementById('detail-report-closed-btn').addEventListener('click', () => {
     document.getElementById('detail-closed-row').classList.remove('hidden');
   });
@@ -1135,6 +1194,7 @@ async function recommendPlace(r, btn) {
     if (data.is_new) {
       triggerAvatarGrowthFeedback();
       loadMyProfile();
+      showSavingsToast('👍 추천 완료!');
     }
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
@@ -1346,9 +1406,12 @@ async function submitStatusUpdate(r, status, btn) {
         });
         document.getElementById('detail-interest-count').textContent = `누적 발견 ${data.interest_count}회`;
         msgEl.innerHTML = `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
-        // 발견하기도 아바타 성장치(발견+방문+추천 합산, 2-4)에 들어간다.
+        // 발견하기도 아바타 성장치(발견+방문+추천 합산, 2-4)에 들어간다. 휴무/임시
+        // 휴무 제보는 같은 API를 쓰지만 "절약 행동"은 아니라 토스트는 발견(open)일
+        // 때만 띄운다.
         triggerAvatarGrowthFeedback();
         loadMyProfile();
+        if (status === 'open') showSavingsToast('🧭 발견 완료!');
       } catch (err) {
         msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
       } finally {
@@ -1418,6 +1481,8 @@ async function certifyOffer(r) {
     loadSavingsBadge();
     triggerAvatarGrowthFeedback();
     loadMyProfile();
+    // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
+    showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   }
@@ -1468,6 +1533,8 @@ async function certifyWithReceipt(r, fileInput) {
     loadSavingsBadge();
     triggerAvatarGrowthFeedback();
     loadMyProfile();
+    // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
+    showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   } finally {
