@@ -143,12 +143,6 @@ body {
   gap: 8px;
 }
 
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .brand-pill {
   display: flex;
   align-items: center;
@@ -804,11 +798,6 @@ select:focus {
 
 .ai-recommend-pill:hover {
   filter: brightness(1.03);
-}
-
-.ai-route-cta-icon {
-  font-size: 1rem;
-  margin-right: 2px;
 }
 
 /* --- AI 절약 플랜 결과: 코스 스톱 목록 --- */

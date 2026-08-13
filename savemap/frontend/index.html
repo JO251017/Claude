@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813d" />
+  <link rel="stylesheet" href="style.css?v=20260813e" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -19,15 +19,14 @@
 
       <div class="floating-topbar">
         <div class="topbar-row">
-          <div class="topbar-left">
-            <div class="brand-pill glass">SaveMap</div>
-            <!-- 기존엔 아래쪽에 큰 배너 카드였던 AI 절약 플랜 진입 버튼을 로고 옆 작은
-                 알약형 버튼으로 옮김 — SaveMap 로고 pill과 같은 디자인(사용자 지시,
-                 2026-08-13). 클릭 동작(openRoutePlanSheet)은 그대로다. -->
-            <button type="button" id="ai-route-cta" class="brand-pill glass ai-recommend-pill">
-              <span class="ai-route-cta-icon">🤖</span>AI 추천
-            </button>
-          </div>
+          <div class="brand-pill glass">SaveMap</div>
+          <!-- 기존엔 아래쪽에 큰 배너 카드였던 AI 절약 플랜 진입 버튼을 오른쪽 끝단
+               작은 알약형 버튼으로 옮김 — 아이콘 없이 텍스트만, SaveMap 로고 pill과
+               같은 디자인(사용자 지시, 2026-08-13). topbar-row가
+               justify-content:space-between이라 xp-badge(RPG, 현재 hidden)가 없는
+               지금은 이 버튼이 자동으로 오른쪽 끝에 붙는다. 클릭 동작
+               (openRoutePlanSheet)은 그대로다. -->
+          <button type="button" id="ai-route-cta" class="brand-pill glass ai-recommend-pill">AI 추천</button>
           <!-- RPG 요소(레벨/칭호) 잠시 비활성화 — 기본 베이스 구조 완성 후 다시 켠다
                (사용자 지시, 2026-08-12). hidden만 떼면 바로 복구된다. -->
           <div class="xp-badge glass hidden" id="savings-badge">
@@ -444,6 +443,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813d"></script>
+  <script src="app.js?v=20260813e"></script>
 </body>
 </html>
