@@ -58,7 +58,6 @@ function characterAvatarFor(level) {
   return ICONS[icon];
 }
 
-let currentCategory = '';
 let merchantPlaces = [];
 
 function escapeHtml(str) {
@@ -263,21 +262,58 @@ async function loadMyProfile() {
   }
 }
 
-// --- 바텀시트 펼치기/접기 ---
+// --- 바텀시트: 드래그로 높이를 자유롭게 조절 (기존엔 탭으로 두 단계만 토글되는
+// 고정 높이였음 — 사용자 지시, 2026-08-13). 핸들을 눌러서 끌면 그 위치까지 실시간으로
+// 따라오고, 끌지 않고 탭만 하면 기존처럼 기본/확장 두 단계를 토글한다.
 const bottomSheet = document.getElementById('bottom-sheet');
-document.getElementById('sheet-toggle').addEventListener('click', () => {
-  bottomSheet.classList.toggle('expanded');
+const sheetToggleBtn = document.getElementById('sheet-toggle');
+
+const SHEET_MIN_PX = 110; // 핸들 + 개수 표시만 보이는 최소 높이
+const SHEET_DEFAULT_RATIO = 0.42;
+const SHEET_EXPANDED_RATIO = 0.82;
+const SHEET_MAX_RATIO = 0.88;
+
+function sheetContainerHeight() {
+  return bottomSheet.parentElement.clientHeight;
+}
+
+function setSheetHeightPx(px) {
+  const maxPx = sheetContainerHeight() * SHEET_MAX_RATIO;
+  bottomSheet.style.height = `${Math.min(Math.max(px, SHEET_MIN_PX), maxPx)}px`;
+}
+
+setSheetHeightPx(sheetContainerHeight() * SHEET_DEFAULT_RATIO);
+
+let sheetDrag = null;
+
+sheetToggleBtn.addEventListener('pointerdown', (e) => {
+  sheetDrag = { startY: e.clientY, startHeight: bottomSheet.getBoundingClientRect().height, moved: false };
+  bottomSheet.classList.add('dragging');
+  sheetToggleBtn.setPointerCapture(e.pointerId);
 });
 
-// --- 카테고리 칩 ---
-document.querySelectorAll('.chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
-    chip.classList.add('active');
-    currentCategory = chip.dataset.category;
-    runSearch();
-  });
+sheetToggleBtn.addEventListener('pointermove', (e) => {
+  if (!sheetDrag) return;
+  const dy = sheetDrag.startY - e.clientY; // 위로 끌수록 커짐
+  if (Math.abs(dy) > 6) sheetDrag.moved = true;
+  setSheetHeightPx(sheetDrag.startHeight + dy);
 });
+
+function endSheetDrag() {
+  if (!sheetDrag) return;
+  bottomSheet.classList.remove('dragging');
+  if (!sheetDrag.moved) {
+    // 드래그 없이 탭만 했으면 기존 동작대로 기본/확장 두 단계를 토글한다.
+    const container = sheetContainerHeight();
+    const mid = (container * SHEET_DEFAULT_RATIO + container * SHEET_EXPANDED_RATIO) / 2;
+    const isExpanded = bottomSheet.getBoundingClientRect().height > mid;
+    setSheetHeightPx(container * (isExpanded ? SHEET_DEFAULT_RATIO : SHEET_EXPANDED_RATIO));
+  }
+  sheetDrag = null;
+}
+
+sheetToggleBtn.addEventListener('pointerup', endSheetDrag);
+sheetToggleBtn.addEventListener('pointercancel', endSheetDrag);
 
 // --- 내 위치 사용 ---
 const useLocationBtn = document.getElementById('use-location-btn');
@@ -1164,39 +1200,6 @@ async function certifyWithReceipt(r, fileInput) {
   }
 }
 
-// --- 홈 히어로: "내 주변에서 최대 X원 절약 가능" ---
-let lastRegionLabel = '';
-let lastRegionCoords = null;
-
-async function updateRegionLabel(lat, lng) {
-  if (lastRegionCoords && Math.abs(lastRegionCoords.lat - lat) < 0.01 && Math.abs(lastRegionCoords.lng - lng) < 0.01) {
-    return lastRegionLabel;
-  }
-  try {
-    const res = await fetch(`${API_BASE}/geo/reverse?lat=${lat}&lng=${lng}`);
-    const data = await res.json();
-    lastRegionLabel = data.region || '';
-    lastRegionCoords = { lat, lng };
-  } catch {
-    lastRegionLabel = '';
-  }
-  return lastRegionLabel;
-}
-
-function renderSavingsHero(results) {
-  const heroEl = document.getElementById('savings-hero');
-  const prefix = lastRegionLabel ? `${lastRegionLabel} · ` : '';
-  if (!results || results.length === 0) {
-    heroEl.textContent = `${prefix}내 주변 절약 정보를 찾고 있어요`;
-    return;
-  }
-  const maxSavings = Math.max(...results.map((r) => r.total_savings || 0));
-  heroEl.textContent =
-    maxSavings > 0
-      ? `${prefix}내 주변에서 최대 ${Math.round(maxSavings).toLocaleString()}원 절약 가능`
-      : `${prefix}내 주변 절약 정보를 확인해보세요`;
-}
-
 // --- 검색 실행 ---
 async function runSearch() {
   const lat = document.getElementById('s-lat').value;
@@ -1204,20 +1207,16 @@ async function runSearch() {
   const radius = document.getElementById('s-radius').value;
 
   const params = new URLSearchParams({ lat, lng, radius_km: radius });
-  if (currentCategory) params.set('category', currentCategory);
 
   const resultsEl = document.getElementById('search-results');
   const countEl = document.getElementById('sheet-count');
   resultsEl.innerHTML = '<p class="empty-msg">주변 절약 기회를 찾는 중...</p>';
-
-  updateRegionLabel(parseFloat(lat), parseFloat(lng)).then(() => renderSavingsHero(lastResults));
 
   try {
     const data = await apiFetch(`/search?${params.toString()}`);
     lastResults = data.results;
     lastDiscovered = data.discovered_places || [];
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results, lastDiscovered);
-    renderSavingsHero(data.results);
 
     if (data.results.length === 0 && lastDiscovered.length === 0) {
       countEl.textContent = '주변에 절약 기회가 없어요';

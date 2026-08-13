@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813b" />
+  <link rel="stylesheet" href="style.css?v=20260813c" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -32,7 +32,6 @@
             </div>
           </div>
         </div>
-        <div class="savings-hero glass" id="savings-hero">내 주변 절약 정보를 찾고 있어요</div>
         <button type="button" id="ai-route-cta" class="ai-route-cta glass">
           <span class="ai-route-cta-icon">🤖</span>
           <span class="ai-route-cta-text">
@@ -51,14 +50,6 @@
             <option value="5">5km</option>
             <option value="10">10km</option>
           </select>
-        </div>
-        <div class="category-chips" id="category-chips">
-          <button class="chip active" data-category="">전체</button>
-          <button class="chip" data-category="free">무료</button>
-          <button class="chip" data-category="discount">할인</button>
-          <button class="chip" data-category="closing_soon">마감임박</button>
-          <button class="chip" data-category="free_parking">무료주차</button>
-          <button class="chip" data-category="local_benefit">지역혜택</button>
         </div>
       </div>
 
@@ -452,6 +443,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813b"></script>
+  <script src="app.js?v=20260813c"></script>
 </body>
 </html>

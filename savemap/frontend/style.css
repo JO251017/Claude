@@ -250,18 +250,6 @@ body {
   background: rgba(255, 255, 255, 0.92);
 }
 
-.category-chips {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-
-.category-chips::-webkit-scrollbar {
-  display: none;
-}
-
 .chip {
   flex-shrink: 0;
   background: var(--glass-bg-strong);
@@ -284,8 +272,8 @@ body {
   color: white;
 }
 
-/* AI 절약 플랜 Step1(활동)/Step2(조건) 선택 — .category-chips(가로 스크롤)와 달리
-   항목이 줄바꿈되도록 wrap한다. .chip을 그대로 재사용해서 새 비주얼 시스템을
+/* AI 절약 플랜 Step1(활동)/Step2(조건) 선택 — 항목 개수가 가변적이라 가로 스크롤
+   대신 줄바꿈(wrap)되게 한다. .chip을 그대로 재사용해서 새 비주얼 시스템을
    만들지 않는다. */
 .chip-group {
   display: flex;
@@ -338,6 +326,10 @@ body {
 }
 
 /* --- Bottom sheet --- */
+/* 높이는 JS(app.js의 setSheetHeightPx)가 인라인 style.height로 직접 조절한다 —
+   핸들을 드래그하면 그 위치를 실시간으로 따라간다(기존엔 탭으로 두 단계만 토글되는
+   고정 max-height였음, 사용자 지시 2026-08-13). 아래 height는 JS가 아직 안 붙었을
+   때를 위한 초기값일 뿐이다. */
 .bottom-sheet {
   position: absolute;
   left: 0;
@@ -350,14 +342,16 @@ body {
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: 0 -8px 32px rgba(30, 34, 51, 0.16);
   z-index: 10;
-  max-height: 42%;
+  height: 42%;
   display: flex;
   flex-direction: column;
-  transition: max-height 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: height 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.bottom-sheet.expanded {
-  max-height: 80%;
+/* 드래그로 끄는 동안은 트랜지션을 꺼서 손가락/포인터를 1:1로 즉시 따라오게 한다 —
+   트랜지션이 걸려 있으면 계속 뒤늦게 쫓아오는 느낌이 든다. */
+.bottom-sheet.dragging {
+  transition: none;
 }
 
 .sheet-handle-btn {
@@ -365,12 +359,17 @@ body {
   background: none;
   border: none;
   padding: 10px 20px 8px;
-  cursor: pointer;
+  cursor: grab;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  touch-action: none; /* 핸들 자체는 드래그 제스처 전용 — 페이지 스크롤과 충돌 방지 */
+}
+
+.sheet-handle-btn:active {
+  cursor: grabbing;
 }
 
 .sheet-handle {
@@ -786,16 +785,6 @@ select:focus {
   flex-shrink: 0;
   margin-left: 8px;
   padding: 4px 10px;
-}
-
-/* --- 홈 히어로 (내 주변 최대 절약 가능 금액) --- */
-.savings-hero {
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--primary-dark);
-  text-align: center;
 }
 
 /* --- AI 절약 플랜 CTA (홈 화면 최상단) --- */
