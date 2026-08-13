@@ -1528,10 +1528,19 @@ select:focus {
   margin-bottom: 16px;
 }
 
+/* 아바타를 감싸는 래퍼 — 머리 위 칭호 배지(.avatar-title-badge)와 장식
+   요소(.avatar-deco)를 아바타 원 기준으로 절대 위치시키기 위한 기준점(2-4,
+   2026-08-13). */
+.character-avatar-wrap {
+  position: relative;
+  display: inline-block;
+  margin: 0 auto 8px;
+}
+
 .character-avatar {
+  position: relative;
   width: 84px;
   height: 84px;
-  margin: 0 auto 10px;
   border-radius: 50%;
   background: linear-gradient(145deg, var(--primary), var(--primary-dark));
   color: white;
@@ -1546,17 +1555,74 @@ select:focus {
   height: 40px;
 }
 
+/* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다. */
+.character-avatar.avatar-halo {
+  box-shadow:
+    0 8px 20px rgba(13, 148, 136, 0.35),
+    0 0 0 4px rgba(251, 191, 36, 0.25),
+    0 0 24px 6px rgba(251, 191, 36, 0.55);
+  animation: avatar-halo-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes avatar-halo-pulse {
+  0%, 100% { box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35), 0 0 0 4px rgba(251, 191, 36, 0.25), 0 0 20px 4px rgba(251, 191, 36, 0.45); }
+  50% { box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35), 0 0 0 6px rgba(251, 191, 36, 0.35), 0 0 30px 10px rgba(251, 191, 36, 0.7); }
+}
+
+/* 발견/방문/추천 성공 직후 살짝 튀는 반응(다마고치식 "먹이 주면 반응하는" 감각,
+   2-4) — triggerAvatarGrowthFeedback()이 클래스를 껐다 켠다. */
+.character-avatar.avatar-bounce {
+  animation: avatar-bounce 0.5s ease;
+}
+
+@keyframes avatar-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.18) rotate(-4deg); }
+  55% { transform: scale(0.94) rotate(3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-avatar.avatar-halo { animation: none; }
+  .character-avatar.avatar-bounce { animation: none; }
+}
+
+/* 성장 단계가 오를수록 늘어나는 장식(별) — 다마고치처럼 "장식이 늘어나는" 느낌을
+   레이어드 SVG 대신 가볍게 구현한다. */
+.avatar-deco {
+  position: absolute;
+  font-size: 0.95rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+.avatar-deco--1 { top: -2px; right: -4px; }
+.avatar-deco--2 { bottom: 2px; left: -6px; }
+.avatar-deco--3 { top: 4px; left: -8px; font-size: 0.8rem; }
+
 .character-level {
   font-size: 0.85rem;
   font-weight: 800;
   color: var(--gold);
 }
 
-.character-title {
-  font-size: 1.05rem;
+/* 아바타 머리 위 칭호 배지(2-4) — 기존엔 아바타 아래 평문이었다. 사용자 지시:
+   "칭호 달성 시 아바타 머리위에 칭호 띄우고". */
+.avatar-title-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
   font-weight: 800;
   color: var(--ink);
-  margin-bottom: 10px;
+  box-shadow: var(--glass-shadow-sm);
+  z-index: 1;
 }
 
 .saving-amount {

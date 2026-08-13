@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813p" />
+  <link rel="stylesheet" href="style.css?v=20260813q" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -189,14 +189,19 @@
             <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
           </div>
 
-          <!-- RPG 요소(캐릭터 아바타/레벨/칭호/배지) 잠시 비활성화 — 기본 베이스
-               구조 완성 후 다시 켠다(사용자 지시, 2026-08-12). "누적 절약"만 핵심
-               지표라 그대로 남겨둔다. hidden만 떼면 바로 복구된다. -->
+          <!-- 아바타(다마고치식 성장, 2-4, 2026-08-13) — 예전엔 절약금액 레벨 기반
+               RPG 블록이었고 기본 베이스 완성 전까지 hidden이었다. 사용자 지시:
+               "다마고치 키우기 같은 형식 — 맵에서 가게 인증이나 추천기능을 통해
+               아바타가 성장하는 구조". 이제 발견/방문/추천(칭호 3종, 2-2)의 실제
+               누적 카운트 합계로 성장 단계가 정해진다 — 지어낸 별도 점수 없음.
+               hidden을 떼고 노출한다. -->
           <div class="character-card glass">
-            <div class="character-rpg-block hidden">
-              <div class="character-avatar" id="character-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg></div>
-              <div class="character-level" id="my-level-badge">Lv.1</div>
-              <div class="character-title" id="my-title">절약 초보</div>
+            <div class="character-rpg-block">
+              <div class="character-avatar-wrap">
+                <div class="avatar-title-badge" id="my-title">씨앗</div>
+                <div class="character-avatar" id="character-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg></div>
+              </div>
+              <div class="character-level" id="my-level-badge">성장 1/7단계</div>
             </div>
             <!-- 절약 요약 재구조화(2-1, 2026-08-13) — 예전엔 all-time 누적 절약
                  하나만 보여줬다. "오늘 얼마나 아꼈는지"가 매일 다시 켜고 싶어지는
@@ -220,9 +225,11 @@
                 <label>연간 절약</label>
               </div>
             </div>
-            <div class="character-rpg-block hidden">
+            <div class="character-rpg-block">
+              <!-- 이 바는 이제 절약금액이 아니라 아바타 성장(발견+방문+추천 합산)
+                   진행도를 보여준다 — 위 아바타와 같은 축으로 통일했다. -->
               <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
-              <div class="saving-next" id="my-next-level-text">다음 레벨까지 ₩10,000</div>
+              <div class="saving-next" id="my-next-level-text">다음 성장까지 10</div>
             </div>
           </div>
 
@@ -487,6 +494,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813p"></script>
+  <script src="app.js?v=20260813q"></script>
 </body>
 </html>

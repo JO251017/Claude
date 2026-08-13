@@ -39,23 +39,63 @@ const ICONS = {
   check: `<svg ${ICON_SVG_ATTRS}><path d="m5 12 5 5 9-11"/></svg>`,
 };
 
-// (가정) 레벨 구간별 캐릭터 아바타. 실제 AI 3D 캐릭터 생성 전 단계의 임시(Mock) 표현.
-const CHARACTER_AVATARS = [
-  { minLevel: 1, icon: 'sprout' },
-  { minLevel: 2, icon: 'compass' },
-  { minLevel: 3, icon: 'backpack' },
-  { minLevel: 4, icon: 'map' },
-  { minLevel: 5, icon: 'medal' },
-  { minLevel: 6, icon: 'shield' },
-  { minLevel: 7, icon: 'crown' },
+// --- 아바타 성장(다마고치식, 2-4, 2026-08-13) ---
+// 예전엔 절약금액 레벨(compute_savings_level) 기준이었다. 사용자 지시: "다마고치
+// 키우기 같은 형식 — 맵에서 가게 인증이나 추천기능을 통해 아바타가 성장하는
+// 구조로 가". 그래서 이제 발견(discovered_place_count) + 방문(visit_count) +
+// 추천(recommend_count) — 이미 실제 행동에서 결정론적으로 계산되는 세 칭호(2-2)의
+// 원본 카운트를 그대로 합산한 값 하나("성장치")로 단계를 정한다. 별도로 지어낸
+// 점수는 없다.
+const AVATAR_GROWTH_STAGES = [
+  { minScore: 0, icon: 'sprout', name: '씨앗' },
+  { minScore: 10, icon: 'compass', name: '새싹 탐험가' },
+  { minScore: 25, icon: 'backpack', name: '배낭 여행자' },
+  { minScore: 60, icon: 'map', name: '지도 마스터' },
+  { minScore: 100, icon: 'medal', name: '메달리스트' },
+  { minScore: 180, icon: 'shield', name: '수호자' },
+  { minScore: 300, icon: 'crown', name: 'SaveMap 전설' },
 ];
 
-function characterAvatarFor(level) {
-  let icon = CHARACTER_AVATARS[0].icon;
-  for (const tier of CHARACTER_AVATARS) {
-    if (level >= tier.minLevel) icon = tier.icon;
-  }
-  return ICONS[icon];
+function avatarGrowthStageFor(growthScore) {
+  let stageIndex = 0;
+  AVATAR_GROWTH_STAGES.forEach((stage, i) => {
+    if (growthScore >= stage.minScore) stageIndex = i;
+  });
+  const stage = AVATAR_GROWTH_STAGES[stageIndex];
+  const next = AVATAR_GROWTH_STAGES[stageIndex + 1] || null;
+  return {
+    stageIndex,
+    stageNumber: stageIndex + 1,
+    totalStages: AVATAR_GROWTH_STAGES.length,
+    name: stage.name,
+    icon: stage.icon,
+    isMaxStage: next === null,
+    progressPct: next
+      ? Math.min(100, Math.round(((growthScore - stage.minScore) / (next.minScore - stage.minScore)) * 100))
+      : 100,
+    remainingToNext: next ? Math.max(next.minScore - growthScore, 0) : 0,
+  };
+}
+
+// 성장 단계가 오를수록 아바타 주변 장식(별)이 하나씩 늘어난다 — 다마고치처럼
+// "몸집/장식이 늘어나는" 느낌을 레이어드 SVG 대신 가볍게 구현.
+function characterAvatarHtmlFor(stageIndex) {
+  const stage = AVATAR_GROWTH_STAGES[stageIndex];
+  const decos = [];
+  if (stageIndex >= 2) decos.push('<span class="avatar-deco avatar-deco--1" aria-hidden="true">⭐</span>');
+  if (stageIndex >= 4) decos.push('<span class="avatar-deco avatar-deco--2" aria-hidden="true">⭐</span>');
+  if (stageIndex >= 6) decos.push('<span class="avatar-deco avatar-deco--3" aria-hidden="true">✨</span>');
+  return ICONS[stage.icon] + decos.join('');
+}
+
+// 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
+// 반응" 감각) — 별도 API 호출 없이 이미 성공한 응답 시점에 클래스만 토글.
+function triggerAvatarGrowthFeedback() {
+  const el = document.getElementById('character-avatar');
+  if (!el) return;
+  el.classList.remove('avatar-bounce');
+  void el.offsetWidth; // 리플로우를 강제해서 애니메이션을 처음부터 다시 재생
+  el.classList.add('avatar-bounce');
 }
 
 let merchantPlaces = [];
@@ -232,20 +272,27 @@ async function loadSavingsBadge() {
 async function loadMyProfile() {
   try {
     const s = await apiFetch('/users/me/savings-summary');
-    document.getElementById('character-avatar').innerHTML = characterAvatarFor(s.level);
-    document.getElementById('my-level-badge').textContent = `Lv.${s.level}`;
-    document.getElementById('my-title').textContent = s.title;
+
+    // 아바타 성장(다마고치식, 2-4, 2026-08-13) — 발견+방문+추천 실제 카운트
+    // 합산("성장치")으로 단계를 정한다. 절약금액 레벨과는 완전히 분리된 축.
+    const growthScore = s.discovered_place_count + s.visit_count + s.recommend_count;
+    const growth = avatarGrowthStageFor(growthScore);
+    const avatarEl = document.getElementById('character-avatar');
+    avatarEl.innerHTML = characterAvatarHtmlFor(growth.stageIndex);
+    avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
+    document.getElementById('my-title').textContent = growth.name;
+    document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
+    document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;
+    document.getElementById('my-next-level-text').textContent = growth.isMaxStage
+      ? '최고 성장 단계에 도달했어요!'
+      : `다음 성장까지 ${growth.remainingToNext}`;
+
     // 절약 요약 재구조화(2-1, 2026-08-13) — all-time 누적 하나 대신 오늘 누적을
     // 메인으로, 주간/한달/연간을 나란히 보여준다.
     document.getElementById('my-today-saved').textContent = formatWon(s.today_saved);
     document.getElementById('my-weekly-saved').textContent = formatWon(s.weekly_saved);
     document.getElementById('my-monthly-saved').textContent = formatWon(s.monthly_saved);
     document.getElementById('my-yearly-saved').textContent = formatWon(s.yearly_saved);
-    document.getElementById('my-saving-bar').style.width = `${s.progress_pct}%`;
-    document.getElementById('my-next-level-text').textContent =
-      s.next_threshold == null
-        ? '최고 레벨 구간입니다'
-        : `다음 레벨까지 ${formatWon(s.remaining_to_next)}`;
     document.getElementById('my-cert-count').textContent = s.certification_count;
 
     // 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 레벨과 독립된 축이라
@@ -1032,6 +1079,12 @@ async function recommendPlace(r, btn) {
     msgEl.innerHTML = data.is_new
       ? `<p class="empty-msg">${ICONS.check} 추천했어요! AI 절약 리포트 신뢰도에 반영돼요.</p>`
       : `<p class="empty-msg">이미 추천한 매장이에요.</p>`;
+    // 새 추천일 때만 실제 recommend_count가 늘어나므로 아바타 성장치도 그때만
+    // 갱신한다(2-4) — 중복 추천 클릭으로 지어낸 성장은 없다.
+    if (data.is_new) {
+      triggerAvatarGrowthFeedback();
+      loadMyProfile();
+    }
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
     btn.disabled = false;
@@ -1242,6 +1295,9 @@ async function submitStatusUpdate(r, status, btn) {
         });
         document.getElementById('detail-interest-count').textContent = `누적 발견 ${data.interest_count}회`;
         msgEl.innerHTML = `<p class="empty-msg">${ICONS.check} 확인 감사합니다!</p>`;
+        // 발견하기도 아바타 성장치(발견+방문+추천 합산, 2-4)에 들어간다.
+        triggerAvatarGrowthFeedback();
+        loadMyProfile();
       } catch (err) {
         msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
       } finally {
@@ -1309,6 +1365,7 @@ async function certifyOffer(r) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
+    triggerAvatarGrowthFeedback();
     loadMyProfile();
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
@@ -1358,6 +1415,7 @@ async function certifyWithReceipt(r, fileInput) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
+    triggerAvatarGrowthFeedback();
     loadMyProfile();
   } catch (err) {
     msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
