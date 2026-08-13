@@ -209,6 +209,102 @@ body {
   color: var(--ink);
 }
 
+/* --- 주소 검색 pill (기존 SaveMap 로고 자리, 2026-08-13) --- */
+/* 왼쪽에 "내 위치" 아이콘 버튼, 오른쪽에 주소 검색 입력창을 한 알약 안에 묶는다
+   — 로고 pill과 같은 높이/톤을 이어받아 topbar 리듬을 깨지 않는다. */
+.address-search-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  flex: 1;
+  min-width: 0;
+}
+
+.address-search-locate-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--primary-dark);
+  cursor: pointer;
+}
+
+.address-search-locate-btn:hover {
+  background: rgba(13, 148, 136, 0.2);
+}
+
+.address-search-locate-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.address-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.address-search-input:focus {
+  outline: none;
+}
+
+.address-search-input::placeholder {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.address-search-error {
+  margin: 0;
+  padding: 6px 14px 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+/* 스크린리더 전용 — 시각적으로는 아이콘 버튼만 보이지만 라벨은 남겨둔다 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- 줌 레벨 기반 반경 배지 (7번 항목, 2026-08-13) --- */
+/* 드롭다운 대신 지도를 줌인/줌아웃하면 현재 반경(km)을 옆에서 계속 보여준다. */
+.zoom-radius-badge {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  z-index: 10;
+  background: rgba(30, 34, 51, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
 /* --- RPG XP badge --- */
 .xp-badge {
   display: flex;
@@ -360,7 +456,9 @@ body {
 
 .research-btn {
   position: absolute;
-  top: 138px;
+  /* topbar가 두 줄(주소 검색 + 재검색 여백)에서 한 줄로 줄어들어(1번 항목,
+     2026-08-13) 값도 같이 줄였다 — 실제 배포 후 미세 조정 필요할 수 있음. */
+  top: 88px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(30, 34, 51, 0.82);

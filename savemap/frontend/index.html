@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813k" />
+  <link rel="stylesheet" href="style.css?v=20260813l" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -29,13 +29,21 @@
 
       <div class="floating-topbar">
         <div class="topbar-row">
-          <div class="brand-pill glass">SaveMap</div>
+          <!-- SaveMap 로고 pill 삭제, 그 자리에 주소 검색을 배치(1번 항목, 2026-08-13).
+               "내 위치" 아이콘 버튼도 이 안으로 통합해서 좌상단 자리 다툼을 없앴다
+               (사용자 확정: "내 위치를 검색창 안 아이콘 버튼으로 통합"). -->
+          <div class="address-search-pill glass">
+            <button type="button" id="use-location-btn" class="address-search-locate-btn" aria-label="내 위치로 찾기" title="내 위치로 찾기">
+              <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+              <span id="use-location-label" class="sr-only">내 위치</span>
+            </button>
+            <input type="text" id="address-search-input" class="address-search-input" placeholder="주소로 찾기" enterkeyhint="search" />
+          </div>
           <!-- 기존엔 아래쪽에 큰 배너 카드였던 AI 절약 플랜 진입 버튼을 오른쪽 끝단
-               작은 알약형 버튼으로 옮김 — 아이콘 없이 텍스트만, SaveMap 로고 pill과
-               같은 디자인(사용자 지시, 2026-08-13). topbar-row가
-               justify-content:space-between이라 xp-badge(RPG, 현재 hidden)가 없는
-               지금은 이 버튼이 자동으로 오른쪽 끝에 붙는다. 클릭 동작
-               (openRoutePlanSheet)은 그대로다. -->
+               작은 알약형 버튼으로 옮김 — 아이콘 없이 텍스트만(사용자 지시,
+               2026-08-13). topbar-row가 justify-content:space-between이라
+               xp-badge(RPG, 현재 hidden)가 없는 지금은 이 버튼이 자동으로 오른쪽
+               끝에 붙는다. 클릭 동작(openRoutePlanSheet)은 그대로다. -->
           <button type="button" id="ai-route-cta" class="brand-pill glass ai-recommend-pill">AI 추천</button>
           <!-- RPG 요소(레벨/칭호) 잠시 비활성화 — 기본 베이스 구조 완성 후 다시 켠다
                (사용자 지시, 2026-08-12). hidden만 떼면 바로 복구된다. -->
@@ -49,19 +57,13 @@
             </div>
           </div>
         </div>
-        <div class="search-row">
-          <button type="button" id="use-location-btn" class="pill-btn">
-            <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
-            <span id="use-location-label">내 위치</span>
-          </button>
-          <select id="s-radius" class="pill-select">
-            <option value="1">1km</option>
-            <option value="3" selected>3km</option>
-            <option value="5">5km</option>
-            <option value="10">10km</option>
-          </select>
-        </div>
+        <p id="address-search-error" class="address-search-error hidden"></p>
       </div>
+
+      <!-- 거리 반경을 드롭다운으로 고르는 대신, 손가락으로 지도를 줌인/줌아웃하면
+           그 줌 레벨에 맞는 반경(km)을 지도 옆에 계속 보여준다(7번 항목,
+           2026-08-13). zoom_changed에서 값을 갱신한다. -->
+      <div class="zoom-radius-badge" id="zoom-radius-badge">🔍 3km</div>
 
       <button type="button" id="research-btn" class="research-btn hidden">
         <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg></span>
@@ -462,6 +464,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813k"></script>
+  <script src="app.js?v=20260813l"></script>
 </body>
 </html>

@@ -361,7 +361,37 @@ useLocationBtn.addEventListener('click', () => {
   );
 });
 
-document.getElementById('s-radius').addEventListener('change', runSearch);
+// --- 주소로 찾기 (1번 항목, 2026-08-13) ---
+// KakaoClient.geocode()를 노출한 새 /geo/search를 호출한다. 성공하면 검색 위치로
+// 지도를 옮기고 폴백 안내는 해제한다(이제 사용자가 직접 고른 진짜 위치니까).
+const addressSearchInput = document.getElementById('address-search-input');
+const addressSearchError = document.getElementById('address-search-error');
+addressSearchInput.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  const query = addressSearchInput.value.trim();
+  if (!query) return;
+  addressSearchError.classList.add('hidden');
+  addressSearchError.textContent = '';
+  addressSearchInput.disabled = true;
+  try {
+    const result = await apiFetch(`/geo/search?query=${encodeURIComponent(query)}`);
+    if (!result.found) {
+      addressSearchError.textContent = '주소를 찾을 수 없어요. 다르게 입력해보세요.';
+      addressSearchError.classList.remove('hidden');
+      return;
+    }
+    document.getElementById('s-lat').value = result.lat.toFixed(6);
+    document.getElementById('s-lng').value = result.lng.toFixed(6);
+    if (kakaoMap) kakaoMap.setCenter(new kakao.maps.LatLng(result.lat, result.lng));
+    usedFallbackLocation = false;
+    runSearch();
+  } catch (err) {
+    addressSearchError.textContent = err.message || '주소 검색에 실패했습니다.';
+    addressSearchError.classList.remove('hidden');
+  } finally {
+    addressSearchInput.disabled = false;
+  }
+});
 
 // --- 카카오 지도 ---
 let kakaoMap = null;
@@ -369,6 +399,32 @@ let mapMarkers = [];
 let mapLabels = [];
 let originMarker = null;
 const researchBtn = document.getElementById('research-btn');
+
+// --- 줌 레벨 기반 반경 (7번 항목, 2026-08-13) ---
+// 드롭다운으로 반경을 고르는 대신, 지도를 줌인/줌아웃하면 카카오 지도의 레벨
+// (숫자가 작을수록 확대)을 읽어 대략적인 km로 매핑해 runSearch가 그 값을 쓴다.
+// 정확한 레벨 구간은 실제 배포 후(이 샌드박스는 Kakao SDK 실행 환경이 없어
+// 실측 불가) 조정이 필요할 수 있다. settings.search_max_radius_km(10km) 이내로
+// clamp한다.
+const ZOOM_LEVEL_TO_KM = [
+  { maxLevel: 3, km: 1 },
+  { maxLevel: 5, km: 3 },
+  { maxLevel: 7, km: 5 },
+  { maxLevel: 99, km: 10 },
+];
+let currentRadiusKm = 3;
+const zoomRadiusBadge = document.getElementById('zoom-radius-badge');
+
+function radiusKmForZoomLevel(level) {
+  const match = ZOOM_LEVEL_TO_KM.find((row) => level <= row.maxLevel);
+  return match ? match.km : 10;
+}
+
+function updateZoomRadiusBadge() {
+  if (!kakaoMap) return;
+  currentRadiusKm = radiusKmForZoomLevel(kakaoMap.getLevel());
+  zoomRadiusBadge.textContent = `🔍 ${currentRadiusKm}km`;
+}
 
 function initMap(lat, lng) {
   if (typeof kakao === 'undefined' || !kakao.maps) {
@@ -380,9 +436,13 @@ function initMap(lat, lng) {
     center: new kakao.maps.LatLng(lat, lng),
     level: 5,
   });
+  updateZoomRadiusBadge();
 
   kakao.maps.event.addListener(kakaoMap, 'dragend', () => researchBtn.classList.remove('hidden'));
-  kakao.maps.event.addListener(kakaoMap, 'zoom_changed', () => researchBtn.classList.remove('hidden'));
+  kakao.maps.event.addListener(kakaoMap, 'zoom_changed', () => {
+    researchBtn.classList.remove('hidden');
+    updateZoomRadiusBadge();
+  });
 }
 
 researchBtn.addEventListener('click', () => {
@@ -1260,7 +1320,7 @@ async function certifyWithReceipt(r, fileInput) {
 async function runSearch() {
   const lat = document.getElementById('s-lat').value;
   const lng = document.getElementById('s-lng').value;
-  const radius = document.getElementById('s-radius').value;
+  const radius = currentRadiusKm;
 
   const params = new URLSearchParams({ lat, lng, radius_km: radius });
 
