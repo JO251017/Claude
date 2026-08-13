@@ -5,6 +5,14 @@ from app.core.spatial import haversine_m
 from app.integrations.kakao import KakaoClient, KakaoPlace
 
 RESTAURANT_CAFE_CATEGORY_CODES = ("FD6", "CE7")  # 음식점, 카페
+# 쇼핑(마트/편의점) 발견 확장 — "SaveMap 구조 재설계 제안서"(2026-08-13) §6:
+# Activity 후보 중 확장 비용이 가장 낮다고 판단한 항목. search_category()가 이미
+# category_group_code를 파라미터로 받는 범용 함수라 코드만 추가하면 된다. 단,
+# 이건 "발견"(가격 없는 상태로 지도에 보여주기)까지만이다 — 실제 가격/Offer
+# 데이터가 없는 한 AI 절약 플랜의 RouteActivity로는 아직 못 넣는다(활동 분류가
+# 아니라 발견 범위 확장).
+SHOPPING_CATEGORY_CODES = ("MT1", "CS2")  # 대형마트, 편의점
+DISCOVERY_CATEGORY_CODES = RESTAURANT_CAFE_CATEGORY_CODES + SHOPPING_CATEGORY_CODES
 DEDUPE_DISTANCE_M = 30.0
 MAX_DISCOVERED = 20
 
@@ -59,14 +67,15 @@ async def discover_nearby_places(
     existing_coords: list[tuple[float, float]],
     kakao: KakaoClient | None = None,
 ) -> list[DiscoveredCandidate]:
-    """SaveMap에 아직 가격/절약 정보가 등록되지 않은 주변 음식점·카페를 카카오 로컬
-    API로 찾는다. 콜드스타트 문제(초기에 아무도 매장을 등록하지 않아 지도가 텅 비는 것)
-    완화용 — 가격 비교는 못 보여줘도 "여기 이런 매장이 있다"는 발견은 항상 가능하게 한다."""
+    """SaveMap에 아직 가격/절약 정보가 등록되지 않은 주변 음식점·카페·마트·편의점을
+    카카오 로컬 API로 찾는다. 콜드스타트 문제(초기에 아무도 매장을 등록하지 않아 지도가
+    텅 비는 것) 완화용 — 가격 비교는 못 보여줘도 "여기 이런 매장이 있다"는 발견은 항상
+    가능하게 한다."""
     client = kakao or KakaoClient()
     radius_m = int(radius_km * 1000)
 
     raw: list[KakaoPlace] = []
-    for code in RESTAURANT_CAFE_CATEGORY_CODES:
+    for code in DISCOVERY_CATEGORY_CODES:
         try:
             raw.extend(await _search_category_cached(client, lat, lng, radius_m, code))
         except Exception:

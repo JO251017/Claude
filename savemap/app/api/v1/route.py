@@ -43,7 +43,7 @@ def _build_context_note(payload: RouteSuggestRequest) -> str | None:
     conditions = []
     if payload.preference:
         conditions.append(_PREFERENCE_LABELS[payload.preference])
-    if payload.free_parking_required:
+    if payload.constraints.free_parking_required:
         conditions.append("무료주차 필요")
     if conditions:
         parts.append("조건: " + ", ".join(conditions))
@@ -55,10 +55,11 @@ async def suggest_route(
     payload: RouteSuggestRequest,
     session: AsyncSession = SessionDep,
 ) -> RouteSuggestResponse:
-    if not (settings.route_min_budget <= payload.budget <= settings.route_max_budget):
+    constraints = payload.constraints
+    if not (settings.route_min_budget <= constraints.budget <= settings.route_max_budget):
         raise BudgetOutOfRangeError()
 
-    radius = payload.radius_km or settings.search_default_radius_km
+    radius = constraints.radius_km or settings.search_default_radius_km
     if radius <= 0 or radius > settings.search_max_radius_km:
         raise RadiusOutOfRangeError()
 
@@ -70,7 +71,7 @@ async def suggest_route(
     # 조건"으로 걸 수 있는 유일한 방법이 이 필터다 — 식사 오퍼가 곁다리로 주차장을
     # 갖고 있어도 그 오퍼의 category가 free_parking이 아니면 지금은 알 수 없다
     # (알려진 v1 한계, ARCHITECTURE.md 참고).
-    offer_type = Category.FREE_PARKING if payload.free_parking_required else None
+    offer_type = Category.FREE_PARKING if constraints.free_parking_required else None
     rows = rule_filter(rows, category=offer_type, activities=payload.activities)
     candidates = [build_candidate(o, p, d) for o, p, d in rows]
     combine(candidates, set(payload.payment_methods))
@@ -99,7 +100,7 @@ async def suggest_route(
 
     plan = build_route(
         deduped,
-        budget=payload.budget,
+        budget=constraints.budget,
         max_stops=settings.route_max_stops,
         preference=payload.preference,
     )
@@ -129,13 +130,13 @@ async def suggest_route(
             stop_items.append(RouteStopItem(**item.model_dump(), order=s.order))
 
     summary, summary_source = await generate_summary(
-        plan, payload.party_size, context_note=_build_context_note(payload)
+        plan, payload.context.party_size, context_note=_build_context_note(payload)
     )
 
     return RouteSuggestResponse(
         fits_budget=plan.fits_budget,
-        budget=payload.budget,
-        party_size=payload.party_size,
+        budget=constraints.budget,
+        party_size=payload.context.party_size,
         radius_km=radius,
         stop_count=len(stop_items),
         total_spend=plan.total_spend,

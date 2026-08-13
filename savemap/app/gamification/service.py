@@ -8,38 +8,12 @@ from app.domain.enums import XP_REWARD, XpReason
 from app.domain.savings import SavingsCertification
 from app.domain.xp import XpLedger
 
-# (가정) 레벨당 필요 경험치. 기획서에 명시된 값이 없어 임의로 설정.
-XP_PER_LEVEL = 50
-
-# 기획서(SUB 기획서_260723) 기준 레벨 구간별 칭호.
-LEVEL_TITLES: list[tuple[int, int | None, str]] = [
-    (1, 9, "짠지망생"),
-    (10, 29, "절약 탐험가"),
-    (30, 49, "혜택 마스터"),
-    (50, None, "절약의 신"),
-]
-
-
-@dataclass
-class XpSummary:
-    total_xp: int
-    level: int
-    title: str
-    xp_into_level: int
-    xp_per_level: int
-
-
-def compute_level(total_xp: int) -> XpSummary:
-    total_xp = max(total_xp, 0)
-    level = total_xp // XP_PER_LEVEL + 1
-    title = next(t for lo, hi, t in LEVEL_TITLES if hi is None or lo <= level <= hi)
-    return XpSummary(
-        total_xp=total_xp,
-        level=level,
-        title=title,
-        xp_into_level=total_xp % XP_PER_LEVEL,
-        xp_per_level=XP_PER_LEVEL,
-    )
+# 예전엔 여기에 XP 총량 기반 레벨링(compute_level/XP_PER_LEVEL/LEVEL_TITLES)이
+# 있었다 — "구조 재설계 제안서"(2026-08-13) §1 진단에서, 프론트가 실제로는
+# compute_savings_level()(실제 인증된 누적 절약금액 기반)만 쓰고 이쪽은 어디서도
+# 호출되지 않는 죽은 코드라는 게 확인돼 제거했다(GET /me/xp 엔드포인트도 함께
+# 제거). xp_ledger/award_xp 자체는 그대로 남는다 — "캐릭터 레벨"이 아니라 향후
+# 배지 등 활동 지표 전용으로 역할이 좁혀졌을 뿐이다.
 
 
 async def award_xp(session: AsyncSession, user_id: str, reason: XpReason) -> int:
@@ -61,13 +35,6 @@ async def get_dining_counts(session: AsyncSession, place_ids: list[int]) -> dict
         )
     ).all()
     return {place_id: count for place_id, count in rows}
-
-
-async def get_xp_summary(session: AsyncSession, user_id: str) -> XpSummary:
-    total = (
-        await session.execute(select(func.coalesce(func.sum(XpLedger.delta), 0)).where(XpLedger.user_id == user_id))
-    ).scalar_one()
-    return compute_level(int(total))
 
 
 # --- 절약 레벨 (리디자인 기획서 §5~15): 캐릭터 성장은 XP가 아닌

@@ -30,6 +30,29 @@ def _place(pid: str, name: str, lat: float, lng: float) -> KakaoPlace:
     )
 
 
+def test_discovery_category_codes_include_shopping():
+    # 쇼핑(마트/편의점) 발견 확장(2026-08-13) — 음식점/카페 코드에 추가로 존재해야
+    # 하고, 기존 두 코드가 빠지면 안 된다(회귀 방지).
+    assert set(discovery.RESTAURANT_CAFE_CATEGORY_CODES) <= set(discovery.DISCOVERY_CATEGORY_CODES)
+    assert set(discovery.SHOPPING_CATEGORY_CODES) <= set(discovery.DISCOVERY_CATEGORY_CODES)
+    assert "MT1" in discovery.DISCOVERY_CATEGORY_CODES  # 대형마트
+    assert "CS2" in discovery.DISCOVERY_CATEGORY_CODES  # 편의점
+
+
+def test_discover_queries_every_discovery_category_code():
+    # discover_nearby_places가 DISCOVERY_CATEGORY_CODES 전부를 실제로 조회하는지 —
+    # 코드 목록만 늘려두고 루프가 안 따라가는 회귀를 막는다.
+    kakao = MagicMock()
+    kakao.search_category = AsyncMock(return_value=[])
+
+    asyncio.run(
+        discover_nearby_places(36.9925, 127.1130, radius_km=3.0, existing_coords=[], kakao=kakao)
+    )
+
+    queried_codes = {call.args[3] for call in kakao.search_category.await_args_list}
+    assert queried_codes == set(discovery.DISCOVERY_CATEGORY_CODES)
+
+
 def test_discover_dedupes_and_filters_existing():
     kakao = MagicMock()
     kakao.search_category = AsyncMock(

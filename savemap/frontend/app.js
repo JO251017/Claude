@@ -790,10 +790,18 @@ async function submitRoutePlan() {
   msgEl.innerHTML = '';
 
   try {
-    const payload = { lat, lng, budget, party_size: partySize };
+    // 요청 스키마: context(누구와/얼마나 등 상황)와 constraints(반드시 지켜야 하는
+    // 조건)를 별도 그룹으로 나눈다 — "SaveMap 구조 재설계 제안서"(2026-08-13) §3
+    // 반영. free_parking_required는 정렬 기준(preference)과 달리 후보를 아예
+    // 걸러내는 하드 조건이라 constraints에 속한다.
+    const payload = {
+      lat,
+      lng,
+      context: { party_size: partySize },
+      constraints: { budget, free_parking_required: freeParkingRequired },
+    };
     if (activities.length) payload.activities = activities;
     if (preference) payload.preference = preference;
-    if (freeParkingRequired) payload.free_parking_required = true;
     const data = await apiFetch('/route/suggest', { method: 'POST', body: JSON.stringify(payload) });
     renderRoutePlanResult(data);
   } catch (err) {
@@ -881,15 +889,16 @@ async function recommendPlace(r, btn) {
 }
 
 // --- 아직 가격 정보 없는(카카오로만 발견된) 매장 상세: 그냥 구경만 하고 나가지 않도록
-// 두 가지 길을 준다 — (1) 누구든 실제 메뉴판 사진을 찍어서 바로 제보 (카카오/네이버
-// 어디도 메뉴를 API로 안 주고, 크롤링은 원칙상 안 쓰므로 이게 유일한 실제 데이터 경로),
-// (2) 사장님 본인이면 사업자 콘솔에서 정식 등록. 둘 다 SaveMap의 핵심 루프
-// (등록→비교→방문 인증→XP)로 이어진다. ---
+// 두 가지 길을 준다 — (1) 누구든 실제 가격표/메뉴판 사진을 찍어서 바로 제보 (카카오/
+// 네이버 어디도 메뉴를 API로 안 주고, 크롤링은 원칙상 안 쓰므로 이게 유일한 실제 데이터
+// 경로), (2) 사장님 본인이면 사업자 콘솔에서 정식 등록. 둘 다 SaveMap의 핵심 루프
+// (등록→비교→방문 인증→XP)로 이어진다. 발견 소스가 음식점·카페 외 마트·편의점으로도
+// 넓어졌으므로(2026-08-13) 문구는 업종을 특정하지 않는다. ---
 function openDiscoveredDetail(d) {
   const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
   detailContent.innerHTML = `
     <div class="badge-group">
-      <span class="badge">${escapeHtml(shortCategory || '음식점·카페')}</span>
+      <span class="badge">${escapeHtml(shortCategory || '발견된 장소')}</span>
       <span class="tier-tag" style="--tier-color:#94a3b8">가격 정보 없음</span>
     </div>
     <h2 class="place-name">${escapeHtml(d.place_name)}</h2>
@@ -898,18 +907,18 @@ function openDiscoveredDetail(d) {
     </div>
     ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
-      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴판 사진을 찍어서 알려주시면
-      다른 사람들도 이 매장의 절약 정보를 바로 볼 수 있어요.
+      아직 SaveMap에 가격 정보가 없는 매장이에요. 가격표나 메뉴판 사진을 찍어서
+      알려주시면 다른 사람들도 이곳의 절약 정보를 바로 볼 수 있어요.
     </p>
     <div class="detail-actions">
-      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판 찍어서 알려주기</button>
+      <button type="button" class="btn-primary" id="discovered-report-btn">📷 사진 찍어서 알려주기</button>
     </div>
     <input type="file" id="discovered-menu-input" accept="image/*" capture="environment" class="hidden" />
     <p id="discovered-menu-status" class="subtitle"></p>
     <div id="discovered-menu-results"></div>
 
     <div class="detail-actions">
-      <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 전체 메뉴 보기</button>
+      <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 매장 정보 보기</button>
       <button type="button" class="btn-text" id="discovered-register-btn">사장님이신가요? 매장 정식 등록하기</button>
     </div>
   `;
@@ -1226,7 +1235,7 @@ async function runSearch() {
 
     countEl.textContent = data.results.length > 0
       ? `지금 잡을 수 있는 절약 ${data.results.length}개`
-      : `주변 식당·카페 ${lastDiscovered.length}곳 발견`;
+      : `주변에서 ${lastDiscovered.length}곳 발견`;
 
     const offerCardsHtml = data.results
       .map((r, i) => {
@@ -1270,7 +1279,7 @@ async function runSearch() {
     const discoveredHtml = lastDiscovered.length
       ? `
       <div class="discovered-section">
-        <div class="discovered-header">주변 식당·카페 ${lastDiscovered.length}곳 (아직 절약 정보 없음)</div>
+        <div class="discovered-header">주변에서 발견한 곳 ${lastDiscovered.length}곳 (아직 절약 정보 없음)</div>
         ${lastDiscovered
           .map((d, i) => {
             const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
@@ -1302,6 +1311,20 @@ async function runSearch() {
 
 initMap(36.9925, 127.113);
 runSearch();
+
+// 첫 방문 온보딩: AI 절약 플랜을 지도보다 먼저 보여준다 — "SaveMap 구조 재설계
+// 제안서"(2026-08-13) §4 추천안 "지금은 A(현행 topbar 진입) 보강" 반영. 하단
+// 탭/topbar 구조는 그대로 두고 첫인상만 바꾸는 최소 비용 개선이다. 두 번째
+// 방문부터는 지금처럼 topbar의 "AI 추천" 버튼으로만 진입한다.
+try {
+  const ONBOARDING_KEY = 'savemap_ai_plan_onboarded_v1';
+  if (!localStorage.getItem(ONBOARDING_KEY)) {
+    localStorage.setItem(ONBOARDING_KEY, '1');
+    openRoutePlanSheet();
+  }
+} catch {
+  // localStorage 접근 불가(프라이빗 모드 등) — 온보딩 노출을 못 해도 앱 사용엔 지장 없음
+}
 
 // --- COMMUNITY: 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록) ---
 let reportImageUrl = null;

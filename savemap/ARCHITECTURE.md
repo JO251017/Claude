@@ -62,9 +62,16 @@ GET /v1/search?lat&lng&radius_km&category&payment_methods
 여가/가족활동"은 지금 데이터 소스(일반음식점·휴게음식점·유흥주점 인허가 + 착한가격
 업소, 전부 음식점·카페 계열)로는 매핑 근거가 없어 아직 넣지 않았다 — 카카오 로컬
 API로 다른 업종을 더 들여오거나 사업자 직접등록이 늘면 다음 후보.
+**Context/Constraint 그룹화 (2026-08-13):** "SaveMap 구조 재설계 제안서" §3의 진단 —
+Activity/Preference는 이미 별도 개념으로 분리돼 있는데 "누구와/얼마나" 같은 Context와
+"반드시 지켜야 하는 조건"인 Constraint는 요청에 flat하게 흩어져 있어 이름조차 없었다.
+새 기능 없이 필드만 `RouteContext`(`party_size`)/`RouteConstraints`(`budget`,
+`radius_km`, `free_parking_required`)로 묶었다 — 동행/이동수단/시간대처럼 Context가
+늘어날 자리를 지금 미리 만들어 둔 것.
 ```
 POST /v1/route/suggest
-  {lat, lng, budget, party_size, activities?, free_parking_required?, preference?}
+  {lat, lng, activities?, preference?,
+   context: {party_size}, constraints: {budget, radius_km?, free_parking_required?}}
  → spatial_query + rule_filter(activities로 Place.category_name 기반 필터 추가)
    + candidate_builder (검색과 동일 파이프라인 재사용)
  → rank_candidates → dedupe_by_place
