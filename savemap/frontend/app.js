@@ -24,13 +24,9 @@ const ASSET_CATEGORY_LABELS = {
 // 라인 아이콘 세트 (이모지 대체용, currentColor로 테마 색상 상속)
 const ICON_SVG_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
 const ICONS = {
-  sprout: `<svg ${ICON_SVG_ATTRS}><path d="M12 21V10"/><path d="M12 10c0-3-2.5-5-6-5 0 3.5 2.5 6 6 6"/><path d="M12 13c0-3 2.5-5 6-5 0 3.5-2.5 6-6 6"/></svg>`,
-  compass: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5 13 13l-3.5 1.5L11 11z"/></svg>`,
-  backpack: `<svg ${ICON_SVG_ATTRS}><rect x="5" y="8" width="14" height="13" rx="3"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M9 13h6"/></svg>`,
-  map: `<svg ${ICON_SVG_ATTRS}><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg>`,
-  medal: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="15" r="6"/><path d="M9 3 12 9l3-6"/><path d="M12 12v6"/></svg>`,
-  shield: `<svg ${ICON_SVG_ATTRS}><path d="M12 3 5 6v6c0 5 3 8 7 9 4-1 7-4 7-9V6z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>`,
-  crown: `<svg ${ICON_SVG_ATTRS}><path d="m4 8 3 3 5-6 5 6 3-3-1.5 10h-13Z"/><path d="M6 20h12"/></svg>`,
+  // 예전엔 여기 sprout/compass/backpack/map/medal/shield/crown(아바타 성장 단계별
+  // 아이콘)이 있었다 — 도트 강아지(pixelDogSvg)로 바뀌면서(사용자 지시,
+  // 2026-08-13) 더 이상 쓰이지 않아 제거했다.
   swap: `<svg ${ICON_SVG_ATTRS}><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg>`,
   user: `<svg ${ICON_SVG_ATTRS}><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg>`,
   people: `<svg ${ICON_SVG_ATTRS}><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg>`,
@@ -47,13 +43,13 @@ const ICONS = {
 // 원본 카운트를 그대로 합산한 값 하나("성장치")로 단계를 정한다. 별도로 지어낸
 // 점수는 없다.
 const AVATAR_GROWTH_STAGES = [
-  { minScore: 0, icon: 'sprout', name: '씨앗' },
-  { minScore: 10, icon: 'compass', name: '새싹 탐험가' },
-  { minScore: 25, icon: 'backpack', name: '배낭 여행자' },
-  { minScore: 60, icon: 'map', name: '지도 마스터' },
-  { minScore: 100, icon: 'medal', name: '메달리스트' },
-  { minScore: 180, icon: 'shield', name: '수호자' },
-  { minScore: 300, icon: 'crown', name: 'SaveMap 전설' },
+  { minScore: 0, name: '씨앗 강아지' },
+  { minScore: 10, name: '새싹 강아지' },
+  { minScore: 25, name: '목줄 찬 강아지' },
+  { minScore: 60, name: '배낭 여행자' },
+  { minScore: 100, name: '리본 두른 강아지' },
+  { minScore: 180, name: '수호자' },
+  { minScore: 300, name: 'SaveMap 전설' },
 ];
 
 function avatarGrowthStageFor(growthScore) {
@@ -68,7 +64,6 @@ function avatarGrowthStageFor(growthScore) {
     stageNumber: stageIndex + 1,
     totalStages: AVATAR_GROWTH_STAGES.length,
     name: stage.name,
-    icon: stage.icon,
     isMaxStage: next === null,
     progressPct: next
       ? Math.min(100, Math.round(((growthScore - stage.minScore) / (next.minScore - stage.minScore)) * 100))
@@ -77,15 +72,61 @@ function avatarGrowthStageFor(growthScore) {
   };
 }
 
-// 성장 단계가 오를수록 아바타 주변 장식(별)이 하나씩 늘어난다 — 다마고치처럼
-// "몸집/장식이 늘어나는" 느낌을 레이어드 SVG 대신 가볍게 구현.
+// --- 아바타 스프라이트: 귀여운 강아지, 도트(픽셀아트) 스타일 (사용자 지시,
+// 2026-08-13) --- 예전엔 성장 단계마다 서로 다른 라인아이콘(새싹→나침반→...→
+// 왕관)으로 아예 바뀌었다. 다마고치는 "같은 아이가 자란다"는 감각이 핵심이라,
+// 이제는 강아지 하나를 11x11 도트 그리드로 그리고 성장 단계에 따라 목줄/리본
+// 같은 장식만 덧그린다. 좌우 대칭 패턴이라 절반만 손으로 그리지 않고 그대로
+// 다 적었다 — 한 줄이 11칸이면 다 맞는지 눈으로도 세기 쉽다.
+const DOG_PIXEL_ROWS = [
+  '..ee...ee..',
+  '.eee...eee.',
+  'eeeeeeeeeee',
+  'ehhhhhhhhhe',
+  'hhhhhhhhhhh',
+  'hhkhhhhhkhh',
+  'hhhhhhhhhhh',
+  'hhhwwwwwhhh',
+  'hhwwkkkwwhh',
+  'hhhwwwwwhhh',
+  '.hhhhhhhhh.',
+].map((row) => row.slice(0, 11)); // 각 행이 반드시 11칸이 되도록 안전장치
+const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
+
+function pixelDogSvg({ collar = false, bandana = false } = {}) {
+  const size = DOG_PIXEL_ROWS.length;
+  const rects = [];
+  DOG_PIXEL_ROWS.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === '.') continue;
+      rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${DOG_PALETTE[ch]}"/>`);
+    }
+  });
+  // 목줄(3단계 이상) — 턱 아래 마지막 줄을 포인트 컬러로 덧그린다.
+  if (collar) {
+    for (let x = 1; x <= 9; x++) {
+      rects.push(`<rect x="${x}" y="${size - 1}" width="1" height="1" fill="#ef6f6f"/>`);
+    }
+  }
+  // 리본(5단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
+  if (bandana) {
+    for (let x = 4; x <= 6; x++) {
+      rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="#7c3aed"/>`);
+    }
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
+}
+
+// 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
+// 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
 function characterAvatarHtmlFor(stageIndex) {
-  const stage = AVATAR_GROWTH_STAGES[stageIndex];
+  const svg = pixelDogSvg({ collar: stageIndex >= 2, bandana: stageIndex >= 4 });
   const decos = [];
   if (stageIndex >= 2) decos.push('<span class="avatar-deco avatar-deco--1" aria-hidden="true">⭐</span>');
   if (stageIndex >= 4) decos.push('<span class="avatar-deco avatar-deco--2" aria-hidden="true">⭐</span>');
   if (stageIndex >= 6) decos.push('<span class="avatar-deco avatar-deco--3" aria-hidden="true">✨</span>');
-  return ICONS[stage.icon] + decos.join('');
+  return svg + decos.join('');
 }
 
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로

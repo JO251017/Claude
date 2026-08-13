@@ -1737,8 +1737,10 @@ select:focus {
 }
 
 .character-avatar svg {
-  width: 40px;
-  height: 40px;
+  /* 도트(픽셀아트) 강아지 — 11x11 격자를 꽉 채워서 작은 원 안에서도 또렷하게
+     보이도록 이전(40px)보다 키웠다. rect 기반 벡터라 확대해도 흐려지지 않는다. */
+  width: 60px;
+  height: 60px;
 }
 
 /* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다. */
