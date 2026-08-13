@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.core.errors import OcrServiceError, ReportImageFetchError
-from app.integrations.gemini import GeminiVisionClient
+from app.integrations.gemini import GeminiVisionClient, _route_summary_prompt
 
 
 def _client() -> GeminiVisionClient:
@@ -105,6 +105,48 @@ def test_summarize_route_returns_stripped_text_on_success():
             )
         )
     assert result == "국밥집에서 8,000원만 써요."
+
+
+def test_route_summary_prompt_includes_context_note_when_given():
+    # context_note(사용자가 고른 활동/조건)는 "설명 근거"로만 프롬프트에 들어가야
+    # 한다 — 없으면 프롬프트에서 아예 빠져야 하고(기존 동작 보존), 있으면 문구가
+    # 그대로 나타나야 한다.
+    prompt = _route_summary_prompt(
+        _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000,
+        context_note="활동: 식사, 커피 · 조건: 검증된 정보 우선",
+    )
+    assert "활동: 식사, 커피 · 조건: 검증된 정보 우선" in prompt
+
+
+def test_route_summary_prompt_omits_context_note_when_none():
+    prompt = _route_summary_prompt(
+        _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+    )
+    assert "사용자가 고른 조건:" not in prompt
+
+
+def test_summarize_route_forwards_context_note_into_prompt():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "설명 문장"}]}}]},
+    )
+    mock_post = AsyncMock(return_value=post_response)
+    with patch("httpx.AsyncClient.post", new=mock_post):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS,
+                budget=20000,
+                party_size=1,
+                total_spend=8000,
+                total_savings=2000,
+                context_note="활동: 식사",
+            )
+        )
+    assert result == "설명 문장"
+    sent_prompt = mock_post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"]
+    assert "활동: 식사" in sent_prompt
 
 
 def test_extract_menu_items_parses_json_array_and_drops_incomplete_rows():

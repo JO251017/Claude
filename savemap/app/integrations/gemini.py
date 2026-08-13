@@ -45,18 +45,30 @@ def _typical_price_prompt(item_name: str) -> str:
 
 
 def _route_summary_prompt(
-    stops: list[dict], budget: float, party_size: int, total_spend: float, total_savings: float
+    stops: list[dict],
+    budget: float,
+    party_size: int,
+    total_spend: float,
+    total_savings: float,
+    context_note: str | None = None,
 ) -> str:
     lines = "\n".join(
         f"{i + 1}. {s['place_name']} ({s['category']}) - {s['final_price']:,.0f}원"
         + (f", 평균 대비 {s['savings_rate']:.0f}% 저렴" if s["savings_rate"] > 0 else "")
         for i, s in enumerate(stops)
     )
+    # context_note: 사용자가 Step1/Step2에서 고른 활동/조건(예: "활동: 식사, 커피 ·
+    # 조건: 검증된 정보 우선") — "왜 이 코스인지" 설명에 참고만 하게 한다. 숫자/장소는
+    # 여전히 아래 코스 목록에 있는 것만 쓰라고 명시해서, 참고 정보가 새 숫자를 만들어낼
+    # 근거로 오용되지 않게 한다.
+    note_line = f"\n사용자가 고른 조건: {context_note}\n" if context_note else ""
     return (
         "아래는 이미 계산이 끝난 절약 코스야. 새로운 숫자나 장소를 절대 만들어내지 말고, "
         "주어진 숫자와 장소 이름만 그대로 사용해서 자연스러운 한국어 한 문단(3문장 이내, "
-        "친근한 말투)으로 설명해줘. JSON이 아니라 그냥 문장으로 답해.\n\n"
-        f"예산: {budget:,.0f}원 (인원 {party_size}명)\n코스:\n{lines}\n"
+        "친근한 말투)으로 설명해줘. 사용자가 고른 조건은 왜 이 코스를 추천하는지 "
+        "설명하는 데만 참고하고, 그 조건으로 새 숫자를 계산하지는 마. "
+        "JSON이 아니라 그냥 문장으로 답해.\n\n"
+        f"예산: {budget:,.0f}원 (인원 {party_size}명){note_line}\n코스:\n{lines}\n"
         f"총 지출: {total_spend:,.0f}원\n총 절약: {total_savings:,.0f}원\n"
     )
 
@@ -212,15 +224,19 @@ class GeminiVisionClient:
         party_size: int,
         total_spend: float,
         total_savings: float,
+        context_note: str | None = None,
     ) -> str | None:
         """이미 계산 끝난 절약 코스(장소/가격/절약률)를 자연어 한 문단으로 phrase만
         한다 — 프롬프트에도 명시하지만, 숫자·장소 자체는 절대 여기서 새로 만들지
         않는다(호출부가 이미 결정론적으로 계산해서 넘긴다). estimate_typical_price와
         동일하게 실패 시 예외를 밖으로 던지지 않고 None으로 fail-soft — 호출부
-        (route_planner.generate_summary)가 결정론적 템플릿 문장으로 대체한다."""
+        (route_planner.generate_summary)가 결정론적 템플릿 문장으로 대체한다.
+        context_note는 사용자가 고른 활동/조건 요약(설명 근거용, 숫자 계산에는 안 씀)."""
         try:
             raw_text = await self._ask_text(
-                _route_summary_prompt(stops, budget, party_size, total_spend, total_savings)
+                _route_summary_prompt(
+                    stops, budget, party_size, total_spend, total_savings, context_note
+                )
             )
         except (OcrServiceError, ReportImageFetchError):
             return None

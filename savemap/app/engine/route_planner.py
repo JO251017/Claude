@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
+from app.domain.enums import RoutePreference
 from app.engine.ranker import RankedOffer
 
 # SaveMap의 원래 기획(하이브리드 AI 동선 추천)은 "예산/인원을 넣으면 실제로 얼마나
@@ -26,14 +28,55 @@ class RoutePlan:
     fits_budget: bool  # True면 최소 1개 이상 선택됨
 
 
-def build_route(ranked: list[RankedOffer], budget: float, max_stops: int) -> RoutePlan:
+# preference별 후보 정렬 기준 — build_route가 "어떤 후보부터 예산에 채울지" 순서를
+# 정하는 데 쓴다. 전부 이미 계산/저장돼 있는 실측값만 쓰고(가격/trust_score/
+# verification_count/last_verified_at/distance_m), 값이 없는 항목은 임의로 좋은
+# 점수를 주지 않고 정렬상 뒤로 민다(예: trust_score는 OfferCandidate 기본값 0.5가
+# 이미 "모른다"는 뜻이라 그대로 둔다).
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _preference_sort_key(preference: RoutePreference):
+    if preference == RoutePreference.CHEAPEST:
+        return lambda r: r.breakdown.final_price
+    if preference == RoutePreference.VERIFIED:
+        return lambda r: (-r.candidate.trust_score, -r.candidate.verification_count)
+    if preference == RoutePreference.RECENT:
+        return lambda r: -(r.candidate.last_verified_at or _EPOCH).timestamp()
+    if preference == RoutePreference.DISTANCE:
+        return lambda r: r.candidate.distance_m
+    raise ValueError(f"알 수 없는 RoutePreference: {preference}")
+
+
+def _ordered_by_preference(
+    ranked: list[RankedOffer], preference: RoutePreference | None
+) -> list[RankedOffer]:
+    """preference가 없으면 기존 그대로(rank_candidates가 이미 매긴 점수순) 순서를
+    유지한다 — 이게 기존 build_route 호출부(파라미터 안 넘기는 곳)의 동작을 그대로
+    보존하는 방법이다."""
+    if preference is None:
+        return ranked
+    return sorted(ranked, key=_preference_sort_key(preference))
+
+
+def build_route(
+    ranked: list[RankedOffer],
+    budget: float,
+    max_stops: int,
+    preference: RoutePreference | None = None,
+) -> RoutePlan:
     """예산 안에서 실제 후보만 골라 코스를 짠다 — 지어낸 장소/가격 없이, ranked에 이미
     있는(점수순 정렬된) 실제 오퍼만 대상으로 한다.
+
+    preference가 있으면 "어떤 후보부터 담을지" 순서를 그 기준으로 바꾼다(사용자가
+    Step2에서 고른 조건, 2026-08-13) — 예산 제약 자체나 다양성 우선/채우기 2단계
+    구조는 그대로다.
 
     두 번의 순회로 나눈다:
     1) 다양성 우선: 아직 안 쓴 카테고리인 후보만, 예산 안에서 채택.
     2) 채우기: 슬롯/예산이 남으면 카테고리 제약 없이 나머지 후보로 채운다.
-    두 순회 모두 이미 점수순으로 정렬된 ranked를 그대로 훑기만 해서 결정론적이다."""
+    두 순회 모두 같은 정렬된 순서를 그대로 훑기만 해서 결정론적이다."""
+    ordering = _ordered_by_preference(ranked, preference)
     selected: list[RankedOffer] = []
     used_categories: set = set()
     remaining = budget
@@ -48,7 +91,7 @@ def build_route(ranked: list[RankedOffer], budget: float, max_stops: int) -> Rou
         return True
 
     # 1차: 카테고리 다양성 우선
-    for r in ranked:
+    for r in ordering:
         if len(selected) >= max_stops:
             break
         if r.candidate.category in used_categories:
@@ -59,7 +102,7 @@ def build_route(ranked: list[RankedOffer], budget: float, max_stops: int) -> Rou
     # 2차: 남은 예산/슬롯을 카테고리 제약 없이 채움
     if len(selected) < max_stops:
         already = {id(r) for r in selected}
-        for r in ranked:
+        for r in ordering:
             if len(selected) >= max_stops:
                 break
             if id(r) in already:
@@ -97,10 +140,17 @@ def _fallback_summary(stops: list[RouteStop], total_spend: float, total_savings:
     )
 
 
-async def generate_summary(plan: RoutePlan, party_size: int, gemini=None) -> tuple[str, str]:
+async def generate_summary(
+    plan: RoutePlan, party_size: int, gemini=None, context_note: str | None = None
+) -> tuple[str, str]:
     """(문장, 출처) — 출처는 "ai" | "template". benchmark_source처럼 어디서 나온
     문장인지 그대로 노출해서 프론트/사용자가 AI 추정과 결정론적 결과를 구분할 수
-    있게 한다. 코스가 비어 있으면 지어낼 게 없으니 Gemini를 아예 부르지 않는다."""
+    있게 한다. 코스가 비어 있으면 지어낼 게 없으니 Gemini를 아예 부르지 않는다.
+
+    context_note: 사용자가 고른 활동/조건을 사람이 읽는 문장으로 미리 요약한 것
+    (예: "활동: 식사, 커피 · 조건: 검증된 정보 우선"). Gemini가 "왜 이 코스를
+    추천하는지" 설명할 때 참고만 하는 배경 정보이고, 숫자/장소는 여전히 stops에
+    있는 것만 쓰게 프롬프트에서 강제한다(gemini._route_summary_prompt)."""
     if not plan.stops:
         return _fallback_summary(plan.stops, 0.0, 0.0), "template"
 
@@ -121,6 +171,7 @@ async def generate_summary(plan: RoutePlan, party_size: int, gemini=None) -> tup
         party_size=party_size,
         total_spend=plan.total_spend,
         total_savings=plan.total_savings,
+        context_note=context_note,
     )
     if text:
         return text, "ai"

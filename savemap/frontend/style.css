@@ -284,6 +284,37 @@ body {
   color: white;
 }
 
+/* AI 절약 플랜 Step1(활동)/Step2(조건) 선택 — .category-chips(가로 스크롤)와 달리
+   항목이 줄바꿈되도록 wrap한다. .chip을 그대로 재사용해서 새 비주얼 시스템을
+   만들지 않는다. */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+}
+
+.field-hint {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+
 .research-btn {
   position: absolute;
   top: 138px;
@@ -616,7 +647,8 @@ body {
   gap: 10px;
 }
 
-.form-row .form-group {
+.form-row .form-group,
+.form-row input {
   flex: 1;
 }
 

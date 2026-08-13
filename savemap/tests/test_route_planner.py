@@ -1,24 +1,36 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
-from app.domain.enums import Category, Layer
+from app.domain.enums import Category, Layer, RoutePreference
 from app.engine.models import OfferCandidate
 from app.engine.ranker import rank_candidates
 from app.engine.route_planner import _fallback_summary, build_route, generate_summary
 
 
-def _c(offer_id: int, category: Category, base: float, discount: float = 0.0) -> OfferCandidate:
+def _c(
+    offer_id: int,
+    category: Category,
+    base: float,
+    discount: float = 0.0,
+    distance_m: float = 100.0,
+    trust_score: float = 0.5,
+    verification_count: int = 0,
+    last_verified_at=None,
+) -> OfferCandidate:
     return OfferCandidate(
         offer_id=offer_id,
         place_id=offer_id,
         place_name=f"place{offer_id}",
         category=category,
         layer=Layer.REGULAR,
-        distance_m=100.0,
+        distance_m=distance_m,
         base_price=base,
         lat=36.99,
         lng=127.11,
         store_discount=discount,
-        trust_score=0.5,
+        trust_score=trust_score,
+        verification_count=verification_count,
+        last_verified_at=last_verified_at,
     )
 
 
@@ -135,3 +147,88 @@ def test_generate_summary_falls_back_to_template_when_gemini_returns_none():
     text, source = asyncio.run(generate_summary(plan, party_size=1, gemini=_FailingGemini()))
     assert source == "template"
     assert plan.stops[0].ranked.candidate.place_name in text
+
+
+def test_generate_summary_forwards_context_note_to_gemini():
+    captured = {}
+
+    class _FakeGemini:
+        async def summarize_route(self, **kwargs):
+            captured.update(kwargs)
+            return "문장"
+
+    candidates = [_c(1, Category.FREE, base=0)]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=5000, max_stops=4)
+
+    asyncio.run(
+        generate_summary(
+            plan, party_size=1, gemini=_FakeGemini(), context_note="활동: 식사"
+        )
+    )
+    assert captured["context_note"] == "활동: 식사"
+
+
+# --- preference: build_route가 선택 순서를 실제로 바꾸는지(사용자 지시, 2026-08-13) ---
+
+
+def test_no_preference_keeps_existing_rank_score_order():
+    # preference를 안 넘기면 기존 동작(rank_candidates가 이미 매긴 점수순) 그대로다.
+    candidates = [_c(1, Category.DISCOUNT, base=1000), _c(2, Category.DISCOUNT, base=1000)]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=1, preference=None)
+    assert len(plan.stops) == 1
+    assert plan.stops[0].ranked.candidate.offer_id == ranked[0].candidate.offer_id
+
+
+def test_cheapest_preference_picks_lowest_price_first():
+    candidates = [
+        _c(1, Category.DISCOUNT, base=9000),
+        _c(2, Category.DISCOUNT, base=1000),
+        _c(3, Category.DISCOUNT, base=5000),
+    ]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=1, preference=RoutePreference.CHEAPEST)
+    assert len(plan.stops) == 1
+    assert plan.stops[0].ranked.candidate.offer_id == 2
+
+
+def test_verified_preference_prefers_higher_trust_score():
+    candidates = [
+        _c(1, Category.DISCOUNT, base=1000, trust_score=0.3),
+        _c(2, Category.DISCOUNT, base=1000, trust_score=0.9),
+    ]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=1, preference=RoutePreference.VERIFIED)
+    assert plan.stops[0].ranked.candidate.offer_id == 2
+
+
+def test_recent_preference_prefers_most_recently_verified():
+    now = datetime.now(timezone.utc)
+    candidates = [
+        _c(1, Category.DISCOUNT, base=1000, last_verified_at=now - timedelta(days=30)),
+        _c(2, Category.DISCOUNT, base=1000, last_verified_at=now - timedelta(days=1)),
+        _c(3, Category.DISCOUNT, base=1000, last_verified_at=None),
+    ]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=1, preference=RoutePreference.RECENT)
+    assert plan.stops[0].ranked.candidate.offer_id == 2
+
+
+def test_distance_preference_prefers_closest():
+    candidates = [
+        _c(1, Category.DISCOUNT, base=1000, distance_m=800.0),
+        _c(2, Category.DISCOUNT, base=1000, distance_m=50.0),
+    ]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=1, preference=RoutePreference.DISTANCE)
+    assert plan.stops[0].ranked.candidate.offer_id == 2
+
+
+def test_preference_does_not_override_budget_constraint():
+    # cheapest든 뭐든, 예산 넘는 후보는 여전히 못 담는다.
+    candidates = [_c(1, Category.DISCOUNT, base=50000)]
+    ranked = rank_candidates(candidates)
+    plan = build_route(ranked, budget=1000, max_stops=4, preference=RoutePreference.CHEAPEST)
+    assert plan.stops == []
+    assert plan.fits_budget is False

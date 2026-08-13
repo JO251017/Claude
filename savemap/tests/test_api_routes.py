@@ -57,6 +57,35 @@ def test_route_suggest_rejects_invalid_party_size(client):
     assert resp.status_code == 422
 
 
+def test_route_suggest_rejects_unknown_activity_value(client):
+    # activities는 "무엇을 할까요?" 선택지(app.domain.enums.RouteActivity)여야 하고,
+    # 예전 offer-type 카테고리 값("discount" 등)을 넣으면 422로 걸러져야 한다 —
+    # Activity/Category가 실제로 분리됐는지 검증(사용자 지시, 2026-08-13).
+    resp = client.post(
+        "/v1/route/suggest",
+        json={"lat": 36.99, "lng": 127.11, "budget": 20000, "activities": ["discount"]},
+    )
+    assert resp.status_code == 422
+
+
+def test_route_suggest_accepts_new_request_shape_before_db(client):
+    # activities/preference/free_parking_required가 스키마 레벨에서 통과되는지만
+    # 확인한다 — 예산 검증(400) 이전에 422가 나지 않아야 새 필드들이 유효하다는 뜻.
+    resp = client.post(
+        "/v1/route/suggest",
+        json={
+            "lat": 36.99,
+            "lng": 127.11,
+            "budget": 100,  # 일부러 범위 밖 값 — 요청 파싱은 통과하고 SM4003으로 걸려야 한다
+            "activities": ["dining", "cafe"],
+            "preference": "verified",
+            "free_parking_required": True,
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "SM4003"
+
+
 def test_admin_sync_rejects_missing_key(client, monkeypatch):
     from app.core.config import settings
 

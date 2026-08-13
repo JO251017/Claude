@@ -649,31 +649,66 @@ document.getElementById('route-plan-close-btn').addEventListener('click', () => 
   routePlanOverlay.classList.add('hidden');
 });
 
+// Step1 "무엇을 할까요?" — 할인/무료/마감세일 같은 절약 수단(Category)이 아니라
+// 사용자가 실제로 하고 싶은 일. Place.category_name에서 실제로 구분 가능한 것부터만
+// 넣는다(사용자 지시, 2026-08-13) — 쇼핑/문화·여가/가족활동은 지금 데이터로 매핑할
+// 근거가 없어서 아직 넣지 않는다.
+const ROUTE_ACTIVITIES = [
+  { value: 'dining', label: '🍚 식사' },
+  { value: 'cafe', label: '☕ 커피' },
+  { value: 'dessert', label: '🍰 디저트' },
+];
+
+// Step2 "어떤 조건이 중요할까요?" — 실제 build_route 정렬 로직에 그대로 반영된다
+// (app/engine/route_planner.py의 RoutePreference). 첫 항목(균형있게)은 preference를
+// 아예 안 보내는 것(=기존 기본 랭킹 점수) — 장식이 아니라 실제 선택지다.
+const ROUTE_PREFERENCES = [
+  { value: '', label: '균형있게' },
+  { value: 'cheapest', label: '💰 최대한 저렴하게' },
+  { value: 'verified', label: '✅ 검증된 정보 우선' },
+  { value: 'recent', label: '🕐 최신 정보 우선' },
+  { value: 'distance', label: '📍 이동거리 최소화' },
+];
+
 function routePlanFormHtml() {
+  const activityChips = ROUTE_ACTIVITIES.map(
+    (a) => `<button type="button" class="chip route-activity-chip" data-value="${a.value}">${a.label}</button>`
+  ).join('');
+  const preferenceChips = ROUTE_PREFERENCES.map(
+    (p, i) =>
+      `<button type="button" class="chip route-preference-chip${i === 0 ? ' active' : ''}" data-value="${p.value}">${p.label}</button>`
+  ).join('');
+
   return `
     <h2 class="place-name">🤖 AI 절약 플랜</h2>
-    <div class="meta-line">예산과 인원을 알려주면 실제 후보 중에서 예산 안에 드는 코스를 짜드려요.</div>
+    <div class="meta-line">뭘 하고 싶은지 알려주면, 실제 후보 중에서 가장 절약되는 코스를 짜드려요.</div>
+
     <div class="form-group">
-      <label for="route-budget-input">예산 (원)</label>
-      <input type="number" id="route-budget-input" min="1000" step="1000" value="30000" />
+      <label>① 무엇을 할까요? (여러 개 선택 가능)</label>
+      <div class="chip-group">${activityChips}</div>
+      <div class="field-hint">비워두면 모든 활동에서 찾아요. 지원 활동은 계속 늘려갈 예정이에요.</div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="route-party-input">인원</label>
-        <input type="number" id="route-party-input" min="1" max="20" value="1" />
-      </div>
-      <div class="form-group">
-        <label for="route-category-input">선호 카테고리</label>
-        <select id="route-category-input">
-          <option value="">전체</option>
-          <option value="free">무료</option>
-          <option value="discount">할인</option>
-          <option value="closing_soon">마감임박</option>
-          <option value="free_parking">무료주차</option>
-          <option value="local_benefit">지역혜택</option>
-        </select>
+
+    <div class="form-group">
+      <label>② 어떤 조건이 중요할까요?</label>
+      <div class="chip-group">${preferenceChips}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="route-parking-input" /> 🅿️ 무료주차 필요
+      </label>
+      <div class="field-hint">실제로 무료주차 혜택이 등록된 곳만 찾아요 — 데이터가 없으면 결과가 적을 수 있어요.</div>
+    </div>
+
+    <div class="form-group">
+      <label>③ 예산 / 인원</label>
+      <div class="form-row">
+        <input type="number" id="route-budget-input" min="1000" step="1000" value="30000" aria-label="예산" />
+        <input type="number" id="route-party-input" min="1" max="20" value="1" aria-label="인원" />
       </div>
     </div>
+
     <button type="button" class="btn-primary" id="route-plan-submit-btn">코스 만들기</button>
     <div id="route-plan-msg"></div>
   `;
@@ -683,6 +718,15 @@ function openRoutePlanSheet() {
   routePlanContent.innerHTML = routePlanFormHtml();
   routePlanOverlay.classList.remove('hidden');
   document.getElementById('route-plan-submit-btn').addEventListener('click', submitRoutePlan);
+  routePlanContent.querySelectorAll('.route-activity-chip').forEach((chip) => {
+    chip.addEventListener('click', () => chip.classList.toggle('active'));
+  });
+  routePlanContent.querySelectorAll('.route-preference-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      routePlanContent.querySelectorAll('.route-preference-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
 }
 
 async function submitRoutePlan() {
@@ -690,7 +734,12 @@ async function submitRoutePlan() {
   const btn = document.getElementById('route-plan-submit-btn');
   const budget = parseFloat(document.getElementById('route-budget-input').value);
   const partySize = parseInt(document.getElementById('route-party-input').value, 10) || 1;
-  const category = document.getElementById('route-category-input').value;
+  const activities = Array.from(routePlanContent.querySelectorAll('.route-activity-chip.active')).map(
+    (c) => c.dataset.value
+  );
+  const activePreferenceChip = routePlanContent.querySelector('.route-preference-chip.active');
+  const preference = activePreferenceChip && activePreferenceChip.dataset.value ? activePreferenceChip.dataset.value : null;
+  const freeParkingRequired = document.getElementById('route-parking-input').checked;
 
   if (!budget || budget <= 0) {
     msgEl.innerHTML = '<p class="error-msg">예산을 입력해주세요.</p>';
@@ -706,7 +755,9 @@ async function submitRoutePlan() {
 
   try {
     const payload = { lat, lng, budget, party_size: partySize };
-    if (category) payload.category = category;
+    if (activities.length) payload.activities = activities;
+    if (preference) payload.preference = preference;
+    if (freeParkingRequired) payload.free_parking_required = true;
     const data = await apiFetch('/route/suggest', { method: 'POST', body: JSON.stringify(payload) });
     renderRoutePlanResult(data);
   } catch (err) {
@@ -734,7 +785,14 @@ function renderRoutePlanResult(data) {
   const stopsHtml = data.stops
     .map((s, i) => {
       const priceLabel = s.final_price > 0 ? formatWon(s.final_price) : '무료';
-      const savingsNote = s.savings_rate > 0 ? ` · 평균보다 ${Math.round(s.savings_rate)}% 저렴` : '';
+      // savings_source: "region"=주변 매장 실측가 비교, "ai"=Gemini 추정 통상가 비교,
+      // null=비교 대상 없음 — 실측처럼 보이지 않게 항상 출처를 그대로 밝힌다
+      // (검색 결과 카드의 sourceLabel 표기와 동일한 원칙).
+      let savingsNote = '';
+      if (s.savings_rate > 0) {
+        const sourceLabel = s.savings_source === 'ai' ? 'AI 추정' : '실측';
+        savingsNote = ` · ${sourceLabel} 대비 ${Math.round(s.savings_rate)}% 저렴`;
+      }
       return `
       <div class="route-stop-card" data-idx="${i}">
         <div class="route-stop-order">${s.order}</div>
