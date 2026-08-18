@@ -1723,6 +1723,23 @@ select:focus {
   margin: 0 auto 8px;
 }
 
+/* 성장 링(디자인 스킬 적용, 2026-08-18) — MAP 상단 절약 레벨 배지(.xp-ring)와
+   같은 conic-gradient + --*-pct 커스텀 프로퍼티 패턴을 그대로 재사용한다(이
+   앱에서 이미 자리잡은 "원형 진행도" 관용구 — 새 시각 언어를 만들지 않는다).
+   padding 5px가 안쪽 .character-avatar(84px)를 그대로 감싸 94px 링이 된다. */
+.character-avatar-ring {
+  width: 94px;
+  height: 94px;
+  border-radius: 50%;
+  padding: 5px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(var(--gold) var(--growth-pct, 0%), rgba(148, 163, 184, 0.28) 0);
+  transition: background 0.4s ease;
+}
+
 .character-avatar {
   position: relative;
   width: 84px;
@@ -1733,7 +1750,29 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.35);
+  cursor: pointer;
+  /* 원 가장자리에 얇은 하이라이트를 얹어 유리/도자기 같은 입체감을 준다(글래스
+     시스템의 --glass-shadow가 쓰는 inset 하이라이트와 같은 수법). */
+  box-shadow:
+    0 8px 20px rgba(13, 148, 136, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: avatar-breathe 3.6s ease-in-out infinite;
+}
+
+/* 탭-투-펫(디자인 스킬 4.5 Tactile Feedback 적용) — 눌렀을 때 살짝
+   눌리는 느낌으로 "만질 수 있는 대상"임을 알려준다. CSS 스펙상 실행 중인
+   애니메이션(avatar-breathe)의 transform이 일반 규칙보다 항상 우선이라
+   !important 없이는 눌러도 아무 반응이 안 보인다 — 이 파일의 유일한 다른
+   !important(.hidden)처럼 좁은 범위에서만 정당하게 쓴다. */
+.character-avatar:active {
+  transform: scale(0.94) !important;
+}
+
+/* 대기 중에도 아주 살짝 위아래로 숨쉬어서 "살아있는" 느낌을 준다 — 동작할
+   이유가 분명한 모션만(디자인 스킬 5. Motion Must Be Motivated). */
+@keyframes avatar-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
 }
 
 .character-avatar svg {
@@ -1745,13 +1784,19 @@ select:focus {
   height: 64px;
 }
 
-/* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다. */
+/* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다.
+   breathe(숨쉬기)도 같이 나열해서 최고 단계에서도 계속 숨쉰다 — animation
+   shorthand는 병합이 아니라 통째로 교체되므로, 여기서 빠뜨리면 halo가 붙는
+   순간 숨쉬기가 영영 멈춘다. box-shadow는 halo-pulse가, transform은 breathe가
+   맡아 서로 다른 프로퍼티라 충돌 없이 같이 돈다. */
 .character-avatar.avatar-halo {
   box-shadow:
     0 8px 20px rgba(13, 148, 136, 0.35),
     0 0 0 4px rgba(251, 191, 36, 0.25),
     0 0 24px 6px rgba(251, 191, 36, 0.55);
-  animation: avatar-halo-pulse 2.4s ease-in-out infinite;
+  animation:
+    avatar-halo-pulse 2.4s ease-in-out infinite,
+    avatar-breathe 3.6s ease-in-out infinite;
 }
 
 @keyframes avatar-halo-pulse {
@@ -1773,24 +1818,34 @@ select:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .character-avatar { animation: none; }
   .character-avatar.avatar-halo { animation: none; }
   .character-avatar.avatar-bounce { animation: none; }
+  .character-avatar:active { transform: none !important; }
 }
 
-/* 성장 단계가 오를수록 늘어나는 장식(별) — 다마고치처럼 "장식이 늘어나는" 느낌을
-   레이어드 SVG 대신 가볍게 구현한다. */
+/* 성장 단계가 오를수록 늘어나는 장식(반짝임) — 다마고치처럼 "장식이 늘어나는"
+   느낌을 레이어드 SVG 대신 가볍게 구현한다. 이모지(⭐/✨) 대신 골드 톤
+   currentColor SVG(ICONS.sparkle)를 써서 OS/폰트에 따라 색이 들쭉날쭉하던
+   걸 --gold-glow 하나로 통일했다(디자인 스킬 적용, 2026-08-18). 링이 생기며
+   아바타 바깥 여백이 넓어진 만큼 위치도 같이 밀어냈다. */
 .avatar-deco {
   position: absolute;
-  font-size: 0.95rem;
-  line-height: 1;
+  width: 16px;
+  height: 16px;
+  color: var(--gold-glow);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
 }
 
-.avatar-deco--1 { top: -2px; right: -4px; }
-.avatar-deco--2 { bottom: 2px; left: -6px; }
-.avatar-deco--3 { top: 4px; left: -8px; font-size: 0.8rem; }
+.avatar-deco svg { width: 100%; height: 100%; }
+
+.avatar-deco--1 { top: -6px; right: -8px; }
+.avatar-deco--2 { bottom: -2px; left: -10px; }
+.avatar-deco--3 { top: 2px; left: -13px; width: 13px; height: 13px; }
 
 .character-level {
+  display: block;
+  margin: 8px 0 10px;
   font-size: 0.85rem;
   font-weight: 800;
   color: var(--gold);
@@ -1805,7 +1860,11 @@ select:focus {
   transform: translateX(-50%);
   white-space: nowrap;
   background: var(--glass-bg-strong);
-  border: 1px solid var(--border);
+  /* 골드 톤 테두리 — 색상 락(디자인 스킬 4.2 Color Consistency Lock) 적용:
+     이 카드에서 "성장"을 뜻하는 하나의 강조색(골드)을 배지·링·바가 동일하게
+     쓰도록 통일했다. 회색 중립 테두리 대신 골드를 옅게 섞어 세 요소가 하나의
+     모듈로 보이게 한다. */
+  border: 1px solid rgba(217, 119, 6, 0.35);
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 0.7rem;
@@ -1820,6 +1879,10 @@ select:focus {
   color: var(--ink-soft);
   font-weight: 700;
   margin-bottom: 12px;
+  /* 성장 모듈(아바타+링+바)과 절약금액 모듈을 얇은 구분선으로 나눠서 두 축이
+     다른 정보임을 시각적으로도 분리한다(디자인 스킬 적용, 2026-08-18). */
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 .saving-amount span {

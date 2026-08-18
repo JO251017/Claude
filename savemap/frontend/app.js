@@ -33,6 +33,10 @@ const ICONS = {
   pin: `<svg ${ICON_SVG_ATTRS}><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
   refresh: `<svg ${ICON_SVG_ATTRS}><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg>`,
   check: `<svg ${ICON_SVG_ATTRS}><path d="m5 12 5 5 9-11"/></svg>`,
+  // 아바타 성장 장식(avatar-deco)용 반짝임. 예전엔 이모지(⭐/✨)를 그대로
+  // 썼는데 OS/폰트마다 색·모양이 달라 골드 톤(--gold-glow)과 안 맞았다 —
+  // currentColor로 그려서 CSS에서 색을 통일한다(디자인 스킬 적용, 2026-08-18).
+  sparkle: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.7 3.4 1.9 5.6 3.6 7.3 1.7 1.7 3.9 2.9 7.3 3.6-3.4.7-5.6 1.9-7.3 3.6-1.7 1.7-2.9 3.9-3.6 7.3-.7-3.4-1.9-5.6-3.6-7.3-1.7-1.7-3.9-2.9-7.3-3.6 3.4-.7 5.6-1.9 7.3-3.6 1.7-1.7 2.9-3.9 3.6-7.3Z"/></svg>`,
 };
 
 // --- 아바타 성장(다마고치식, 2-4, 2026-08-13) ---
@@ -134,9 +138,9 @@ function pixelDogSvg({ collar = false, bandana = false } = {}) {
 function characterAvatarHtmlFor(stageIndex) {
   const svg = pixelDogSvg({ collar: stageIndex >= 2, bandana: stageIndex >= 4 });
   const decos = [];
-  if (stageIndex >= 2) decos.push('<span class="avatar-deco avatar-deco--1" aria-hidden="true">⭐</span>');
-  if (stageIndex >= 4) decos.push('<span class="avatar-deco avatar-deco--2" aria-hidden="true">⭐</span>');
-  if (stageIndex >= 6) decos.push('<span class="avatar-deco avatar-deco--3" aria-hidden="true">✨</span>');
+  if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
+  if (stageIndex >= 4) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
+  if (stageIndex >= 6) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
   return svg + decos.join('');
 }
 
@@ -300,6 +304,12 @@ document.querySelectorAll('[data-goto]').forEach((btn) => {
   btn.addEventListener('click', () => switchScreen(btn.dataset.goto));
 });
 
+// 아바타 탭-투-펫(디자인 스킬 적용, 2026-08-18) — 다마고치는 만지면 반응해야
+// "살아있는" 느낌이 난다. 새 API 호출이나 상태 없이 이미 있는
+// triggerAvatarGrowthFeedback()(발견/방문/추천 성공 시 쓰던 바로 그 바운스)를
+// 그대로 재사용한다 — element 자체(innerHTML만 바뀜)에 한 번만 바인딩.
+document.getElementById('character-avatar')?.addEventListener('click', () => triggerAvatarGrowthFeedback());
+
 // --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
   if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '레전더리' };
@@ -348,6 +358,13 @@ async function loadMyProfile() {
     const avatarEl = document.getElementById('character-avatar');
     avatarEl.innerHTML = characterAvatarHtmlFor(growth.stageIndex);
     avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
+    // 아바타를 감싸는 링에도 같은 진행도를 반영(디자인 스킬 적용, 2026-08-18) —
+    // 아래 가로 바(my-saving-bar)와 같은 숫자를 아바타 바로 옆에서 한눈에
+    // 보여줘서 "펫 + 진행도"가 시각적으로 한 덩어리로 읽히게 한다.
+    document.getElementById('character-avatar-ring')?.style.setProperty(
+      '--growth-pct',
+      `${growth.progressPct}%`,
+    );
     document.getElementById('my-title').textContent = growth.name;
     document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
     document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;
