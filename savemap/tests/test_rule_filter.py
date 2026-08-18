@@ -52,3 +52,24 @@ def test_category_and_activities_filters_combine():
     ]
     result = rule_filter(rows, category=Category.FREE_PARKING, activities=[RouteActivity.DINING])
     assert [o.id for o, _, _ in result] == [1]
+
+
+# --- FLASH(마감임박 타임세일) 검색 노출(2026-08-18, "핵심 콘셉트 강화") ---
+# 예전 기본값(mvp_only=True)은 FLASH 레이어를 통째로 걸러냈다 — 사장님이 실제
+# TTL 있는 타임세일을 등록해도 지도에 영원히 안 떴다. 기본값을 뒤집었으니 이제
+# 기본 호출(= /search가 쓰는 그대로)에서 FLASH도 나와야 한다.
+
+
+def test_flash_layer_included_by_default():
+    offer = Offer(id=1, place_id=1, category=Category.DISCOUNT, layer=Layer.FLASH, title="타임세일")
+    place = Place(id=1, name="place1")
+    result = rule_filter([(offer, place, 50.0)])
+    assert [o.id for o, _, _ in result] == [1]
+
+
+def test_mvp_only_true_still_excludes_flash_when_explicitly_requested():
+    # 옛 동작이 필요한 호출부가 나중에 생기면 여전히 켤 수 있다는 것만 확인.
+    offer = Offer(id=1, place_id=1, category=Category.DISCOUNT, layer=Layer.FLASH, title="타임세일")
+    place = Place(id=1, name="place1")
+    result = rule_filter([(offer, place, 50.0)], mvp_only=True)
+    assert result == []

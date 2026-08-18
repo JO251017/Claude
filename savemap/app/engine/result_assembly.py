@@ -61,6 +61,7 @@ def build_search_result_item(
         address=c.place_address,
         phone=c.place_phone,
         category=c.category,
+        layer=c.layer,
         distance_m=round(c.distance_m, 1),
         lat=c.lat,
         lng=c.lng,

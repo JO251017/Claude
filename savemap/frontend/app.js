@@ -974,6 +974,30 @@ function savingsReportHtml(r) {
 
 const STATUS_LABELS = { open: '🟢 영업중', closed: '🔴 휴무', temp_closed: '🟠 임시 휴무' };
 
+// --- FLASH(마감임박 타임세일) 카운트다운(2026-08-18, "핵심 콘셉트 강화 —
+// 마감임박 긴급성 되살리기") --- 예전엔 rule_filter.py가 FLASH 레이어를 검색
+// 자체에서 걸러내서 사장님이 타임세일을 등록해도 지도에 안 떴다. 이제 뜨니까
+// "지금 아니면 놓친다"는 게 눈에 보여야 훅으로 작동한다 — 정적 뱃지가 아니라
+// 실제로 줄어드는 카운트다운으로 보여준다.
+function flashCountdownLabel(expiresAtIso) {
+  if (!expiresAtIso) return '마감임박';
+  const remainingMs = new Date(expiresAtIso).getTime() - Date.now();
+  if (remainingMs <= 0) return '마감';
+  const totalMin = Math.floor(remainingMs / 60000);
+  if (totalMin >= 60) return `${Math.floor(totalMin / 60)}시간 ${totalMin % 60}분 후 마감`;
+  if (totalMin >= 1) return `${totalMin}분 후 마감`;
+  return `${Math.floor(remainingMs / 1000)}초 후 마감`;
+}
+
+// 카드 자체를 다시 그리지 않고 뱃지 텍스트만 30초마다 갱신한다 — 검색 결과가
+// 새로 렌더링되면 data-expires가 없는 카드는 그냥 querySelectorAll에서 안
+// 잡히니 별도 정리 로직 없이도 자연히 no-op이 된다.
+setInterval(() => {
+  document.querySelectorAll('.flash-badge[data-expires]').forEach((el) => {
+    el.textContent = `⏰ ${flashCountdownLabel(el.dataset.expires)}`;
+  });
+}, 30000);
+
 // 사람이 읽는 상대시간("3일 전 확인됨") — last_verified_at을 그대로 노출하지
 // 않고 변환만 한다(10번 항목, 2026-08-13). 지어낸 값 아님, ISO 문자열 그대로 계산.
 function relativeTimeFromNow(isoString) {
@@ -1007,12 +1031,14 @@ function openOfferDetail(r) {
         </div>`
       : '';
   const lastVerifiedText = relativeTimeFromNow(r.last_verified_at);
+  const isFlash = r.layer === 'flash';
 
   detailContent.innerHTML = `
     <div class="badge-group">
       <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
       ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
       ${freeParkingBadge}
+      ${isFlash ? `<span class="flash-badge" data-expires="${r.expires_at || ''}">⏰ ${flashCountdownLabel(r.expires_at)}</span>` : ''}
     </div>
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
     <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
@@ -1812,12 +1838,14 @@ async function runSearch() {
         // "가보면 첫 인증자가 된다"는 행동 요청으로 카드 문구를 바꾼다(현장 활동
         // 유도 기획안 §3-B, 2026-08-13).
         const isUnverified = !hasScore && !hasEstimate && r.discover_count === 0 && r.dining_count === 0;
+        const isFlash = r.layer === 'flash';
         return `
-      <div class="result-card" data-idx="${i}">
+      <div class="result-card${isFlash ? ' result-card--flash' : ''}" data-idx="${i}">
         <div class="result-header">
           <div class="badge-group">
             <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
             ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
+            ${isFlash ? `<span class="flash-badge" data-expires="${r.expires_at || ''}">⏰ ${flashCountdownLabel(r.expires_at)}</span>` : ''}
           </div>
           <span class="distance">${r.distance_m.toFixed(0)}m</span>
         </div>
@@ -1915,6 +1943,17 @@ async function initialLoad() {
 
   initMap(lat, lng);
   await runSearch().catch(() => {});
+
+  // AI 절약 플랜을 첫 화면으로 승격(사용자 지시, 2026-08-18: "핵심 콘셉트
+  // 강화 — AI 절약 플랜을 메인으로"). 예전엔 "지도 보여줄게, 알아서 찾아봐"가
+  // 첫 경험이었다 — 지도는 한 번 보면 끝이지만 "오늘 얼마로 뭘 할까"는 매번
+  // 다시 물어볼 이유가 있는 질문이라 재방문을 만드는 힘이 있다. localStorage
+  // 아니라 sessionStorage — 브라우저 세션(탭)마다 다시 물어봐야 "매번" 훅으로
+  // 작동한다(한 번 봤다고 평생 다시 안 보여주면 딱 온보딩용 안내랑 다를 게 없다).
+  if (!sessionStorage.getItem('savemap_route_plan_shown')) {
+    sessionStorage.setItem('savemap_route_plan_shown', '1');
+    openRoutePlanSheet();
+  }
 }
 
 initialLoad();

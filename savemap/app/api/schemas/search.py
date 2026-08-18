@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain.enums import Category, PaymentMethodType
+from app.domain.enums import Category, Layer, PaymentMethodType
 
 
 class SavingsReportItem(BaseModel):
@@ -40,6 +40,10 @@ class SearchResultItem(BaseModel):
     address: str | None = None
     phone: str | None = None
     category: Category
+    # FLASH면 프론트가 마감 카운트다운 배지를 보여준다(2026-08-18, "마감임박
+    # 긴급성 되살리기" — rule_filter.py 참고). 지금까진 검색에서 FLASH 자체가
+    # 아예 빠져 있어서 이 값을 쓸 일도 없었다.
+    layer: Layer
     distance_m: float
     lat: float
     lng: float
