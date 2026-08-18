@@ -104,20 +104,31 @@ const DOG_PIXEL_ROWS = [
 ].map((row) => row.slice(0, 13)); // 각 행이 반드시 13칸이 되도록 안전장치
 const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
 
-function pixelDogSvg({ collar = false, bandana = false } = {}) {
-  const width = DOG_PIXEL_ROWS[0].length;
-  const height = DOG_PIXEL_ROWS.length;
+// blink(눈 감기)/tailWag(꼬리 흔들기) — 프레임마다 바뀌는 두 파츠. 정적인
+// 그림 하나를 CSS로 흔드는 대신, 실제 예전 다마고치처럼 "그림 자체가 몇
+// 프레임을 반복 재생"하는 방식이 필요하다(사용자 지시: "진짜 예전
+// 다마고치처럼 2D로 적용하지만 움직이고 이런게 필요해", 2026-08-18).
+function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag = false } = {}) {
+  // 눈(row 5의 'k' 두 개)을 얼굴색으로 덮으면 "눈을 감은" 프레임이 된다 — 코(row
+  // 8)의 'k'는 건드리면 안 되니 row index로만 골라서 바꾼다.
+  const rows = blink
+    ? DOG_PIXEL_ROWS.map((row, y) => (y === 5 ? row.replace(/k/g, 'h') : row))
+    : DOG_PIXEL_ROWS;
+  const width = rows[0].length;
+  const height = rows.length;
   const rects = [];
-  DOG_PIXEL_ROWS.forEach((row, y) => {
+  rows.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) {
       const ch = row[x];
       if (ch === '.') continue;
       rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${DOG_PALETTE[ch]}"/>`);
     }
   });
-  // 꼬리 — 몸통 오른쪽에 항상 붙어 있는 기본 파츠(성장 단계와 무관).
+  // 꼬리 — 몸통 오른쪽에 항상 붙어 있는 기본 파츠(성장 단계와 무관). tailWag
+  // 프레임에서는 아래쪽 칸을 한 칸 안쪽으로 당겨 좌우로 흔드는 것처럼 보이게
+  // 한다 — 진짜 스프라이트 두 장을 번갈아 그리는 애니메이션의 핵심 파츠.
   rects.push(`<rect x="${width - 1}" y="12" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  rects.push(`<rect x="${width - 1}" y="13" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
+  rects.push(`<rect x="${tailWag ? width - 2 : width - 1}" y="13" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
   // 목줄(3단계 이상) — 목(좁아지는 줄, row 11) 색을 포인트 컬러로 덧그린다.
   if (collar) {
     for (let x = 4; x <= 8; x++) {
@@ -135,13 +146,54 @@ function pixelDogSvg({ collar = false, bandana = false } = {}) {
 
 // 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
 // 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
-function characterAvatarHtmlFor(stageIndex) {
-  const svg = pixelDogSvg({ collar: stageIndex >= 2, bandana: stageIndex >= 4 });
+function characterAvatarHtmlFor(stageIndex, frame = {}) {
+  const svg = pixelDogSvg({
+    collar: stageIndex >= 2,
+    bandana: stageIndex >= 4,
+    blink: !!frame.blink,
+    tailWag: !!frame.tailWag,
+  });
   const decos = [];
   if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 4) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 6) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
   return svg + decos.join('');
+}
+
+// --- 아바타 스프라이트 애니메이션 루프 (다마고치식 프레임 재생, 2026-08-18) ---
+// CSS transform으로 전체를 흔드는 것("도구가 흔들린다")과, 그림 자체가 눈을
+// 깜빡이고 꼬리를 흔드는 것("살아있는 그림")은 완전히 다른 인상을 준다.
+// 후자를 위해 프레임 두 세트(꼬리 좌/우 × 눈 뜸/감음)를 순서대로 재생한다.
+// 눈 감음은 매 프레임마다 나오면 부자연스러워서 4프레임 중 1번만 등장하게
+// 배치했다(사람 눈 깜빡임 빈도를 흉내).
+const AVATAR_SPRITE_SEQUENCE = [
+  { tailWag: false, blink: false },
+  { tailWag: true, blink: false },
+  { tailWag: false, blink: false },
+  { tailWag: true, blink: true },
+];
+let avatarSpriteStageIndex = 0;
+let avatarSpriteFrameIdx = 0;
+let avatarSpriteTimer = null;
+
+function renderAvatarSpriteFrame() {
+  const el = document.getElementById('character-avatar');
+  if (!el) return;
+  el.innerHTML = characterAvatarHtmlFor(avatarSpriteStageIndex, AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx]);
+}
+
+// loadMyProfile()이 성장 단계를 바꿀 때마다 새로 부르는 게 아니라, 페이지에
+// 딱 한 번만 걸어두고 이후엔 avatarSpriteStageIndex만 갱신한다 — 그래야
+// 로그인 전 자리표시자 단계에서도 이미 움직이고 있고, 성장 단계가 바뀌어도
+// 재생 중인 루프가 끊기지 않는다.
+function ensureAvatarSpriteLoopStarted() {
+  if (avatarSpriteTimer) return;
+  renderAvatarSpriteFrame(); // 첫 프레임은 타이머를 기다리지 않고 바로 그린다
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return; // 정지 프레임 유지
+  avatarSpriteTimer = setInterval(() => {
+    avatarSpriteFrameIdx = (avatarSpriteFrameIdx + 1) % AVATAR_SPRITE_SEQUENCE.length;
+    renderAvatarSpriteFrame();
+  }, 450);
 }
 
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
@@ -310,6 +362,11 @@ document.querySelectorAll('[data-goto]').forEach((btn) => {
 // 그대로 재사용한다 — element 자체(innerHTML만 바뀜)에 한 번만 바인딩.
 document.getElementById('character-avatar')?.addEventListener('click', () => triggerAvatarGrowthFeedback());
 
+// 로그인 여부와 무관하게 페이지가 뜨자마자 스프라이트 루프를 건다 — 로그인
+// 전 자리표시자 단계에서도 이미 눈 깜빡이고 꼬리를 흔들어야 "다마고치가
+// 계속 살아있다"는 느낌이 유지된다(사용자 지시, 2026-08-18).
+ensureAvatarSpriteLoopStarted();
+
 // --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
   if (savingsRate >= 50) return { cls: 'rarity-legendary', label: '레전더리' };
@@ -355,8 +412,11 @@ async function loadMyProfile() {
     // 합산("성장치")으로 단계를 정한다. 절약금액 레벨과는 완전히 분리된 축.
     const growthScore = s.discovered_place_count + s.visit_count + s.recommend_count;
     const growth = avatarGrowthStageFor(growthScore);
+    // 실제 그림을 직접 갈아끼우지 않고 스프라이트 루프가 참조하는 단계만
+    // 바꾼다 — 그래야 눈 깜빡임/꼬리 흔들기 재생이 끊기지 않고 이어진다.
+    avatarSpriteStageIndex = growth.stageIndex;
+    renderAvatarSpriteFrame();
     const avatarEl = document.getElementById('character-avatar');
-    avatarEl.innerHTML = characterAvatarHtmlFor(growth.stageIndex);
     avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
     // 아바타를 감싸는 링에도 같은 진행도를 반영(디자인 스킬 적용, 2026-08-18) —
     // 아래 가로 바(my-saving-bar)와 같은 숫자를 아바타 바로 옆에서 한눈에

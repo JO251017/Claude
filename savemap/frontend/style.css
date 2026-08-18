@@ -1768,11 +1768,18 @@ select:focus {
   transform: scale(0.94) !important;
 }
 
-/* 대기 중에도 아주 살짝 위아래로 숨쉬어서 "살아있는" 느낌을 준다 — 동작할
-   이유가 분명한 모션만(디자인 스킬 5. Motion Must Be Motivated). */
+/* 대기 중에도 살짝 위아래로 통통 튀면서 좌우로 갸웃거려서 "살아있는" 느낌을
+   준다(예전 다마고치의 제자리 걸음/뒤뚱거림 느낌, 사용자 지시 2026-08-18) —
+   동작할 이유가 분명한 모션만(디자인 스킬 5. Motion Must Be Motivated). 실제
+   눈 깜빡임/꼬리 흔들기는 CSS가 아니라 app.js의 스프라이트 프레임 재생
+   (avatarSpriteTimer)이 그림 자체를 바꿔서 만든다 — 이 keyframe은 그 위에
+   얹히는 몸통 전체의 통통 튐만 담당한다. */
 @keyframes avatar-breathe {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+  0% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-2px) rotate(-3deg); }
+  50% { transform: translateY(-3px) rotate(0deg); }
+  75% { transform: translateY(-2px) rotate(3deg); }
+  100% { transform: translateY(0) rotate(0deg); }
 }
 
 .character-avatar svg {
