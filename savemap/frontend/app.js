@@ -81,27 +81,41 @@ function avatarGrowthStageFor(growthScore) {
 // 왕관)으로 아예 바뀌었다. 다마고치는 "같은 아이가 자란다"는 감각이 핵심이라,
 // 이제는 강아지 하나를 도트 그리드로 그리고 성장 단계에 따라 목줄/리본 같은
 // 장식만 덧그린다. 처음엔 얼굴(머리)만 그렸더니 "프로필 사진처럼 보인다"는
-// 지적을 받아, 목/가슴/앞발/꼬리까지 있는 전신(13x16)으로 다시 그렸다 —
-// 좌우 대칭 패턴이라 절반만 손으로 그리지 않고 그대로 다 적었다(한 줄이 13칸인지
-// 눈으로도 세기 쉽게).
+// 지적을 받아, 목/가슴/앞발/꼬리까지 있는 전신으로 다시 그렸다.
+// 해상도 2배 상향(13x16 -> 22x25, 사용자 지시: "조잡하네... 픽셀 단위를 더
+// 줄여서 좀 더 정밀하게", 2026-08-18) — 칸 수를 늘려 한 칸(픽셀)이 화면에서
+// 차지하는 비중을 줄이면 같은 그림도 더 정교해 보인다. 코/입을 4칸짜리
+// 뭉툭한 바 2개(로봇 입처럼 보인다는 문제가 있었다)에서 2칸짜리 작은 점으로
+// 줄여 진짜 강아지 주둥이처럼 보이게 다시 그렸다. 좌우 대칭이라 절반만 손으로
+// 그리지 않고 그대로 다 적었다(한 줄이 22칸인지 눈으로도 세기 쉽게, 각 줄을
+// 뒤집어도 같은 문자열이 되는지로 검증했다).
 const DOG_PIXEL_ROWS = [
-  '...ee...ee...', // 귀 끝
-  '..eee...eee..',
-  '.eeeeeeeeeee.',
-  '.ehhhhhhhhhe.', // 머리
-  '.hhhhhhhhhhh.',
-  '.hhkhhhhhkhh.', // 눈
-  '.hhhhhhhhhhh.',
-  '.hhhwwwwwhhh.', // 주둥이 시작
-  '.hhwwkkkwwhh.', // 코
-  '.hhhwwwwwhhh.',
-  '..hhhhhhhhh..', // 턱
-  '....hhhhh....', // 목 (좁아짐 — 목줄이 여기 얹힌다)
-  '..hhhhhhhhh..', // 어깨/가슴
-  '.hhhhwwwhhhh.', // 가슴 흰 무늬
-  '.hhhww.wwhhh.', // 앞발 두 개
-  '....ww.ww....', // 앞발 바닥
-].map((row) => row.slice(0, 13)); // 각 행이 반드시 13칸이 되도록 안전장치
+  '...ee............ee...', // 귀 끝
+  '..eeee..........eeee..',
+  '..eeeee........eeeee..',
+  '.eeeeeehhhhhhhheeeeee.', // 귀 → 머리로 이어짐
+  'eehhhhhhhhhhhhhhhhhhee',
+  'hhhhhhhhhhhhhhhhhhhhhh', // 머리
+  'hhhhhhkhhhhhhhhkhhhhhh', // 눈 위쪽
+  'hhhhhkkhhhhhhhhkkhhhhh', // 눈
+  'hhhhhhhhhhhhhhhhhhhhhh',
+  'hhhhhwwwwwwwwwwwwhhhhh', // 주둥이 시작
+  'hhhhhwwwwwkkwwwwwhhhhh', // 코 (작은 점)
+  'hhhhhwwwwwwwwwwwwhhhhh',
+  'hhhhhwwwwwkkwwwwwhhhhh', // 입 (작은 점)
+  '..hhhhhhhhhhhhhhhhhh..', // 턱
+  '.....hhhhhhhhhhhh.....', // 목 (목줄이 여기 얹힌다)
+  '.....hhhhhhhhhhhh.....',
+  '.hhhhhhhhhhhhhhhhhhhh.', // 어깨
+  '.hhhhhhwwwwwwwwhhhhhh.', // 가슴 흰 무늬
+  '.hhhhhhwwwwwwwwhhhhhh.',
+  '.hhhhhhhwwwwwwhhhhhhh.',
+  '..hhhhhhh....hhhhhhh..', // 앞발 두 개
+  '..hhhhhhh....hhhhhhh..',
+  '..wwwwwww....wwwwwww..',
+  '...wwwww......wwwww...',
+  '....www........www....', // 앞발 바닥
+].map((row) => row.slice(0, 22)); // 각 행이 반드시 22칸이 되도록 안전장치
 const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
 
 // blink(눈 감기)/tailWag(꼬리 흔들기) — 프레임마다 바뀌는 두 파츠. 정적인
@@ -109,10 +123,10 @@ const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
 // 프레임을 반복 재생"하는 방식이 필요하다(사용자 지시: "진짜 예전
 // 다마고치처럼 2D로 적용하지만 움직이고 이런게 필요해", 2026-08-18).
 function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag = false } = {}) {
-  // 눈(row 5의 'k' 두 개)을 얼굴색으로 덮으면 "눈을 감은" 프레임이 된다 — 코(row
-  // 8)의 'k'는 건드리면 안 되니 row index로만 골라서 바꾼다.
+  // 눈(row 6-7의 'k')을 얼굴색으로 덮으면 "눈을 감은" 프레임이 된다 — 코/입
+  // (row 10, 12)의 'k'는 건드리면 안 되니 row index로만 골라서 바꾼다.
   const rows = blink
-    ? DOG_PIXEL_ROWS.map((row, y) => (y === 5 ? row.replace(/k/g, 'h') : row))
+    ? DOG_PIXEL_ROWS.map((row, y) => ((y === 6 || y === 7) ? row.replace(/k/g, 'h') : row))
     : DOG_PIXEL_ROWS;
   const width = rows[0].length;
   const height = rows.length;
@@ -127,17 +141,17 @@ function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag =
   // 꼬리 — 몸통 오른쪽에 항상 붙어 있는 기본 파츠(성장 단계와 무관). tailWag
   // 프레임에서는 아래쪽 칸을 한 칸 안쪽으로 당겨 좌우로 흔드는 것처럼 보이게
   // 한다 — 진짜 스프라이트 두 장을 번갈아 그리는 애니메이션의 핵심 파츠.
-  rects.push(`<rect x="${width - 1}" y="12" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  rects.push(`<rect x="${tailWag ? width - 2 : width - 1}" y="13" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  // 목줄(3단계 이상) — 목(좁아지는 줄, row 11) 색을 포인트 컬러로 덧그린다.
+  rects.push(`<rect x="${width - 1}" y="19" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
+  rects.push(`<rect x="${tailWag ? width - 2 : width - 1}" y="20" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
+  // 목줄(3단계 이상) — 목(row 14) 색을 포인트 컬러로 덧그린다.
   if (collar) {
-    for (let x = 4; x <= 8; x++) {
-      rects.push(`<rect x="${x}" y="11" width="1" height="1" fill="#ef6f6f"/>`);
+    for (let x = 6; x <= 15; x++) {
+      rects.push(`<rect x="${x}" y="15" width="1" height="1" fill="#ef6f6f"/>`);
     }
   }
   // 리본(5단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
   if (bandana) {
-    for (let x = 5; x <= 7; x++) {
+    for (let x = 8; x <= 13; x++) {
       rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="#7c3aed"/>`);
     }
   }
@@ -198,21 +212,24 @@ function ensureAvatarSpriteLoopStarted() {
 
 // --- 아바타 자유 이동(사용자 지시: "테두리 없애고 캐릭터가 자유자재로
 // 돌아다니게", 2026-08-18) --- .character-stage 안에서 무작위 위치로
-// 슬라이드해 걸어다니는 것처럼 보이게 한다. 실제 다리를 움직이는 옆모습
-// 걷기 스프라이트까진 아니지만(정면 캐릭터 그림이라 좌우 반전으로는 걷는
-// 느낌이 안 남), CSS transition으로 부드럽게 미끄러지듯 자리를 옮기고 그
-// 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통 튐(avatar-breathe)이
-// 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
+// 슬라이드해 걸어다니는 것처럼 보이게 한다. 처음엔 바닥에 고정한 채 좌우로만
+// 움직였는데 "그렇게 움직이는게 아니라 동작 범위를 넓히라는거야"라는 후속
+// 지시를 받아 세로 방향(top)까지 포함한 2차원 이동으로 넓혔다 — .character-stage
+// 도 같이 키워서(style.css) 실제로 돌아다닐 만한 공간을 준다. 실제 다리를
+// 움직이는 옆모습 걷기 스프라이트까진 아니지만(정면 캐릭터 그림이라 좌우
+// 반전으로는 걷는 느낌이 안 남), CSS transition으로 부드럽게 미끄러지듯
+// 자리를 옮기고 그 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통
+// 튐(avatar-breathe)이 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
 let avatarRoamTimer = null;
 
 function roamAvatarToRandomSpot() {
   const stage = document.getElementById('character-stage');
   const avatarEl = document.getElementById('character-avatar');
   if (!stage || !avatarEl) return;
-  const stageWidth = stage.clientWidth;
-  const avatarWidth = avatarEl.offsetWidth || 74;
-  const maxLeft = Math.max(stageWidth - avatarWidth, 0);
+  const maxLeft = Math.max(stage.clientWidth - (avatarEl.offsetWidth || 88), 0);
+  const maxTop = Math.max(stage.clientHeight - (avatarEl.offsetHeight || 100), 0);
   avatarEl.style.left = `${Math.round(Math.random() * maxLeft)}px`;
+  avatarEl.style.top = `${Math.round(Math.random() * maxTop)}px`;
 }
 
 function ensureAvatarRoamStarted() {

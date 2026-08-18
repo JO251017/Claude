@@ -1723,28 +1723,30 @@ select:focus {
    overflow로 자를 필요가 없다. */
 .character-stage {
   position: relative;
-  height: 132px;
+  height: 190px;
   margin-bottom: 8px;
   overflow: visible;
 }
 
-/* 원형 배경/그림자(테두리)를 없애고 그림만 남긴다. position:absolute + left로
-   무대 안을 걸어다닌다 — left는 app.js가 주기적으로 바꾸고(roamAvatarToRandomSpot,
-   3.6초 간격) 여기서 transition으로 부드럽게 슬라이드시킨다. 세로 위치는
-   bottom으로 고정(무대 바닥에 서 있는 느낌), transform은 avatar-breathe
+/* 원형 배경/그림자(테두리)를 없애고 그림만 남긴다. position:absolute + left/top으로
+   무대 안 어디로든 걸어다닌다(사용자 지시: "동작 범위를 넓히라는거야",
+   2026-08-18 — 처음엔 바닥에 고정한 채 좌우로만 움직였는데, 그건 "돌아다닌다"는
+   느낌을 주기엔 범위가 너무 좁았다. 이제 무대 안 세로 방향으로도 움직인다).
+   left/top은 app.js가 주기적으로 바꾸고(roamAvatarToRandomSpot, 3.6초 간격)
+   여기서 transition으로 부드럽게 슬라이드시킨다. transform은 avatar-breathe
    (통통 튐/갸웃)·avatar-bounce(탭 반응)·avatar-halo(최고단계 후광)가 쓰므로
-   left와 절대 안 겹친다 — 서로 다른 프로퍼티라 두 애니메이션이 동시에 자연스럽게
-   합쳐진다. */
+   left/top과 절대 안 겹친다 — 서로 다른 프로퍼티라 두 애니메이션이 동시에
+   자연스럽게 합쳐진다. */
 .character-avatar {
   position: absolute;
-  bottom: 4px;
+  top: 40%;
   left: 40%;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   cursor: pointer;
   animation: avatar-breathe 3.6s ease-in-out infinite;
-  transition: left 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: left 1.4s cubic-bezier(0.4, 0, 0.2, 1), top 1.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 탭-투-펫(디자인 스킬 4.5 Tactile Feedback 적용) — 눌렀을 때 살짝
@@ -1771,13 +1773,12 @@ select:focus {
 }
 
 .character-avatar svg {
-  /* 도트(픽셀아트) 강아지 — 처음엔 얼굴(11x11 정사각형)만 그려서 "프로필 사진
-     같다"는 지적을 받았다. 목/가슴/앞발/꼬리까지 있는 전신(13x16)으로 바뀌면서
-     세로가 더 긴 비율(13:16)에 맞춰 폭/높이를 다시 잡았다. rect 기반 벡터라
-     확대해도 흐려지지 않는다. 크기 키움(사용자 지시, 2026-08-18) — 원형 배경이
-     없어져서 카드 폭 안에서 더 커져도 답답하지 않다. */
-  width: 74px;
-  height: 91px;
+  /* 도트(픽셀아트) 강아지. rect 기반 벡터라 확대해도 흐려지지 않는다. 그림
+     해상도를 22x25로 올린 만큼(DOG_PIXEL_ROWS, app.js) 화면 크기도 그 비율에
+     맞춰 다시 잡았다 — 한 칸(픽셀)이 이전(74/13≈5.7px)보다 작아져서(88/22=4px)
+     더 정교해 보인다(사용자 지시, 2026-08-18). */
+  width: 88px;
+  height: 100px;
 }
 
 /* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다.
