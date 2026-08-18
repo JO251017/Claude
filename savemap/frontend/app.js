@@ -12,6 +12,16 @@ const CATEGORY_LABELS = {
   local_benefit: '지역혜택',
 };
 
+// 제보 상태 표시(2026-08-18) — status가 이제 pending 말고도 verified로도
+// 온다(즉시 게시된 제보). REPORT_STATUS_LABELS 없이 그냥 raw enum 값을
+// 보여주면 "verified"처럼 영어가 그대로 노출된다.
+const REPORT_STATUS_LABELS = {
+  pending: '확인 필요',
+  verified: '지도에 반영됨',
+  rejected: '반려됨',
+  expired: '만료됨',
+};
+
 const ASSET_CATEGORY_LABELS = {
   cafe: '카페',
   food: '음식',
@@ -1909,16 +1919,28 @@ async function initialLoad() {
 
 initialLoad();
 
-// --- COMMUNITY: 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록) ---
+// --- 제보 (사진 한 장 → AI 자동 분석 → 확인 후 등록, 2026-08-18: COMMUNITY
+// 탭에 갇혀 있어서 아무도 못 쓰던 걸 #report-overlay로 옮겨 MAP 화면 어디서든
+// report-fab-btn으로 접근 가능하게 함) ---
 let reportImageUrl = null;
 let reportLat = null;
 let reportLng = null;
 
+const reportOverlay = document.getElementById('report-overlay');
 const reportPhotoInput = document.getElementById('r-photo-input');
 const reportCaptureStatus = document.getElementById('report-capture-status');
 const reportCaptureSection = document.getElementById('report-capture');
 const reportConfirmSection = document.getElementById('report-confirm');
 const reportResultEl = document.getElementById('report-result');
+
+document.getElementById('report-fab-btn').addEventListener('click', () => {
+  resetReportForm();
+  reportResultEl.innerHTML = '';
+  reportOverlay.classList.remove('hidden');
+});
+document.getElementById('report-overlay-close-btn').addEventListener('click', () => {
+  reportOverlay.classList.add('hidden');
+});
 
 reportPhotoInput.addEventListener('change', () => {
   const file = reportPhotoInput.files[0];
@@ -1967,11 +1989,18 @@ async function analyzeReportPhoto(file) {
 
     reportImageUrl = data.image_url;
     document.getElementById('report-preview-img').src = data.image_url;
+    // 장소명은 AI가 사진에서 가게 이름/주소를 읽었으면 미리 채워준다 — 항상
+    // 읽히는 건 아니라(간판이 안 보이는 사진 등) 사용자가 직접 고쳐 쓸 수 있게
+    // required로 두되 빈 채로 두지 않으려 시도는 한다.
+    document.getElementById('r-place-name').value = data.location_text || '';
     document.getElementById('r-title').value = data.ocr_title || '';
     document.getElementById('r-price').value = data.ocr_price != null ? data.ocr_price : '';
+    document.getElementById('r-regular-price').value = '';
     document.getElementById('r-category').value = data.ai_category || '';
     document.getElementById('report-location-status').textContent =
-      reportLat != null ? '현재 위치 자동 설정 완료' : '위치를 확인하지 못했어요 (제보는 계속 가능해요)';
+      reportLat != null
+        ? '현재 위치 자동 설정 완료'
+        : '위치를 확인하지 못했어요 — 이번 제보는 지도에는 안 뜨고 기록만 남아요.';
 
     reportCaptureSection.classList.add('hidden');
     reportConfirmSection.classList.remove('hidden');
@@ -1989,19 +2018,31 @@ function resetReportForm() {
   reportImageUrl = null;
   reportLat = null;
   reportLng = null;
+  document.getElementById('r-place-name').value = '';
+  document.getElementById('r-title').value = '';
+  document.getElementById('r-price').value = '';
+  document.getElementById('r-regular-price').value = '';
+  document.getElementById('r-category').value = '';
 }
 
 document.getElementById('report-cancel-btn').addEventListener('click', resetReportForm);
 
 document.getElementById('report-confirm-btn').addEventListener('click', async () => {
   if (!reportImageUrl) return;
+  const placeName = document.getElementById('r-place-name').value.trim();
+  if (!placeName) {
+    alert('장소명을 입력해주세요.');
+    document.getElementById('r-place-name').focus();
+    return;
+  }
   const title = document.getElementById('r-title').value.trim();
   if (!title) {
-    alert('제목을 입력해주세요.');
+    alert('혜택 내용을 입력해주세요.');
     document.getElementById('r-title').focus();
     return;
   }
   const priceVal = document.getElementById('r-price').value;
+  const regularPriceVal = document.getElementById('r-regular-price').value;
   const payload = {
     image_url: reportImageUrl,
     lat: reportLat,
@@ -2009,15 +2050,22 @@ document.getElementById('report-confirm-btn').addEventListener('click', async ()
     title,
     price: priceVal ? parseFloat(priceVal) : null,
     category: document.getElementById('r-category').value || null,
+    place_name: placeName,
+    regular_price: regularPriceVal ? parseFloat(regularPriceVal) : null,
   };
 
   const btn = document.getElementById('report-confirm-btn');
   btn.disabled = true;
   try {
-    await apiFetch('/reports', { method: 'POST', body: JSON.stringify(payload) });
-    reportResultEl.innerHTML = `<p class="empty-msg">${ICONS.check} 제보 완료! 검토 후 지도에 반영됩니다.</p>`;
+    const report = await apiFetch('/reports', { method: 'POST', body: JSON.stringify(payload) });
+    // place_id가 있으면 실제로 Place/Offer가 만들어져 지도에 떴다는 뜻(즉시
+    // 게시, 2026-08-18) — 위치가 없어서 못 만들었을 때와 메시지를 다르게 준다.
+    reportResultEl.innerHTML = report.place_id
+      ? `<p class="empty-msg">${ICONS.check} 제보 완료! 바로 지도에 반영됐어요.</p>`
+      : `<p class="empty-msg">${ICONS.check} 제보가 기록됐어요. (위치 정보가 없어 지도에는 아직 안 떠요)</p>`;
     resetReportForm();
     loadRecentReports();
+    if (report.place_id) runSearch().catch(() => {}); // 내가 방금 올린 게 바로 지도에 보이게
   } catch (err) {
     reportResultEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
   } finally {
@@ -2037,7 +2085,7 @@ async function loadRecentReports() {
       <div class="list-row">
         [${CATEGORY_LABELS[r.ai_category] || r.ai_category || '분류중'}] ${escapeHtml(r.ocr_title || '(제목 인식 중)')}
         ${r.ocr_price != null ? ` - ${r.ocr_price.toLocaleString()}원` : ''}
-        <span class="tier-tag ${r.status === 'pending' ? 'tier-pending' : ''}">${r.status === 'pending' ? '확인 필요' : r.status}</span>
+        <span class="tier-tag ${r.status === 'pending' ? 'tier-pending' : ''}">${REPORT_STATUS_LABELS[r.status] || r.status}</span>
       </div>`
           )
           .join('')

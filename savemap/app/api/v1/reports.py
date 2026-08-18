@@ -50,12 +50,13 @@ async def analyze_report_photo(
         ocr_title=ocr.title,
         lat=lat,
         lng=lng,
+        location_text=ocr.location_text,
     )
 
 
 @router.get("/reports/recent", response_model=list[RecentReportItem])
 async def recent_reports(session: AsyncSession = SessionDep) -> list[RecentReportItem]:
-    reports = await report_service.list_pending(session, limit=20)
+    reports = await report_service.list_recent(session, limit=20)
     return [
         RecentReportItem(
             id=r.id,
@@ -83,6 +84,8 @@ async def submit_report(
         title_override=payload.title,
         price_override=payload.price,
         category_override=payload.category,
+        place_name=payload.place_name,
+        regular_price=payload.regular_price,
     )
     ocr = report.ocr_json or {}
     return ReportResponse(
@@ -94,4 +97,6 @@ async def submit_report(
         ocr_price=ocr.get("price"),
         ocr_title=ocr.get("title"),
         has_location=report.geom is not None,
+        place_id=report.place_id,
+        offer_id=report.offer_id,
     )

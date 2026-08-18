@@ -928,6 +928,43 @@ select:focus {
   filter: brightness(1.03);
 }
 
+/* --- 제보 진입점 (2026-08-18, "제보/인증 마찰 줄이기") --- */
+/* .address-search-locate-btn과 같은 원형 아이콘 버튼 톤을 재사용 — 새 시각
+   언어를 만들지 않는다. topbar-row에 AI 추천 pill과 나란히 항상 떠 있어서
+   COMMUNITY 탭을 몰라도 바로 보인다. */
+.report-fab-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 148, 136, 0.35);
+  color: var(--primary-dark);
+  cursor: pointer;
+}
+
+.report-fab-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.report-fab-btn:hover {
+  filter: brightness(1.03);
+}
+
+.report-overlay-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.report-price-hint {
+  margin: -6px 0 12px;
+}
+
 /* --- AI 절약 플랜 입력 폼: Step 카드 (6번 항목, 2026-08-13) --- */
 /* 기존엔 Step①/②/③이 굵은 라벨 텍스트로만 구분돼 있었다 — "AI추천 기능
    조건별로 정리가 잘 안되는 점 개선"(사용자 지시)에 따라 카드/보더로 시각적

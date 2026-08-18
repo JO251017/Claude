@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813ad" />
+  <link rel="stylesheet" href="style.css?v=20260813ae" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -35,6 +35,14 @@
                xp-badge(RPG, 현재 hidden)가 없는 지금은 이 버튼이 자동으로 오른쪽
                끝에 붙는다. 클릭 동작(openRoutePlanSheet)은 그대로다. -->
           <button type="button" id="ai-route-cta" class="brand-pill glass ai-recommend-pill">AI 추천</button>
+          <!-- 제보 진입점(2026-08-18, "제보/인증 마찰 줄이기") — 예전엔 이 폼 자체가
+               hidden 처리된 COMMUNITY 탭 안에만 있어서 사용자가 아예 접근할 방법이
+               없었다(#report-overlay로 옮기면서 COMMUNITY의 report-capture/confirm
+               마크업은 제거함, 아래 참고). 지도 어디서든 바로 새 절약 정보를 올릴 수
+               있게 여기 노출한다. -->
+          <button type="button" id="report-fab-btn" class="report-fab-btn glass" aria-label="절약 정보 제보하기" title="절약 정보 제보하기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </button>
           <!-- RPG 요소(레벨/칭호) 잠시 비활성화 — 기본 베이스 구조 완성 후 다시 켠다
                (사용자 지시, 2026-08-12). hidden만 떼면 바로 복구된다. -->
           <div class="xp-badge glass hidden" id="savings-badge">
@@ -85,6 +93,72 @@
         <div class="detail-sheet glass">
           <button type="button" id="route-plan-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           <div id="route-plan-content"></div>
+        </div>
+      </div>
+
+      <!-- 절약 정보 제보(2026-08-18) — COMMUNITY 탭(hidden)에 갇혀 있던 폼을
+           그대로 옮겨왔다(같은 id, 같은 JS 로직). 사진 한 장 → AI가 가격/카테고리/
+           장소명을 자동으로 채워주고, 사용자가 확인 후 등록하면 즉시 실제
+           Place/Offer로 지도에 뜬다(ReportPipeline.ingest, source=S4_REPORT) —
+           예전엔 등록해도 지도에 영원히 안 뜨는 죽은 기능이었다. -->
+      <div id="report-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="report-overlay-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <h1 class="report-overlay-title">절약 정보 제보</h1>
+          <p class="subtitle">사진 한 장이면 AI가 가격·장소를 자동으로 채워드려요. 등록하는 즉시 지도에 반영돼요.</p>
+
+          <div id="report-capture" class="card-form">
+            <label for="r-photo-input" class="photo-capture-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>사진 찍기 / 갤러리에서 선택</span>
+            </label>
+            <input type="file" id="r-photo-input" accept="image/*" capture="environment" class="hidden" />
+            <div id="report-capture-status" class="subtitle"></div>
+          </div>
+
+          <div id="report-confirm" class="card-form hidden">
+            <img id="report-preview-img" class="report-preview-img" alt="제보 사진 미리보기" />
+            <div class="form-group">
+              <label for="r-place-name">장소명</label>
+              <input type="text" id="r-place-name" placeholder="예: 늘푸른정육점" required />
+            </div>
+            <div class="form-group">
+              <label for="r-title">혜택 내용</label>
+              <input type="text" id="r-title" placeholder="예: 삼겹살 20% 할인" required />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="r-price">할인가/실제 가격 (원, 선택)</label>
+                <input type="text" id="r-price" />
+              </div>
+              <div class="form-group">
+                <label for="r-regular-price">정가 (원, 선택)</label>
+                <input type="text" id="r-regular-price" />
+              </div>
+            </div>
+            <!-- 정가를 알면 절약액을 실제로 계산해서 보여줄 수 있다는 걸 미리
+                 알려준다 — 왜 이 필드가 따로 있는지 설명 없이는 "할인 가격"과
+                 헷갈리기 쉽다. -->
+            <p class="subtitle report-price-hint">정가를 알려주시면 절약액을 계산해서 보여드려요. 몰라도 등록은 가능해요.</p>
+            <div class="form-group">
+              <label for="r-category">카테고리</label>
+              <select id="r-category">
+                <option value="">AI 추정</option>
+                <option value="free">무료</option>
+                <option value="discount">할인</option>
+                <option value="closing_soon">마감임박</option>
+                <option value="free_parking">무료주차</option>
+                <option value="local_benefit">지역혜택</option>
+              </select>
+            </div>
+            <p class="subtitle" id="report-location-status">현재 위치 자동 설정</p>
+            <div class="form-row">
+              <button type="button" id="report-cancel-btn" class="btn-secondary">다시 찍기</button>
+              <button type="button" id="report-confirm-btn" class="btn-primary">등록하기</button>
+            </div>
+          </div>
+
+          <div id="report-result"></div>
         </div>
       </div>
     </section>
@@ -298,57 +372,17 @@
          아직 이 패턴 그대로 — 하단 네비 진입점만 hidden 처리, 백엔드
          (app/api/v1/reports.py 등)와 이 화면 자체는 그대로 남겨둔다. data-goto로
          이 화면에 들어오는 다른 진입점은 없다(확인 완료). hidden만 떼면 바로
-         복구된다. -->
+         복구된다.
+         제보 폼(사진→AI분석→등록) 자체는 여기 갇혀 있으면 아무도 못 써서(2026-08-18,
+         "제보/인증 마찰 줄이기") #screen-map의 #report-overlay로 옮겼다 — MAP
+         화면 어디서든 report-fab-btn으로 바로 접근 가능. 여기 COMMUNITY엔 "최근
+         제보" 피드만 남는다(진짜 커뮤니티 기능이라 계속 hidden 범위). -->
     <section id="screen-community" class="screen hidden">
       <header class="screen-header">
         <h1>COMMUNITY</h1>
         <p class="subtitle">제보와 검증으로 우리 지역 절약 데이터를 함께 만들어요</p>
       </header>
       <div class="screen-body">
-        <h2>절약 정보 제보</h2>
-        <p class="subtitle">사진 한 장이면 AI가 가격·혜택을 자동으로 채워드려요</p>
-
-        <div id="report-capture" class="card-form">
-          <label for="r-photo-input" class="photo-capture-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-            <span>사진 찍기 / 갤러리에서 선택</span>
-          </label>
-          <input type="file" id="r-photo-input" accept="image/*" capture="environment" class="hidden" />
-          <div id="report-capture-status" class="subtitle"></div>
-        </div>
-
-        <div id="report-confirm" class="card-form hidden">
-          <img id="report-preview-img" class="report-preview-img" alt="제보 사진 미리보기" />
-          <div class="form-group">
-            <label for="r-title">제목</label>
-            <input type="text" id="r-title" required />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="r-price">할인 가격 (원, 선택)</label>
-              <input type="text" id="r-price" />
-            </div>
-            <div class="form-group">
-              <label for="r-category">카테고리</label>
-              <select id="r-category">
-                <option value="">AI 추정</option>
-                <option value="free">무료</option>
-                <option value="discount">할인</option>
-                <option value="closing_soon">마감임박</option>
-                <option value="free_parking">무료주차</option>
-                <option value="local_benefit">지역혜택</option>
-              </select>
-            </div>
-          </div>
-          <p class="subtitle" id="report-location-status">현재 위치 자동 설정</p>
-          <div class="form-row">
-            <button type="button" id="report-cancel-btn" class="btn-secondary">다시 찍기</button>
-            <button type="button" id="report-confirm-btn" class="btn-primary">등록하기</button>
-          </div>
-        </div>
-
-        <div id="report-result"></div>
-
         <div class="list-section-header">
           <h2>최근 제보</h2>
           <button type="button" id="load-recent-reports-btn" class="btn-text">새로고침</button>
@@ -520,6 +554,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813ad"></script>
+  <script src="app.js?v=20260813ae"></script>
 </body>
 </html>
