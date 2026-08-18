@@ -96,6 +96,13 @@ class MenuItemResponse(BaseModel):
     listed_on_map: bool = False
     # 커뮤니티 메뉴 제보 경로에서만 0보다 클 수 있다 (새 메뉴 정보를 더했을 때 보상)
     xp_awarded: int = 0
+    # 이번 제보 항목이 실제로 어떻게 처리됐는지(2026-08-18, 항목 단위 갱신 도입) —
+    # "created"(새 메뉴로 등록) / "unchanged"(기존과 같은 가격이라 그대로 둠) /
+    # "updated"(AI 검토 통과, 가격 갱신) / "rejected"(AI 검토 거부, 기존 가격 유지).
+    # 사업자 콘솔(항상 "created"/직접 수정) 경로에선 그대로 "created"만 쓴다.
+    status: str = "created"
+    # updated/rejected일 때 AI가 판단한 한 줄 이유. created/unchanged면 None.
+    review_note: str | None = None
 
 
 class MenuItemGuessItem(BaseModel):

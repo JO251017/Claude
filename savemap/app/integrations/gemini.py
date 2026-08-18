@@ -32,6 +32,21 @@ _MENU_EXTRACTION_PROMPT = (
 )
 
 
+def _price_update_review_prompt(
+    item_name: str, old_price: float, old_verified_at: str, new_price: float
+) -> str:
+    return (
+        f'이 사진은 "{item_name}" 메뉴의 가격표·메뉴판·영수증이야. '
+        f"SaveMap에는 이미 {old_price:,.0f}원으로 등록돼 있고(마지막 확인: {old_verified_at}), "
+        f"이번에 새로 {new_price:,.0f}원이라고 제보됐어. "
+        "이 사진이 실제로 그 새 가격을 보여주는 게 맞는지 확인하고, 기존 등록 가격을 이 "
+        "사진 기준으로 갱신하는 게 타당한지 판단해줘. 사진이 흐릿하거나, 이 메뉴가 아닌 "
+        "다른 걸 찍었거나, 가격이 사진에서 안 보이면 거부해. "
+        "반드시 아래 JSON 형식으로만 응답하고 다른 텍스트는 포함하지 마:\n"
+        '{"accept_update": true 또는 false, "reason": "한 문장 이유(한국어)"}'
+    )
+
+
 def _typical_price_prompt(item_name: str) -> str:
     return (
         f'한국의 동네 식당/카페에서 "{item_name}"과(와) 같은 메뉴를 판매한다면, '
@@ -266,3 +281,32 @@ class GeminiVisionClient:
                 continue
             guesses.append(MenuItemGuess(name=str(name).strip(), price=float(price)))
         return guesses
+
+    async def review_price_update(
+        self, item_name: str, image_url: str, old_price: float, old_verified_at: str, new_price: float
+    ) -> tuple[bool, str]:
+        """이미 등록된 메뉴 가격과 다른 값이 다시 제보되면 AI가 새 사진 + 기존
+        가격의 최신성을 보고 갱신 여부를 판단한다(사용자 지시, 2026-08-18: "가격이
+        다를경우 사진에 정보 시간 및 일자, 최신성을 반영해서 검토해 AI로"). 사진을
+        다시 확인 못 하거나 응답을 이해 못 하면 보수적으로 거부(기존 값 유지) —
+        검증 안 된 가격으로 함부로 덮어쓰지 않는다."""
+        try:
+            raw_text = await self._ask_about_image(
+                image_url,
+                _price_update_review_prompt(item_name, old_price, old_verified_at, new_price),
+            )
+        except (OcrServiceError, ReportImageFetchError):
+            return False, "사진을 다시 확인하지 못해 기존 가격을 유지했어요"
+
+        try:
+            parsed = json.loads(_strip_code_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return False, "AI가 사진을 판단하지 못해 기존 가격을 유지했어요"
+
+        if not isinstance(parsed, dict):
+            return False, "AI가 사진을 판단하지 못해 기존 가격을 유지했어요"
+
+        accept = bool(parsed.get("accept_update"))
+        reason = parsed.get("reason")
+        default_reason = "가격 갱신을 확인했어요" if accept else "가격 갱신을 확인하지 못해 기존 가격을 유지했어요"
+        return accept, (str(reason) if reason else default_reason)

@@ -527,15 +527,13 @@ async function loadMyProfile() {
     // 자산 개수는 부가 정보라 실패해도 무시
   }
 
-  // 사업자 콘솔 바로가기는 인증된 사용자에게만 보인다(2-3, 2026-08-13) — 서버도
-  // require_merchant_verified로 실제 접근을 막지만, 인증 안 된 사용자가 버튼을
-  // 눌렀다가 403을 만나는 것보단 애초에 안 보이는 게 낫다.
-  try {
-    const status = await apiFetch('/users/me/merchant-status');
-    document.getElementById('merchant-console-btn').classList.toggle('hidden', !status.is_verified_merchant);
-  } catch {
-    // 조회 실패 시엔 안전하게 숨긴 상태를 유지
-  }
+  // 사업자 콘솔 바로가기는 사업자 등록 자체를 비활성화하면서(사용자 지시,
+  // 2026-08-18: "사장님 등록은 일단 비활성화 시키고 사용자가 메뉴 등록하는걸로
+  // 구조를 바꿔") 인증 여부와 무관하게 항상 숨긴다. 예전엔 인증된 사용자에게만
+  // 보였다(2-3, 2026-08-13) — 그 조건부 노출 로직은 제거했고, index.html의
+  // #merchant-console-btn은 기본 hidden 클래스를 그대로 유지한다. 백엔드
+  // (app/sources/merchant_console, /users/me/merchant-status 등)는 그대로 둔다 —
+  // EXCHANGE/COMMUNITY와 같은 hidden-not-deleted 패턴.
 }
 
 // --- 바텀시트: 드래그로 높이를 자유롭게 조절 (기존엔 탭으로 두 단계만 토글되는
@@ -1482,18 +1480,17 @@ function openDiscoveredDetail(d) {
 
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="discovered-kakao-btn">카카오맵에서 매장 정보 보기</button>
-      <button type="button" class="btn-text" id="discovered-register-btn">사장님이신가요? 매장 정식 등록하기</button>
     </div>
   `;
+  // "사장님이신가요? 매장 정식 등록하기" 버튼(→ 사업자 콘솔)은 사업자 등록을
+  // 일단 비활성화하고 사용자 메뉴 제보를 유일한 등록 경로로 삼으면서(사용자 지시,
+  // 2026-08-18) 제거했다. 사업자 콘솔 백엔드/화면 자체는 그대로 남겨둔다 —
+  // EXCHANGE/COMMUNITY와 같은 패턴으로, 나중에 실제 클레임 기능을 붙일 때
+  // 재노출한다. prefillMerchantPlace/#screen-merchant는 건드리지 않았다.
   detailOverlay.classList.remove('hidden');
 
   document.getElementById('discovered-kakao-btn').addEventListener('click', () => {
     if (d.kakao_url) window.open(d.kakao_url, '_blank', 'noopener');
-  });
-  document.getElementById('discovered-register-btn').addEventListener('click', () => {
-    detailOverlay.classList.add('hidden');
-    prefillMerchantPlace(d);
-    switchScreen('merchant');
   });
   document.getElementById('discovered-report-btn').addEventListener('click', () => {
     document.getElementById('discovered-menu-input').click();
@@ -1506,6 +1503,12 @@ function openDiscoveredDetail(d) {
 // 사업자 인증 접근 제어(2026-08-13)가 그 엔드포인트에 걸리면서 일반 사용자가
 // 막히는 회귀가 생겼다 — /places/menu-reports/analyze(로그인만 필요, 사업자 인증
 // 불필요)로 분리했다(사용자 지시: "메뉴판등록은... 사용자들이 등록하도록 바꿔"). ---
+// 방금 분석에 쓰인 메뉴판 사진의 스토리지 URL. 같은 이름의 기존 메뉴가 있고 가격이
+// 다르면 이 사진이 AI 가격 갱신 검토의 근거가 된다(사용자 지시, 2026-08-18: "가격이
+// 다를경우 사진에 정보 시간 및 일자, 최신성을 반영해서 검토해 AI로") — 사진 없이는
+// 서버가 보수적으로 갱신을 거부하므로 반드시 함께 보내야 한다.
+let discoveredMenuImageUrl = null;
+
 async function analyzeDiscoveredMenuPhoto(d, fileInput) {
   const file = fileInput.files[0];
   if (!file) return;
@@ -1533,6 +1536,7 @@ async function analyzeDiscoveredMenuPhoto(d, fileInput) {
     }
 
     const items = data.items || [];
+    discoveredMenuImageUrl = data.image_url || null;
     statusEl.textContent = items.length
       ? `${items.length}개 메뉴를 찾았어요. 확인하고 제보해주세요.`
       : '메뉴를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.';
@@ -1576,7 +1580,10 @@ async function confirmDiscoveredMenuReport(d) {
     const name = row.querySelector('.mp-name').value.trim();
     const price = parseFloat(row.querySelector('.mp-price').value);
     if (!name || Number.isNaN(price) || price < 0) return;
-    toSave.push({ name, price });
+    // 이 메뉴판 사진 URL을 같이 보낸다 — 같은 이름의 메뉴가 이미 다른 가격으로
+    // 등록돼 있으면 서버가 이 사진을 근거로 AI 갱신 검토를 하기 때문(사진이
+    // 없으면 보수적으로 거부됨).
+    toSave.push({ name, price, source_url: discoveredMenuImageUrl });
   });
 
   if (!toSave.length) {
@@ -1587,9 +1594,12 @@ async function confirmDiscoveredMenuReport(d) {
 
   statusEl.textContent = '제보 중...';
   try {
-    // 사진 한 장에서 메뉴가 여럿 나올 수 있어 한 번에 배치로 제보한다 — 매장당
-    // 최초 1회만 허용되므로(2026-08-13, "한번 등록되면 추가 등록은 안되게해")
-    // 항목마다 따로 보내면 두 번째 항목부터 "이미 등록됨"으로 막힌다.
+    // 사진 한 장에서 메뉴가 여럿 나올 수 있어 한 번에 배치로 제보한다. 예전엔
+    // 매장당 최초 1회만 허용됐지만(2026-08-13), 사업자 등록을 비활성화하고 이
+    // 경로를 유일한 메뉴 등록/갱신 수단으로 삼으면서(사용자 지시, 2026-08-18)
+    // 항목마다 같은 이름의 기존 메뉴가 있으면 가격을 비교해 created/unchanged/
+    // updated/rejected로 개별 처리된다 — 더 이상 "이미 등록됨"으로 전체가
+    // 막히지 않는다.
     const saved = await apiFetch('/places/menu-reports', {
       method: 'POST',
       body: JSON.stringify({
@@ -1604,12 +1614,24 @@ async function confirmDiscoveredMenuReport(d) {
         items: toSave,
       }),
     });
+    const created = saved.filter((s) => s.status === 'created').length;
+    const updated = saved.filter((s) => s.status === 'updated').length;
+    const unchanged = saved.filter((s) => s.status === 'unchanged').length;
+    const rejected = saved.filter((s) => s.status === 'rejected');
     const listed = saved.filter((s) => s.listed_on_map).length;
     const totalXp = saved.reduce((sum, s) => sum + (s.xp_awarded || 0), 0);
-    statusEl.textContent = listed
-      ? `${saved.length}개 메뉴 제보 완료! 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요. 감사합니다!`
-      : `${saved.length}개 메뉴 제보 완료! 감사합니다.`;
+
+    const parts = [];
+    if (created) parts.push(`새 메뉴 ${created}개 등록`);
+    if (updated) parts.push(`가격 ${updated}개 갱신`);
+    if (unchanged) parts.push(`동일 가격 ${unchanged}개 확인`);
+    if (rejected.length) parts.push(`반려 ${rejected.length}개`);
+    let message = parts.length ? `${parts.join(', ')} 완료!` : '제보를 처리했어요.';
+    if (listed) message += ` 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요.`;
+    if (rejected.length) message += ` (반려 사유: ${rejected[0].review_note || '가격 확인 불가'})`;
+    statusEl.textContent = message;
     document.getElementById('discovered-menu-results').innerHTML = '';
+    discoveredMenuImageUrl = null;
     if (totalXp > 0) loadSavingsBadge();
   } catch (err) {
     statusEl.textContent = `제보 실패: ${err.message}`;

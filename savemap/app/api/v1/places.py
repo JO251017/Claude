@@ -83,8 +83,11 @@ async def create_menu_report(
     """카카오맵으로만 발견된(아직 SaveMap에 없는) 매장의 메뉴를, 실제로 그 메뉴판을
     본 사용자가 사진으로 제보한다. 사진 한 장에서 메뉴가 여럿 나올 수 있어 배치로
     받는다. 제보자가 그 매장의 사업자가 되는 게 아니므로 사업자 콘솔(소유권 확인)과
-    달리 로그인만 하면 누구나 쓸 수 있다 — 대신 매장당 이 배치 전체가 최초 1회만
-    허용된다(사용자 지시, 2026-08-13)."""
+    달리 로그인만 하면 누구나 쓸 수 있다. 예전엔 매장당 이 배치 전체가 최초 1회만
+    허용됐지만(2026-08-13), 사업자 등록을 비활성화하고 이 경로를 유일한 메뉴 등록
+    수단으로 삼으면서(사용자 지시, 2026-08-18) 항목 단위로 계속 갱신을 받는다 —
+    같은 가격이면 무시(unchanged), 다르면 AI가 사진·최신성을 보고 판단
+    (updated/rejected). 자세한 상태 분기는 submit_menu_report_batch 참고."""
     place = await find_or_create_place(
         session,
         place_id=payload.place_id,
@@ -99,26 +102,33 @@ async def create_menu_report(
     results = await submit_menu_report_batch(
         session, user_id, place, [(i.name, i.price, i.source_url) for i in payload.items]
     )
-    return [
-        MenuItemResponse(
-            id=item.id,
-            place_id=item.place_id,
-            name=item.name,
-            price=float(item.price),
-            source_url=item.source_url,
-            verified_at=item.verified_at,
-            region_median=cmp.region_median,
-            sample_count=cmp.sample_count,
-            savings_amount=cmp.savings_amount,
-            savings_rate=cmp.savings_rate,
-            reliable=cmp.reliable,
-            benchmark_source=cmp.benchmark_source,
-            benchmark_price=cmp.benchmark_price,
-            listed_on_map=bool(cmp.savings_amount and cmp.savings_amount > 0),
-            xp_awarded=xp_awarded,
+    responses = []
+    for item, cmp, xp_awarded, status, review_note in results:
+        responses.append(
+            MenuItemResponse(
+                id=item.id,
+                place_id=item.place_id,
+                name=item.name,
+                price=float(item.price),
+                source_url=item.source_url,
+                verified_at=item.verified_at,
+                # rejected는 cmp가 없다(기존 가격을 그대로 두므로 새로 비교할 게
+                # 없음) — 지도 노출 여부도 이전 상태 그대로이므로 listed_on_map은
+                # False로 두고 프론트가 status/review_note로 안내 문구를 판단한다.
+                region_median=cmp.region_median if cmp else None,
+                sample_count=cmp.sample_count if cmp else 0,
+                savings_amount=cmp.savings_amount if cmp else None,
+                savings_rate=cmp.savings_rate if cmp else None,
+                reliable=cmp.reliable if cmp else False,
+                benchmark_source=cmp.benchmark_source if cmp else None,
+                benchmark_price=cmp.benchmark_price if cmp else None,
+                listed_on_map=bool(cmp and cmp.savings_amount and cmp.savings_amount > 0),
+                xp_awarded=xp_awarded,
+                status=status,
+                review_note=review_note,
+            )
         )
-        for item, cmp, xp_awarded in results
-    ]
+    return responses
 
 
 @router.post("/{place_id}/recommendations", response_model=RecommendationResponse, status_code=201)
