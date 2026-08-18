@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260813z" />
+  <link rel="stylesheet" href="style.css?v=20260813aa" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -93,8 +93,10 @@
          (사용자 지시, 2026-08-13). offer_id/place_id FK 연결(마이그레이션 0014) +
          오퍼 상세 "저장하기" 버튼으로 발견→저장 흐름만 연결했다. 실제 사용자 간
          거래(교환 요청)는 계속 범위 밖 — assetCard()의 "교환 요청 (준비 중)"
-         버튼은 그대로 비활성 유지. -->
-    <section id="screen-exchange" class="screen">
+         버튼은 그대로 비활성 유지. 다시 hidden 처리(사용자 지시, 2026-08-18) —
+         백엔드/API/데이터는 그대로 두고 화면 노출만 COMMUNITY와 같은 패턴으로
+         닫는다. -->
+    <section id="screen-exchange" class="screen hidden">
       <header class="screen-header">
         <h1>절약 교환소</h1>
         <p class="subtitle">내가 사용하지 않는 절약 기회를 다른 사람이 필요한 절약 기회로 바꿔보세요.</p>
@@ -272,13 +274,16 @@
 
           <div class="stats-grid">
             <div class="stat-tile"><span id="my-cert-count">0</span><label>절약 인증</label></div>
-            <div class="stat-tile"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
+            <!-- EXCHANGE 재도입과 같이 노출했다가 다시 hidden 처리(사용자 지시,
+                 2026-08-18) — EXCHANGE 탭 자체가 hidden이라 이 통계만 남겨두면
+                 이동할 곳 없는 숫자가 된다. -->
+            <div class="stat-tile hidden"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
           </div>
 
           <div id="my-badges" class="badge-row hidden"></div>
 
           <div class="list-section-header"><h2>바로가기</h2></div>
-          <button type="button" class="btn-secondary" data-goto="exchange">내 절약 자산 보기</button>
+          <button type="button" class="btn-secondary hidden" data-goto="exchange">내 절약 자산 보기</button>
           <!-- 사업자 인증된 사용자에게만 노출(2-3, 2026-08-13) — 기본은 숨김, loadMyProfile()이
                /users/me/merchant-status를 확인해서 조건부로 hidden을 뗀다. 서버도
                require_merchant_verified로 실제 접근을 막으므로 이 hidden은 UX용일 뿐이다. -->
@@ -503,7 +508,7 @@
       <button class="nav-btn active" data-screen="map">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg></span><span class="nav-label">MAP</span>
       </button>
-      <button class="nav-btn" data-screen="exchange">
+      <button class="nav-btn hidden" data-screen="exchange">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg></span><span class="nav-label">EXCHANGE</span>
       </button>
       <button class="nav-btn" data-screen="my">
@@ -515,6 +520,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260813z"></script>
+  <script src="app.js?v=20260813aa"></script>
 </body>
 </html>

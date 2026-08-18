@@ -933,7 +933,11 @@ function openOfferDetail(r) {
 
     <div class="detail-actions">
       <button type="button" class="btn-secondary" id="detail-directions-btn">길찾기</button>
-      <button type="button" class="btn-secondary" id="detail-save-asset-btn">저장하기</button>
+      <!-- EXCHANGE 탭을 다시 hidden 처리(사용자 지시, 2026-08-18)하면서 같이
+           숨김 — 저장은 되는데 보러 갈 EXCHANGE 탭은 안 보이는 막다른 흐름을
+           막는다. saveOfferAsAsset()/리스너는 그대로 둬서 나중에 다시 켤 때
+           복구 작업 없이 hidden만 떼면 된다. -->
+      <button type="button" class="btn-secondary hidden" id="detail-save-asset-btn">저장하기</button>
     </div>
 
     <!-- 현장 인증 통합(10번 항목, 2026-08-13) — 예전엔 "발견하기"(관심 표시)와
