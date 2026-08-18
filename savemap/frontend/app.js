@@ -196,6 +196,32 @@ function ensureAvatarSpriteLoopStarted() {
   }, 450);
 }
 
+// --- 아바타 자유 이동(사용자 지시: "테두리 없애고 캐릭터가 자유자재로
+// 돌아다니게", 2026-08-18) --- .character-stage 안에서 무작위 위치로
+// 슬라이드해 걸어다니는 것처럼 보이게 한다. 실제 다리를 움직이는 옆모습
+// 걷기 스프라이트까진 아니지만(정면 캐릭터 그림이라 좌우 반전으로는 걷는
+// 느낌이 안 남), CSS transition으로 부드럽게 미끄러지듯 자리를 옮기고 그
+// 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통 튐(avatar-breathe)이
+// 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
+let avatarRoamTimer = null;
+
+function roamAvatarToRandomSpot() {
+  const stage = document.getElementById('character-stage');
+  const avatarEl = document.getElementById('character-avatar');
+  if (!stage || !avatarEl) return;
+  const stageWidth = stage.clientWidth;
+  const avatarWidth = avatarEl.offsetWidth || 74;
+  const maxLeft = Math.max(stageWidth - avatarWidth, 0);
+  avatarEl.style.left = `${Math.round(Math.random() * maxLeft)}px`;
+}
+
+function ensureAvatarRoamStarted() {
+  if (avatarRoamTimer) return;
+  roamAvatarToRandomSpot(); // 첫 자리부터 무작위로 — 항상 가운데 고정이면 "돌아다닌다"는 느낌이 안 난다
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return; // 한 자리에 고정
+  avatarRoamTimer = setInterval(roamAvatarToRandomSpot, 3600);
+}
+
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
 // 반응" 감각) — 별도 API 호출 없이 이미 성공한 응답 시점에 클래스만 토글.
 function triggerAvatarGrowthFeedback() {
@@ -346,6 +372,10 @@ if (supabaseClient) {
 function switchScreen(name) {
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === name));
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
+  // MY 탭은 display:none이었다가 막 보이는 순간이라 그전까지 roamAvatarToRandomSpot()이
+  // 재던 clientWidth가 0이었을 수 있다(화면이 안 보이면 폭도 0) — 진짜로 보이는
+  // 시점에 한 번 더 굴려서 처음 봤을 때부터 자리가 잡혀 있게 한다.
+  if (name === 'my') roamAvatarToRandomSpot();
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -366,6 +396,7 @@ document.getElementById('character-avatar')?.addEventListener('click', () => tri
 // 전 자리표시자 단계에서도 이미 눈 깜빡이고 꼬리를 흔들어야 "다마고치가
 // 계속 살아있다"는 느낌이 유지된다(사용자 지시, 2026-08-18).
 ensureAvatarSpriteLoopStarted();
+ensureAvatarRoamStarted();
 
 // --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
@@ -418,13 +449,6 @@ async function loadMyProfile() {
     renderAvatarSpriteFrame();
     const avatarEl = document.getElementById('character-avatar');
     avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
-    // 아바타를 감싸는 링에도 같은 진행도를 반영(디자인 스킬 적용, 2026-08-18) —
-    // 아래 가로 바(my-saving-bar)와 같은 숫자를 아바타 바로 옆에서 한눈에
-    // 보여줘서 "펫 + 진행도"가 시각적으로 한 덩어리로 읽히게 한다.
-    document.getElementById('character-avatar-ring')?.style.setProperty(
-      '--growth-pct',
-      `${growth.progressPct}%`,
-    );
     document.getElementById('my-title').textContent = growth.name;
     document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
     document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;
