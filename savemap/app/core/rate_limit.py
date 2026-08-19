@@ -1,9 +1,12 @@
+import secrets
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
+
+from app.core.config import settings
 
 # 지금까지 /search, /reports, admin 엔드포인트 어디에도 요청 횟수 제한이 없었다
 # (2026-08-12 품질 점검에서 확인) — Render 무료 플랜은 인스턴스가 하나뿐이라
@@ -12,6 +15,12 @@ from starlette.types import ASGIApp
 # 분산 레이트리밋이 필요한 게 아니라, "봇이 한도 없이 두들기는 걸" 막는 안전판이다.
 WINDOW_SEC = 60
 ADMIN_LIMIT = 20  # 관리자 엔드포인트는 더 엄격하게 — 키 브루트포스 시도도 늦춘다
+# ADMIN_LIMIT의 목적은 위 주석대로 "키 브루트포스 억제"인데, 키가 **맞는** 요청까지
+# 분당 20건으로 묶으면 정작 정상 운영이 막힌다 — 인허가 데이터 동기화는 한 지역·업종만
+# 해도 페이지가 수백 개라, 20/분으로는 절대 못 끝내고 중간에 429로 끊긴다(2026-08-19
+# 실제 동기화 실행에서 확인). 올바른 키를 제시한 요청은 정의상 브루트포스가 아니므로
+# 별도 버킷에서 훨씬 넉넉하게 허용하고, 키가 없거나 틀린 요청만 20/분으로 묶는다.
+ADMIN_AUTHED_LIMIT = 240
 DEFAULT_LIMIT = 120
 # 헬스체크(Render 자체 헬스체크 + 이 프로젝트의 keep-alive 핑)는 정상적으로 자주
 # 호출되므로 제한 대상에서 뺀다 — 안 빼면 keep-alive가 스스로를 429로 막아버릴 수 있다.
@@ -37,10 +46,21 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _limit_for(path: str) -> tuple[str, int] | None:
+def _is_valid_admin_key(admin_key: str | None) -> bool:
+    """deps.require_admin_key와 같은 판정을 미들웨어 단계에서 한 번 더 한다(상수시간
+    비교도 동일). 여기서 통과시켜도 실제 인증은 라우트 의존성이 다시 하므로,
+    이 함수의 역할은 "어느 카운터 버킷을 쓸지" 고르는 것뿐이다."""
+    if not settings.admin_sync_key or not admin_key:
+        return False
+    return secrets.compare_digest(admin_key, settings.admin_sync_key)
+
+
+def _limit_for(path: str, admin_key: str | None = None) -> tuple[str, int] | None:
     if any(path.startswith(p) for p in EXEMPT_PREFIXES):
         return None
     if path.startswith("/v1/admin"):
+        if _is_valid_admin_key(admin_key):
+            return "admin_authed", ADMIN_AUTHED_LIMIT
         return "admin", ADMIN_LIMIT
     if path.startswith("/v1/"):
         return "api", DEFAULT_LIMIT
@@ -80,7 +100,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next):
-        group_limit = _limit_for(request.url.path)
+        group_limit = _limit_for(request.url.path, request.headers.get("x-admin-key"))
         if group_limit is None:
             return await call_next(request)
         group, limit = group_limit
