@@ -72,3 +72,24 @@ def test_x_forwarded_for_uses_leftmost_ip(client):
         client.get("/v1/admin/places/stats", headers={"X-Forwarded-For": header})
     resp = client.get("/v1/admin/places/stats", headers={"X-Forwarded-For": header})
     assert resp.status_code == 429
+
+
+def test_non_ascii_admin_key_is_rejected_not_crashed(client, monkeypatch):
+    """한글이 섞인 X-Admin-Key가 오면 401로 거부돼야 한다 — 500이 나면 안 된다.
+
+    secrets.compare_digest는 str을 받으면 두 값이 모두 ASCII여야 하고 아니면
+    TypeError를 던진다. 실제로 동기화 스크립트의 키 자리에 안내 문구("여기에_...
+    붙여넣기")가 그대로 남아 있어서, 모든 관리자 요청이 401이 아니라 500으로
+    떨어졌다(2026-08-19). 바이트 비교로 바꾼 뒤의 회귀 방지 테스트다.
+
+    HTTP 헤더는 바이트로 전송되고 Starlette은 그걸 latin-1로 디코딩하므로, 한글 키는
+    서버에서 "UTF-8 바이트를 latin-1로 읽은" 비ASCII 문자열이 된다 — 실제 전송을 그대로
+    재현하려고 바이트로 넣는다.
+    """
+    monkeypatch.setattr(settings, "admin_sync_key", "correct-key")
+    headers = {
+        "X-Forwarded-For": "8.8.8.8",
+        "X-Admin-Key": "여기에_ADMIN_SYNC_KEY_붙여넣기".encode(),
+    }
+    resp = client.get("/v1/admin/places/stats", headers=headers)
+    assert resp.status_code == 401

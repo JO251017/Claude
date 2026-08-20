@@ -1,13 +1,11 @@
-import secrets
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.db import get_session
 from app.core.errors import AuthenticationRequiredError, MerchantNotVerifiedError
-from app.core.security import decode_supabase_jwt
+from app.core.security import admin_key_matches, decode_supabase_jwt
 from app.sources.merchant_console.service import is_merchant_verified
 
 
@@ -57,10 +55,9 @@ async def require_admin_key(x_admin_key: str | None = Header(default=None)) -> N
     보내도 항상 거부한다. 단순 `!=` 문자열 비교는 일치하는 접두 길이에 따라 비교
     시간이 미세하게 달라질 수 있어(타이밍 공격 이론상 가능) secrets.compare_digest로
     상수시간 비교한다 — admin.py 7곳에 흩어져 있던 동일한 (그리고 타이밍에 안전하지
-    않던) 검사를 여기 하나로 모았다(2026-08-12)."""
-    if not settings.admin_sync_key or not x_admin_key:
-        raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
-    if not secrets.compare_digest(x_admin_key, settings.admin_sync_key):
+    않던) 검사를 여기 하나로 모았다(2026-08-12). 실제 비교는 security.admin_key_matches가
+    하고, 레이트리밋 미들웨어도 같은 함수를 써서 판정이 갈리지 않게 한다."""
+    if not admin_key_matches(x_admin_key):
         raise AuthenticationRequiredError("관리자 키가 필요합니다 (X-Admin-Key 헤더)")
 
 

@@ -1,4 +1,3 @@
-import secrets
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -6,7 +5,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
-from app.core.config import settings
+from app.core.security import admin_key_matches
 
 # 지금까지 /search, /reports, admin 엔드포인트 어디에도 요청 횟수 제한이 없었다
 # (2026-08-12 품질 점검에서 확인) — Render 무료 플랜은 인스턴스가 하나뿐이라
@@ -46,20 +45,11 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _is_valid_admin_key(admin_key: str | None) -> bool:
-    """deps.require_admin_key와 같은 판정을 미들웨어 단계에서 한 번 더 한다(상수시간
-    비교도 동일). 여기서 통과시켜도 실제 인증은 라우트 의존성이 다시 하므로,
-    이 함수의 역할은 "어느 카운터 버킷을 쓸지" 고르는 것뿐이다."""
-    if not settings.admin_sync_key or not admin_key:
-        return False
-    return secrets.compare_digest(admin_key, settings.admin_sync_key)
-
-
 def _limit_for(path: str, admin_key: str | None = None) -> tuple[str, int] | None:
     if any(path.startswith(p) for p in EXEMPT_PREFIXES):
         return None
     if path.startswith("/v1/admin"):
-        if _is_valid_admin_key(admin_key):
+        if admin_key_matches(admin_key):
             return "admin_authed", ADMIN_AUTHED_LIMIT
         return "admin", ADMIN_LIMIT
     if path.startswith("/v1/"):
