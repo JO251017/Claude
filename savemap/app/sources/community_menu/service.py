@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.spatial import ewkt_point, to_h3
 from app.domain.enums import SourceType, XpReason
 from app.domain.menu_item import MenuItem
+from app.engine.menu_name import normalize_menu_name
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
 from app.engine.price_comparison import MenuPriceComparison
@@ -94,7 +95,7 @@ async def submit_menu_report_batch(
             await session.execute(
                 select(MenuItem).where(
                     MenuItem.place_id == place.id,
-                    func.lower(func.trim(MenuItem.name)) == name.strip().lower(),
+                    MenuItem.normalized_name == normalize_menu_name(name),
                 )
             )
         ).scalar_one_or_none()

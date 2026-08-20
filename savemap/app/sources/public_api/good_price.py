@@ -4,13 +4,14 @@ import time
 import uuid
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.spatial import ewkt_point, to_h3
 from app.domain.enums import SourceType
 from app.domain.menu_item import MenuItem
+from app.engine.menu_name import normalize_menu_name
 from app.domain.place import Place
 from app.engine.offer_sync import sync_menu_offer
 from app.engine.spatial_query import EXCLUDED_CATEGORY_KEYWORDS
@@ -420,7 +421,7 @@ async def store_parsed_rows(
                     await session.execute(
                         select(MenuItem).where(
                             MenuItem.place_id == place.id,
-                            func.lower(func.trim(MenuItem.name)) == item_name.lower(),
+                            MenuItem.normalized_name == normalize_menu_name(item_name),
                         )
                     )
                 ).scalars().first()

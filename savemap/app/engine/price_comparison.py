@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.spatial import WGS84_SRID
 from app.domain.menu_item import MenuItem
+from app.engine.menu_name import normalize_menu_name
 from app.domain.place import Place
 
 # 이 개수 미만이면 평균/중앙값을 신뢰할 수 없다고 보고 "비교 데이터 부족"으로 표시한다
@@ -36,6 +37,11 @@ class MenuPriceComparison:
 async def _region_prices(
     session: AsyncSession, name: str, lat: float, lng: float, radius_km: float
 ) -> list[float]:
+    """주변 반경에서 같은 메뉴를 파는 매장들의 실제 등록가.
+
+    예전엔 메뉴명이 글자 하나까지 같아야 매칭돼서, "아메리카노"와 "아메리카노(ICE)"가
+    서로 다른 메뉴로 갈렸다 — 실제 가격이 12,000건 넘게 있는데도 비교가 안 돼서
+    대부분 AI 추정 통상가로 떨어지던 원인이다. 정규화된 이름으로 매칭한다."""
     point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), WGS84_SRID)
     place_geog = cast(Place.geom, Geography)
     point_geog = cast(point, Geography)
@@ -43,7 +49,7 @@ async def _region_prices(
         select(MenuItem.price)
         .join(Place, MenuItem.place_id == Place.id)
         .where(
-            func.lower(func.trim(MenuItem.name)) == name.strip().lower(),
+            MenuItem.normalized_name == normalize_menu_name(name),
             func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0),
         )
     )
