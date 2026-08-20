@@ -1468,9 +1468,9 @@ function openDiscoveredDetail(d) {
     </div>
     ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
-      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴판이 아니라 <strong>영수증</strong>만
-      찍어도 됩니다 — AI가 메뉴와 가격을 알아서 읽어요. 알려주시면 다른 사람들도
-      이곳의 절약 정보를 바로 볼 수 있어요.
+      아직 SaveMap에 가격 정보가 없는 매장이에요. <strong>메뉴판</strong>을 찍으면 메뉴
+      여러 개가 한 번에 등록되고, <strong>영수증</strong>을 찍으면 더 간편해요 — 편한
+      쪽으로 찍어서 알려주시면 AI가 메뉴와 가격을 알아서 읽어요.
     </p>
     <div class="detail-actions">
       <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판·영수증 찍어서 알려주기</button>
@@ -1900,7 +1900,7 @@ async function runSearch() {
     const discoveredHtml = lastDiscovered.length
       ? `
       <div class="discovered-section">
-        <div class="discovered-header">주변에서 발견한 곳 ${lastDiscovered.length}곳 · 영수증 한 장이면 가격이 채워져요</div>
+        <div class="discovered-header">주변에서 발견한 곳 ${lastDiscovered.length}곳 · 메뉴판이나 영수증 한 장이면 가격이 채워져요</div>
         ${lastDiscovered
           .map((d, i) => {
             const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
@@ -1908,7 +1908,7 @@ async function runSearch() {
           <div class="discovered-card" data-idx="${i}">
             <div class="discovered-name">${escapeHtml(d.place_name)}</div>
             <div class="discovered-meta">${shortCategory ? escapeHtml(shortCategory) + ' · ' : ''}${d.distance_m.toFixed(0)}m</div>
-            <div class="discovered-cta">가격 정보 없음 · 눌러서 영수증으로 알려주기</div>
+            <div class="discovered-cta">가격 정보 없음 · 눌러서 메뉴판·영수증으로 알려주기</div>
           </div>`;
           })
           .join('')}

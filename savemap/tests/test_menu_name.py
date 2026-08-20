@@ -71,3 +71,21 @@ def test_menu_extraction_prompt_covers_receipts_and_unit_price():
     assert "단가" in _MENU_EXTRACTION_PROMPT
     # 합계·부가세 같은 메뉴 아닌 줄이 메뉴로 들어오면 안 된다.
     assert "부가세" in _MENU_EXTRACTION_PROMPT
+
+
+def test_backfill_only_updates_rows_whose_normalized_name_is_stale():
+    """정규화 규칙이 바뀐 뒤 재실행해도, 이미 맞는 행은 다시 안 건드려야 한다
+    (admin.backfill_menu_normalized_names가 이 판정으로 updated 카운트를 센다)."""
+    from app.engine.menu_name import normalize_menu_name
+
+    item = MenuItem(place_id=1, name="아메리카노 (ICE)", price=3500)
+    # 정상 경로(모델 validates)로 이미 맞게 채워져 있다.
+    assert item.normalized_name == normalize_menu_name(item.name)
+
+    # SQL Editor로 컬럼만 추가된 "레거시" 행을 흉내낸다 — normalized_name이 비어 있다.
+    item.normalized_name = ""
+    correct = normalize_menu_name(item.name)
+    assert item.normalized_name != correct  # backfill 대상으로 판정돼야 함
+
+    item.normalized_name = correct
+    assert item.normalized_name == correct  # 재실행 시 더 건드릴 게 없어야 함

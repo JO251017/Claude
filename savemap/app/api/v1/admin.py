@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import RequireAdminDep, SessionDep
 from app.api.schemas.merchant import MerchantVerificationGrant, MerchantVerificationResponse
 from app.core.errors import InvalidCsvError
+from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.sources.merchant_console.service import (
     grant_merchant_verification,
@@ -38,6 +39,7 @@ from app.sources.public_api.franchise_price import (
 from app.sources.public_api.franchise_price import (
     parse_csv_bytes as parse_franchise_csv_bytes,
 )
+from app.engine.menu_name import normalize_menu_name
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
@@ -197,6 +199,46 @@ async def apply_franchise_prices_endpoint(
     offset=next_offset으로 이어서 호출한다. 사용자가 사진으로 제보한 가격은 덮어쓰지
     않고 그대로 둔다(menu_items_kept_user_reported로 몇 건인지 보고한다)."""
     return await apply_franchise_prices(session, region=region, offset=offset, limit=limit)
+
+
+@router.post("/maintenance/backfill-menu-normalized-names")
+async def backfill_menu_normalized_names(
+    offset: int = Query(default=0, ge=0, description="menu_item.id 기준 몇 번째부터 처리할지"),
+    limit: int = Query(default=2000, ge=1, le=5000, description="한 번에 처리할 건수"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """menu_item.normalized_name이 비어 있는 기존 행을 채운다.
+
+    Supabase SQL Editor에서 컬럼만 추가하면(ALTER TABLE ... ADD COLUMN) 기존 행은
+    빈 값으로 남는다 — 정규화 규칙이 파이썬 쪽(app.engine.menu_name)에만 있어서 SQL로는
+    못 채운다. 이후 새로 생기는 행은 모델이 저장 시점에 자동으로 채우므로(정규화 로직이
+    바뀌지 않는 한) 이 호출은 한 번만 하면 된다 — 다시 돌려도 안전하다(멱등).
+    매장이 많으면 한 요청에 다 못 하니 응답의 next_offset/done을 보고 이어서 호출한다."""
+    rows = (
+        await session.execute(
+            select(MenuItem)
+            .where(MenuItem.id >= offset)
+            .order_by(MenuItem.id)
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    updated = 0
+    for item in rows:
+        correct = normalize_menu_name(item.name)[:255]
+        if item.normalized_name != correct:
+            item.normalized_name = correct
+            updated += 1
+    await session.commit()
+
+    next_offset = rows[-1].id + 1 if rows else offset
+    return {
+        "scanned": len(rows),
+        "updated": updated,
+        "next_offset": next_offset,
+        "done": len(rows) < limit,
+    }
 
 
 @router.get("/places/stats")
