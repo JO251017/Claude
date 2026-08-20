@@ -20,6 +20,15 @@ from app.sources.public_api.good_price import (
     store_rows,
     sync_good_price_stores,
 )
+from app.sources.public_api.dine_out_price import (
+    parse_csv_bytes as parse_dine_out_csv_bytes,
+)
+from app.sources.public_api.dine_out_price import (
+    store_rows as store_dine_out_rows,
+)
+from app.sources.public_api.dine_out_price import (
+    sync_dine_out_prices,
+)
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
@@ -91,6 +100,55 @@ async def trigger_restaurant_registry_sync(
     다른 소스가 나중에 얹힌다. 전국은 한 번에 못 돌리니 region으로 나누고, 한 지역도
     응답의 has_more가 true면 같은 region/category로 page+1을 넣어 이어서 호출한다."""
     return await sync_restaurant_registry(session, category=category, region=region, page=page, per_page=per_page)
+
+
+@router.post("/sync/dine-out-prices")
+async def trigger_dine_out_price_sync(
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """한국소비자원 참가격 외식비(시도별 평균가)를 가져와 저장한다.
+
+    이 통계는 개별 매장 가격이 아니라 시도 평균이라, 주변에 비교할 매장이 없을 때만
+    쓰는 예비 기준이다 — 그동안 그 자리를 AI 추정 통상가가 차지하고 있었는데, 정부가
+    실제로 조사한 값으로 바꾸는 게 목적이다. 우선순위는 항상 실측 > 정부 통계 > AI 추정.
+
+    DINE_OUT_PRICE_API_URL이 설정돼 있어야 동작하고, 미설정이면 아무것도 지어내지 않고
+    skipped로 응답한다. 한 건도 못 읽으면 응답의 sample_raw_keys에 실제 컬럼명이 담겨
+    나오므로 그걸 보고 파서를 맞추면 된다."""
+    return await sync_dine_out_prices(session)
+
+
+@router.post("/import/dine-out-price-csv")
+async def import_dine_out_price_csv(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(default=False, description="true면 저장하지 않고 파싱 결과만 미리보기"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """참가격에서 내려받은 외식비 CSV를 직접 올려서 저장한다 — 오픈API 활용신청이
+    안 됐거나 점검 중일 때 같은 파이프라인을 태우는 우회 경로(착한가격업소와 동일한 구조)."""
+    content = await file.read()
+    try:
+        raw_rows = parse_dine_out_csv_bytes(content)
+    except ValueError as exc:
+        raise InvalidCsvError(str(exc)) from exc
+    if not raw_rows:
+        raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
+
+    if dry_run:
+        from app.sources.public_api.dine_out_price import parse_row as parse_dine_out_row
+
+        parsed = [p for p in (parse_dine_out_row(r) for r in raw_rows) if p is not None]
+        return {
+            "dry_run": True,
+            "raw_rows": len(raw_rows),
+            "usable_rows": len(parsed),
+            "sample_raw_keys": sorted(raw_rows[0].keys())[:40],
+            "preview": parsed[:10],
+        }
+
+    return await store_dine_out_rows(session, raw_rows)
 
 
 @router.get("/places/stats")

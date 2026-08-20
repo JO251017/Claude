@@ -39,6 +39,15 @@ def _grade_for_score(score: int) -> str:
     return "C"
 
 
+# 비교 기준을 화면에 쓸 때의 표기. 근거가 강한 순서대로 region > gov > ai이며,
+# 어느 기준인지 절대 감추지 않는다 — 추정치를 실측처럼 보이게 하지 않기 위해서다.
+BENCHMARK_LABELS = {
+    "region": "주변 매장 실측가",
+    "gov": "한국소비자원 참가격 시도 평균가",
+    "ai": "AI 추정 통상가",
+}
+
+
 def _confidence(
     dining_count: int, discover_count: int, verification_count: int, recommend_count: int
 ) -> tuple[str, int, str]:
@@ -79,6 +88,8 @@ def build_savings_report(
         reasons.append(f"최근 {FRESHNESS_WINDOW_DAYS}일 이내 데이터 반영")
     if benchmark_source == "region":
         reasons.append("주변 매장 실측 가격 데이터 반영")
+    elif benchmark_source == "gov":
+        reasons.append("한국소비자원 참가격 시도 평균가 대비 비교")
     elif benchmark_source == "ai":
         reasons.append("AI(Gemini) 추정 통상가 대비 비교")
 
@@ -91,7 +102,7 @@ def build_savings_report(
             # 실제 방문/인증처럼 사람이 남긴 신호가 있어야 매기므로 score/grade는 여전히
             # None이다. 계산이 안 된 것처럼 "계산 중"이라고 뭉개지 않고, 무엇을
             # 기준으로 얼마나 절약되는지는 있는 그대로 보여준다.
-            source_label = "AI 추정 통상가" if benchmark_source == "ai" else "주변 매장 실측가"
+            source_label = BENCHMARK_LABELS.get(benchmark_source, "비교 기준가")
             one_line = (
                 f"{source_label} 대비로는 저렴하지만, 아직 실제 방문/인증 데이터가 부족해 "
                 "신뢰도 점수는 매기지 않았어요."

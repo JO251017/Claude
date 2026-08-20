@@ -29,7 +29,10 @@ async def sync_menu_offer(session: AsyncSession, place: Place, item: MenuItem) -
 
     cheaper = bool(cmp.savings_amount and cmp.savings_amount > 0)
     if cheaper:
-        label = "지역 평균보다 저렴" if cmp.benchmark_source == "region" else "통상가보다 저렴 (AI 추정)"
+        label = {
+            "region": "지역 평균보다 저렴",
+            "gov": "참가격 시도 평균보다 저렴",
+        }.get(cmp.benchmark_source, "통상가보다 저렴 (AI 추정)")
         title = f"{item.name} {round(item.price):,}원 · {label}"
         base_price = cmp.benchmark_price
         store_discount = cmp.savings_amount

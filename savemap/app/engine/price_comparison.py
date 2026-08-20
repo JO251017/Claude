@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.spatial import WGS84_SRID
 from app.domain.menu_item import MenuItem
-from app.engine.menu_name import normalize_menu_name
 from app.domain.place import Place
+from app.engine.menu_name import canonical_dish, normalize_menu_name
+from app.sources.public_api.dine_out_price import get_regional_price, region_from_address
 
 # 이 개수 미만이면 평균/중앙값을 신뢰할 수 없다고 보고 "비교 데이터 부족"으로 표시한다
 # (기획서 §5). 사용자 지시로 2건까지는 비교 가능하다고 판단.
@@ -27,11 +28,18 @@ class MenuPriceComparison:
     savings_amount: float | None
     savings_rate: float | None
     reliable: bool
-    # 절약을 무엇과 비교해 계산했는지: "region"=주변 매장 실제 등록가(신뢰 높음),
-    # "ai"=AI 추정 통상가(참고용, 주변 표본이 모이면 자동으로 region으로 바뀜), None=비교 불가.
-    # 사용자에게 항상 이 출처를 같이 보여줘서 추정치를 실측처럼 오해하지 않게 한다.
+    # 절약을 무엇과 비교해 계산했는지:
+    #   "region" = 주변 매장 실제 등록가 (가장 신뢰 높음)
+    #   "gov"    = 한국소비자원 참가격 외식비 시도별 평균 (정부 조사 통계)
+    #   "ai"     = Gemini 추정 통상가 (참고용, 근거가 가장 약함)
+    #   None     = 비교 기준 없음
+    # 표본이 쌓이면 아래 등급이 자동으로 위 등급으로 승격된다. 사용자에게 항상 이
+    # 출처를 같이 보여줘서 추정치를 실측처럼 오해하지 않게 한다.
     benchmark_source: str | None = None
     benchmark_price: float | None = None
+    # "gov" 기준일 때 어느 시점 조사분인지 ("2026-07"). 출처를 감춘 채 숫자만
+    # 보여주지 않는다는 원칙에 따라 화면까지 그대로 전달한다.
+    benchmark_period: str | None = None
 
 
 async def _region_prices(
@@ -75,6 +83,21 @@ async def list_menu_items_by_place(
     return grouped
 
 
+async def _government_stat(session: AsyncSession, menu_item: MenuItem):
+    """참가격 외식비 통계에서 이 메뉴에 맞는 시도 평균가를 찾는다.
+
+    품목이 8개뿐이고 시도 단위라 대부분의 메뉴는 여기서 None이 나온다. 매장 주소에서
+    시도를 못 읽어내도 None이다 — 엉뚱한 지역 평균과 비교하느니 비교를 안 하는 게 낫다."""
+    dish = canonical_dish(menu_item.name)
+    if not dish:
+        return None
+    place = await session.get(Place, menu_item.place_id)
+    region = region_from_address(place.address) if place else None
+    if not region:
+        return None
+    return await get_regional_price(session, dish, region)
+
+
 async def compare_menu_item(
     session: AsyncSession, menu_item: MenuItem, lat: float, lng: float, radius_km: float = 3.0
 ) -> MenuPriceComparison:
@@ -85,14 +108,22 @@ async def compare_menu_item(
     region_average = round(statistics.mean(prices), 0) if prices else None
     region_median = round(statistics.median(prices), 0) if prices else None
 
-    # 주변 실측 표본이 충분하면 그걸 쓰고, 없으면 AI 추정 통상가로라도 절약을 계산한다.
-    # 실측이 항상 우선이라, 나중에 주변 매장이 등록되면 자동으로 실측 기준으로 승격된다.
+    # 비교 기준 사다리: 주변 실측 > 정부 통계(참가격 외식비) > AI 추정.
+    # 근거가 강한 쪽을 항상 먼저 쓰고, 아래 등급으로는 위가 없을 때만 내려간다 —
+    # 주변 매장이 나중에 등록되면 자동으로 실측 기준으로 승격된다.
     benchmark_source = None
     benchmark_price = None
+    benchmark_period = None
     if reliable and region_median is not None:
         benchmark_source, benchmark_price = "region", float(region_median)
-    elif menu_item.ai_typical_price is not None:
-        benchmark_source, benchmark_price = "ai", float(menu_item.ai_typical_price)
+    else:
+        gov_stat = await _government_stat(session, menu_item)
+        if gov_stat is not None:
+            benchmark_source = "gov"
+            benchmark_price = float(gov_stat.price)
+            benchmark_period = gov_stat.survey_period
+        elif menu_item.ai_typical_price is not None:
+            benchmark_source, benchmark_price = "ai", float(menu_item.ai_typical_price)
 
     savings_amount = None
     savings_rate = None
@@ -115,4 +146,5 @@ async def compare_menu_item(
         reliable=reliable,
         benchmark_source=benchmark_source,
         benchmark_price=benchmark_price,
+        benchmark_period=benchmark_period,
     )
