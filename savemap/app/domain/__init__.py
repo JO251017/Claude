@@ -1,4 +1,5 @@
 from app.domain.base import Base
+from app.domain.franchise import FranchiseBrand, FranchisePrice
 from app.domain.menu_item import MenuItem
 from app.domain.merchant_verification import MerchantVerification
 from app.domain.offer import Offer, OfferPaymentBenefit
@@ -31,4 +32,6 @@ __all__ = [
     "StoreInterest",
     "MerchantVerification",
     "RegionalPriceStat",
+    "FranchiseBrand",
+    "FranchisePrice",
 ]

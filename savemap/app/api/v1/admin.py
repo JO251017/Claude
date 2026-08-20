@@ -29,6 +29,15 @@ from app.sources.public_api.dine_out_price import (
 from app.sources.public_api.dine_out_price import (
     sync_dine_out_prices,
 )
+from app.sources.public_api.franchise_price import (
+    apply_to_places as apply_franchise_prices,
+)
+from app.sources.public_api.franchise_price import (
+    import_price_rows as import_franchise_price_rows,
+)
+from app.sources.public_api.franchise_price import (
+    parse_csv_bytes as parse_franchise_csv_bytes,
+)
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
@@ -149,6 +158,45 @@ async def import_dine_out_price_csv(
         }
 
     return await store_dine_out_rows(session, raw_rows)
+
+
+@router.post("/import/franchise-prices-csv")
+async def import_franchise_prices_csv(
+    file: UploadFile = File(...),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """프랜차이즈 본사 공식 가격표 CSV를 올린다.
+
+    컬럼: 브랜드, 매칭키워드(선택, 파이프 구분), 메뉴명, 가격, 출처URL(선택), 기준년월(선택)
+    예) 스타벅스,스타벅스|starbucks,아메리카노,4500,https://...,2026-08
+
+    가격은 여기 올린 값만 쓴다 — 이 서버가 가격을 만들어내는 일은 없다. 올린 뒤
+    /admin/apply/franchise-prices를 호출하면 상호명이 맞는 매장에 실제로 붙는다."""
+    content = await file.read()
+    try:
+        raw_rows = parse_franchise_csv_bytes(content)
+    except ValueError as exc:
+        raise InvalidCsvError(str(exc)) from exc
+    if not raw_rows:
+        raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
+    return await import_franchise_price_rows(session, raw_rows)
+
+
+@router.post("/apply/franchise-prices")
+async def apply_franchise_prices_endpoint(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="매장 목록 중 몇 번째부터 처리할지"),
+    limit: int = Query(default=500, ge=1, le=2000, description="한 번에 훑을 매장 수"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """올려둔 브랜드 가격표를 상호명이 맞는 매장에 MenuItem으로 붙인다.
+
+    매장이 수만 건이라 한 번에 다 돌리면 타임아웃에 걸린다 — 응답의 done이 false면
+    offset=next_offset으로 이어서 호출한다. 사용자가 사진으로 제보한 가격은 덮어쓰지
+    않고 그대로 둔다(menu_items_kept_user_reported로 몇 건인지 보고한다)."""
+    return await apply_franchise_prices(session, region=region, offset=offset, limit=limit)
 
 
 @router.get("/places/stats")
