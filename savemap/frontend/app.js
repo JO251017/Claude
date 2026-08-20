@@ -1468,11 +1468,12 @@ function openDiscoveredDetail(d) {
     </div>
     ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
-      아직 SaveMap에 가격 정보가 없는 매장이에요. 가격표나 메뉴판 사진을 찍어서
-      알려주시면 다른 사람들도 이곳의 절약 정보를 바로 볼 수 있어요.
+      아직 SaveMap에 가격 정보가 없는 매장이에요. 메뉴판이 아니라 <strong>영수증</strong>만
+      찍어도 됩니다 — AI가 메뉴와 가격을 알아서 읽어요. 알려주시면 다른 사람들도
+      이곳의 절약 정보를 바로 볼 수 있어요.
     </p>
     <div class="detail-actions">
-      <button type="button" class="btn-primary" id="discovered-report-btn">📷 사진 찍어서 알려주기</button>
+      <button type="button" class="btn-primary" id="discovered-report-btn">📷 메뉴판·영수증 찍어서 알려주기</button>
     </div>
     <input type="file" id="discovered-menu-input" accept="image/*" capture="environment" class="hidden" />
     <p id="discovered-menu-status" class="subtitle"></p>
@@ -1523,7 +1524,7 @@ async function analyzeDiscoveredMenuPhoto(d, fileInput) {
     return;
   }
 
-  statusEl.textContent = 'AI가 메뉴판을 읽고 있어요...';
+  statusEl.textContent = 'AI가 사진을 읽고 있어요...';
   const form = new FormData();
   form.append('image', file);
   const headers = { Authorization: `Bearer ${token}` };
@@ -1539,7 +1540,7 @@ async function analyzeDiscoveredMenuPhoto(d, fileInput) {
     discoveredMenuImageUrl = data.image_url || null;
     statusEl.textContent = items.length
       ? `${items.length}개 메뉴를 찾았어요. 확인하고 제보해주세요.`
-      : '메뉴를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.';
+      : '메뉴를 찾지 못했어요. 메뉴판이나 영수증이 잘 보이게 다시 찍어주세요.';
 
     resultsEl.innerHTML = items.length
       ? `
@@ -1628,6 +1629,9 @@ async function confirmDiscoveredMenuReport(d) {
     if (rejected.length) parts.push(`반려 ${rejected.length}개`);
     let message = parts.length ? `${parts.join(', ')} 완료!` : '제보를 처리했어요.';
     if (listed) message += ` 그중 ${listed}개는 지도에 절약 정보로 바로 떴어요.`;
+    // 받은 XP를 지금까지 화면에 안 보여줬다 — 뱃지만 조용히 갱신했다. 제보는
+    // 순전히 다른 사람을 위한 행동이라 보상이 눈에 보여야 다음 제보로 이어진다.
+    if (totalXp > 0) message += ` +${totalXp} XP를 받았어요.`;
     if (rejected.length) message += ` (반려 사유: ${rejected[0].review_note || '가격 확인 불가'})`;
     statusEl.textContent = message;
     document.getElementById('discovered-menu-results').innerHTML = '';
@@ -1896,7 +1900,7 @@ async function runSearch() {
     const discoveredHtml = lastDiscovered.length
       ? `
       <div class="discovered-section">
-        <div class="discovered-header">주변에서 발견한 곳 ${lastDiscovered.length}곳 (아직 절약 정보 없음)</div>
+        <div class="discovered-header">주변에서 발견한 곳 ${lastDiscovered.length}곳 · 영수증 한 장이면 가격이 채워져요</div>
         ${lastDiscovered
           .map((d, i) => {
             const shortCategory = d.category_name ? d.category_name.split(' > ').pop() : '';
@@ -1904,7 +1908,7 @@ async function runSearch() {
           <div class="discovered-card" data-idx="${i}">
             <div class="discovered-name">${escapeHtml(d.place_name)}</div>
             <div class="discovered-meta">${shortCategory ? escapeHtml(shortCategory) + ' · ' : ''}${d.distance_m.toFixed(0)}m</div>
-            <div class="discovered-cta">가격 정보 없음 · 눌러서 등록하기</div>
+            <div class="discovered-cta">가격 정보 없음 · 눌러서 영수증으로 알려주기</div>
           </div>`;
           })
           .join('')}
@@ -2402,7 +2406,7 @@ document.getElementById('mi-photo-input').addEventListener('change', async () =>
     const items = data.items || [];
     statusEl.textContent = items.length
       ? `${items.length}개 메뉴를 찾았어요. 확인하고 등록해주세요.`
-      : '메뉴를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.';
+      : '메뉴를 찾지 못했어요. 메뉴판이나 영수증이 잘 보이게 다시 찍어주세요.';
 
     resultsEl.innerHTML = items.length
       ? `

@@ -56,3 +56,18 @@ def test_menu_item_fills_normalized_name_on_assignment():
 
     item.name = "카페라떼(HOT)"
     assert item.normalized_name == "카페라떼"
+
+
+def test_menu_extraction_prompt_covers_receipts_and_unit_price():
+    """영수증 제보 경로가 프롬프트에서 조용히 빠지지 않게 고정한다.
+
+    메뉴판은 가게 안에서 대놓고 찍어야 해서 심리적 장벽이 크고, 영수증은 이미 손에
+    있다 — 가격을 실제로 모으려면 영수증 쪽이 현실적인 경로다. 그리고 영수증은
+    "수량 × 단가 = 금액"이라, 합계를 단가로 읽으면 가격이 부풀려진다.
+    """
+    from app.integrations.gemini import _MENU_EXTRACTION_PROMPT
+
+    assert "영수증" in _MENU_EXTRACTION_PROMPT
+    assert "단가" in _MENU_EXTRACTION_PROMPT
+    # 합계·부가세 같은 메뉴 아닌 줄이 메뉴로 들어오면 안 된다.
+    assert "부가세" in _MENU_EXTRACTION_PROMPT
