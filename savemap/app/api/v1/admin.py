@@ -277,10 +277,37 @@ async def get_places_stats(
         for r in (await session.execute(recent_stmt)).all()
     ]
 
+    # 이름·위치만 있고 "얼마인지"는 모르는 매장이 얼마나 되는지 — 오늘(2026-08-20)
+    # 붙인 4가지 가격 채우기 작업(메뉴명 정규화/참가격 통계/프랜차이즈 매칭/영수증
+    # 제보)이 실제로 커버리지를 얼마나 늘렸는지 이 숫자로만 확인할 수 있다. 소스별로
+    # 나누면 어느 경로가 실제로 기여하고 있는지도 바로 보인다.
+    with_price_stmt = (
+        select(func.count(func.distinct(MenuItem.place_id)))
+        .select_from(MenuItem)
+        .join(Place, MenuItem.place_id == Place.id)
+        .where(*filters)
+    )
+    places_with_price = (await session.execute(with_price_stmt)).scalar_one()
+
+    by_source_stmt = (
+        select(MenuItem.source, func.count(func.distinct(MenuItem.place_id)))
+        .join(Place, MenuItem.place_id == Place.id)
+        .where(*filters)
+        .group_by(MenuItem.source)
+    )
+    by_source = {
+        row[0].value: row[1] for row in (await session.execute(by_source_stmt)).all()
+    }
+
     return {
         "region_filter": region,
         "total_places": total,
         "by_category": by_category,
+        "price_coverage": {
+            "places_with_price": places_with_price,
+            "coverage_pct": round(places_with_price / total * 100, 1) if total else 0.0,
+            "places_with_price_by_source": by_source,
+        },
         "recent_samples": recent_samples,
     }
 
