@@ -60,8 +60,15 @@ class Settings(BaseSettings):
     # 반환할 수 있다. search_max_results보다 넉넉하게 잡아서, 정렬 후 상위
     # search_max_results개를 추릴 표본이 부족해지지 않게 한다.
     search_row_fetch_limit: int = 500
-    rank_savings_weight: float = 0.7
-    rank_trust_weight: float = 0.3
+    # 절약률 55% + 신뢰도 25% + 거리 20% 가중합으로 랭킹 점수를 매긴다. 예전엔 거리가
+    # 전혀 안 들어가서(0.7/0.3 둘뿐), 검증 데이터가 적은 콜드스타트에선 거의 모든
+    # 후보가 동점(0.15)이 돼 정렬이 "우연히" 거리순으로 남는 상태였다(2026-08-22
+    # 확인). rank_distance_half_m은 거리 점수가 0.5가 되는 지점(쌍곡 감쇠) — 이
+    # 값을 키우면 먼 매장도 덜 불리해진다.
+    rank_savings_weight: float = 0.55
+    rank_trust_weight: float = 0.25
+    rank_distance_weight: float = 0.20
+    rank_distance_half_m: float = 500.0
 
     # AI 절약 플랜(/v1/route/suggest) — 예산 입력값 검증 범위와 코스에 담을 최대
     # 스톱 수. 최대 스톱 수는 기획서 예시(무료주차→무료체험→할인카페→마감할인식당,

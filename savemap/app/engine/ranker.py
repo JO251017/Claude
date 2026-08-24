@@ -12,11 +12,21 @@ class RankedOffer:
     score: float
 
 
-def _score(breakdown: SavingsBreakdown, trust: float) -> float:
+def _distance_norm(distance_m: float) -> float:
+    """쌍곡 감쇠: 0m→1.0, half_m(기본 500m)→0.5, 3km→0.14. 지수 감쇠와 달리 반경
+    끝에서 0으로 붕괴하지 않는다 — 멀지만 절약이 큰 매장이 점수에서 완전히
+    사라지지 않게 하려는 것이다."""
+    return 1.0 / (1.0 + max(distance_m, 0.0) / settings.rank_distance_half_m)
+
+
+def _score(breakdown: SavingsBreakdown, trust: float, distance_m: float) -> float:
     savings_norm = min(breakdown.savings_rate / 100.0, 1.0)
     trust_norm = min(max(trust, 0.0), 1.0)
+    distance_norm = _distance_norm(distance_m)
     return (
-        savings_norm * settings.rank_savings_weight + trust_norm * settings.rank_trust_weight
+        savings_norm * settings.rank_savings_weight
+        + trust_norm * settings.rank_trust_weight
+        + distance_norm * settings.rank_distance_weight
     )
 
 
@@ -24,8 +34,12 @@ def rank_candidates(candidates: list[OfferCandidate]) -> list[RankedOffer]:
     ranked = []
     for candidate in candidates:
         breakdown = calculate_savings(candidate)
-        ranked.append(RankedOffer(candidate, breakdown, _score(breakdown, candidate.trust_score)))
-    ranked.sort(key=lambda r: r.score, reverse=True)
+        score = _score(breakdown, candidate.trust_score, candidate.distance_m)
+        ranked.append(RankedOffer(candidate, breakdown, score))
+    # 동점은 흔하다(콜드스타트에서 특히) — 예전엔 안정정렬이라 입력 순서(대개 거리순)가
+    # "우연히" 남았을 뿐이다. 거리→offer_id를 명시적 타이브레이크로 둬서 의도된
+    # 동작으로 확정한다(완전 결정론적).
+    ranked.sort(key=lambda r: (-r.score, r.candidate.distance_m, r.candidate.offer_id))
     return ranked
 
 

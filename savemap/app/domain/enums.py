@@ -63,6 +63,19 @@ class RoutePreference(str, enum.Enum):
     DISTANCE = "distance"  # 이동거리 최소화
 
 
+# 검색(/v1/search) 결과 정렬 기준 — 그동안 사용자가 검색 결과 정렬을 바꿀 방법이
+# 없었다(AI 절약 플랜의 RoutePreference에만 있었음, 2026-08-22 확인). 겹치는 값
+# (cheapest/verified/recent/distance)은 RoutePreference와 문자열을 맞췄다 —
+# app/engine/ordering.sort_key_for가 이 값을 그대로 받는다. RECOMMENDED는 검색
+# 전용 기본값(랭킹 점수순)이라 RoutePreference엔 대응하는 값이 없다.
+class SearchSort(str, enum.Enum):
+    RECOMMENDED = "recommended"
+    CHEAPEST = "cheapest"
+    DISTANCE = "distance"
+    VERIFIED = "verified"
+    RECENT = "recent"
+
+
 class ReportStatus(str, enum.Enum):
     PENDING = "pending"
     VERIFIED = "verified"

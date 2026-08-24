@@ -8,10 +8,11 @@ from app.api.deps import SessionDep
 from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
-from app.domain.enums import Category, PaymentMethodType
+from app.domain.enums import Category, PaymentMethodType, SearchSort
 from app.engine.benefit_combiner import combine
 from app.engine.candidate_builder import build_candidate
 from app.engine.discovery import discover_nearby_places
+from app.engine.ordering import sort_key_for
 from app.engine.price_comparison import list_menu_items_by_place
 from app.engine.ranker import dedupe_by_place, rank_candidates
 from app.engine.result_assembly import build_search_result_item
@@ -35,6 +36,10 @@ async def search(
     radius_km: float | None = Query(default=None),
     category: Category | None = Query(default=None),
     payment_methods: list[PaymentMethodType] = Query(default_factory=list),
+    sort: SearchSort = Query(
+        default=SearchSort.RECOMMENDED,
+        description="정렬 기준 — recommended(기본, 종합점수순)/cheapest/distance/verified/recent",
+    ),
     session: AsyncSession = SessionDep,
 ) -> SearchResponse:
     radius = radius_km or settings.search_default_radius_km
@@ -65,10 +70,17 @@ async def search(
     combine(candidates, set(payment_methods))
     ranked = rank_candidates(candidates)
 
-    # 매장 단위 중복 제거 + 응답 상한(search_max_results)까지 한 번에 적용한다 —
-    # 밀집 지역(착한가격업소 등으로 반경 안에 수백 곳이 잡히는 경우)에서 응답이
-    # 무한정 커지고 이 아래 메뉴 조회까지 그 수만큼 늘어나는 걸 막는다.
-    deduped = dedupe_by_place(ranked, max_results=settings.search_max_results)
+    # 매장 단위 중복 제거는 반드시 점수순 상태에서 먼저 한다 — 그래야 매장 하나당
+    # "가장 좋은 조건" 오퍼가 대표로 남는다(dedupe_by_place는 ranked에서 그 매장이
+    # 처음 나오는 자리를 대표로 삼는다). 사용자가 고른 정렬(sort)은 그다음, 대표
+    # 오퍼가 이미 정해진 매장 목록 위에 적용한다 — 순서를 반대로 하면 "거리순인데
+    # 실제로는 상위 60개 점수 안에서만 가까운 순"이 되는 미묘한 오류가 생긴다.
+    # search_row_fetch_limit(최대 500건)로 이미 상한이 있으므로 여기서 max_results
+    # 없이 전부 중복제거해도 안전하다.
+    deduped_all = dedupe_by_place(ranked)
+    if sort != SearchSort.RECOMMENDED:
+        deduped_all = sorted(deduped_all, key=sort_key_for(sort.value))
+    deduped = deduped_all[: settings.search_max_results]
     seen_places = {r.candidate.place_id for r in deduped}
 
     # 대표메뉴: 실제 등록된 메뉴 가격에서만 뽑는다 — 대표 오퍼가 메뉴에서 파생됐으면

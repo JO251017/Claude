@@ -42,6 +42,32 @@ def test_search_rejects_radius_out_of_range(client):
     assert resp.json()["detail"]["code"] == "SM4002"
 
 
+def test_search_rejects_invalid_sort_value(client):
+    # 검증은 DB에 닿기 전에 일어나야 한다 — NullSession인 채로 422가 나온다는 것
+    # 자체가 sort 파라미터 검증이 쿼리보다 먼저라는 증거.
+    resp = client.get("/v1/search", params={"lat": 36.99, "lng": 127.11, "sort": "bogus"})
+    assert resp.status_code == 422
+
+
+def test_search_accepts_every_valid_sort_value(client, monkeypatch):
+    # 빈 결과로 짧게 우회해서(DB 없이도) sort 파라미터 자체가 각 유효값을 실제로
+    # 통과시키는지만 확인한다 — 빈 place_ids는 카운트 조회들이 전부 자체 단락하므로
+    # (get_discover_counts 등) 이 이상 DB를 안 건드린다.
+    import app.api.v1.search as search_module
+
+    async def _empty(*_a, **_kw):
+        return []
+
+    monkeypatch.setattr(search_module, "query_within_radius", _empty)
+    monkeypatch.setattr(search_module, "query_places_without_offer", _empty)
+    monkeypatch.setattr(search_module, "discover_nearby_places", _empty)
+
+    for value in ("recommended", "cheapest", "distance", "verified", "recent"):
+        resp = client.get("/v1/search", params={"lat": 36.99, "lng": 127.11, "sort": value})
+        assert resp.status_code == 200, f"sort={value} 실패: {resp.text}"
+        assert resp.json()["results"] == []
+
+
 def test_route_suggest_rejects_budget_out_of_range(client):
     # 예산 검증도 DB 세션에 닿기 전에 일어나야 한다 (radius 검증과 같은 순서 원칙).
     resp = client.post(

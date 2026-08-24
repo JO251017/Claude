@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from app.domain.enums import RoutePreference
+from app.engine.ordering import sort_key_for
 from app.engine.ranker import RankedOffer
 
 # SaveMap의 원래 기획(하이브리드 AI 동선 추천)은 "예산/인원을 넣으면 실제로 얼마나
@@ -32,20 +32,10 @@ class RoutePlan:
 # 정하는 데 쓴다. 전부 이미 계산/저장돼 있는 실측값만 쓰고(가격/trust_score/
 # verification_count/last_verified_at/distance_m), 값이 없는 항목은 임의로 좋은
 # 점수를 주지 않고 정렬상 뒤로 민다(예: trust_score는 OfferCandidate 기본값 0.5가
-# 이미 "모른다"는 뜻이라 그대로 둔다).
-_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
-
-
+# 이미 "모른다"는 뜻이라 그대로 둔다). 실제 정렬 키 계산은 검색(/v1/search)과
+# 공유하는 app/engine/ordering.py로 옮겼다(2026-08-22) — 여기 있던 로직 그대로다.
 def _preference_sort_key(preference: RoutePreference):
-    if preference == RoutePreference.CHEAPEST:
-        return lambda r: r.breakdown.final_price
-    if preference == RoutePreference.VERIFIED:
-        return lambda r: (-r.candidate.trust_score, -r.candidate.verification_count)
-    if preference == RoutePreference.RECENT:
-        return lambda r: -(r.candidate.last_verified_at or _EPOCH).timestamp()
-    if preference == RoutePreference.DISTANCE:
-        return lambda r: r.candidate.distance_m
-    raise ValueError(f"알 수 없는 RoutePreference: {preference}")
+    return sort_key_for(preference.value)
 
 
 def _ordered_by_preference(

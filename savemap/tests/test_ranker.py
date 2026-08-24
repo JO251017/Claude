@@ -1,6 +1,6 @@
 from app.domain.enums import Category, Layer
 from app.engine.models import OfferCandidate
-from app.engine.ranker import dedupe_by_place, rank_candidates
+from app.engine.ranker import _distance_norm, dedupe_by_place, rank_candidates
 
 
 def _c(offer_id: int, base: float, discount: float, trust: float) -> OfferCandidate:
@@ -62,3 +62,48 @@ def test_dedupe_by_place_no_cap_when_max_results_none():
     candidates = [_at_place(i, place_id=i, discount=1000) for i in range(5)]
     ranked = rank_candidates(candidates)
     assert len(dedupe_by_place(ranked)) == 5
+
+
+# --- 랭킹에 거리 반영(2026-08-22) — 거리가 전혀 안 들어가서, 검증 데이터가 적은
+# 콜드스타트에선 거의 모든 후보가 동점(0.15)이 돼 정렬이 "우연히" 거리순으로만
+# 남는 상태였다. 쌍곡 감쇠 + 명시적 타이브레이크로 의도된 동작으로 바꿨다. ---
+
+
+def test_distance_norm_is_one_at_zero_distance():
+    assert _distance_norm(0.0) == 1.0
+
+
+def test_distance_norm_is_half_at_the_half_distance(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rank_distance_half_m", 500.0)
+    assert _distance_norm(500.0) == 0.5
+
+
+def test_distance_norm_decreases_monotonically():
+    values = [_distance_norm(d) for d in (0, 250, 500, 1000, 3000, 10000)]
+    assert values == sorted(values, reverse=True)
+    assert all(v > 0 for v in values)  # 지수 감쇠와 달리 반경 끝에서 0으로 안 죽는다
+
+
+def test_closer_candidate_wins_when_savings_and_trust_are_equal():
+    far = _c(1, 10000, 2000, 0.5)
+    far.distance_m = 2000.0
+    near = _c(2, 10000, 2000, 0.5)
+    near.distance_m = 100.0
+    ranked = rank_candidates([far, near])
+    assert ranked[0].candidate.offer_id == 2
+
+
+def test_completely_tied_candidates_break_ties_by_distance_then_offer_id():
+    # 콜드스타트에서 흔한 상태: 절약률 0, trust 기본값(0.5) 동일 → 점수도 동일.
+    # 입력 순서를 뒤집어도 결과가 항상 같아야(=결정론적) 한다.
+    a = _c(offer_id=5, base=10000, discount=0, trust=0.5)
+    a.distance_m = 300.0
+    b = _c(offer_id=3, base=10000, discount=0, trust=0.5)
+    b.distance_m = 300.0
+
+    forward = rank_candidates([a, b])
+    backward = rank_candidates([b, a])
+    assert [r.candidate.offer_id for r in forward] == [3, 5]
+    assert [r.candidate.offer_id for r in backward] == [3, 5]
