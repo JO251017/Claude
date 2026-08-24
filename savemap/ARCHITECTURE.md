@@ -47,6 +47,17 @@ GET /v1/search?lat&lng&radius_km&category&payment_methods
  → savings_calculator  실제 낼 돈 = 기본가 − 매장할인 − 카드/통신 − 지역화폐
  → ranker          ④ 절약률(%) × 신뢰도 정렬
 ```
+(단순화한 그림이다 — 실제로는 `candidate_builder`/`price_comparison`/`savings_report`/
+`result_assembly`/`discovery`도 이 흐름 안에 있다.)
+
+**중요: 절약 계산은 검색 시점이 아니라 메뉴 적재/갱신 시점에 한 번만 돈다.**
+`price_comparison.compare_menu_item`은 `offer_sync.sync_menu_offer`가 메뉴를
+등록/갱신할 때만 호출되고, 그 결과(`benchmark_source`/`base_price`/`store_discount`)가
+`Offer` 컬럼에 그대로 굳는다. `/v1/search`는 이미 계산된 그 값을 다시 쓸 뿐, 매
+요청마다 재비교하지 않는다. 즉 주변에 매장이 새로 생기거나 새 벤치마크 소스(참가격
+통계·프랜차이즈 가격 등)가 채워져도, `POST /v1/admin/maintenance/resync-offers`를
+돌리기 전까진 이미 만들어진 오퍼가 자동으로 안 바뀐다 — 새 소스를 적재한 직후엔
+이 재동기화가 배포 절차의 일부다(`app/engine/offer_resync.py`).
 
 ## AI 절약 플랜 흐름 (동선 추천)
 개별 매장을 나열만 하는 것과 별개로, 예산을 넣으면 실제 후보 중에서 예산 안에

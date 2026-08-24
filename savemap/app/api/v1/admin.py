@@ -39,7 +39,9 @@ from app.sources.public_api.franchise_price import (
 from app.sources.public_api.franchise_price import (
     parse_csv_bytes as parse_franchise_csv_bytes,
 )
+from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
+from app.engine.offer_resync import resync_offers
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
 
@@ -239,6 +241,43 @@ async def backfill_menu_normalized_names(
         "next_offset": next_offset,
         "done": len(rows) < limit,
     }
+
+
+@router.post("/maintenance/resync-offers")
+async def resync_offers_endpoint(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="menu_item.id 기준 몇 번째부터 처리할지"),
+    limit: int = Query(default=500, ge=1, le=2000, description="한 번에 처리할 건수"),
+    source: SourceType | None = Query(default=None, description="이 소스로 등록된 메뉴만 (예: s1_public)"),
+    dry_run: bool = Query(default=False, description="true면 계산만 하고 저장하지 않음 — 영향 범위 미리 확인용"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """이미 만들어진 Offer를 다시 계산해서 최신 벤치마크(실측/참가격/AI추정)로 갱신한다.
+
+    절약 계산은 메뉴가 적재/갱신될 때 딱 한 번만 돌고 결과가 Offer에 그대로 굳는다 —
+    나중에 주변에 매장이 더 생기거나 새 벤치마크 소스(참가격 통계, 프랜차이즈 가격
+    등)가 채워져도 이미 만들어진 오퍼는 이 엔드포인트를 돌리기 전까진 안 바뀐다.
+
+    **반드시 실행해야 하는 시점** (옵션이 아니라 배포 절차의 일부):
+    - 새 벤치마크 소스를 처음 채운 직후 — /admin/sync/dine-out-prices,
+      /admin/apply/franchise-prices, /admin/maintenance/backfill-menu-normalized-names
+      실행 뒤에는 전체(region 없이) 한 번 돌려야 실제 검색 결과에 반영된다.
+    - price_comparison.py의 판정 로직/상수(반경, 표본 기준 등)를 바꾼 배포 직후.
+
+    **부분 실행**: 착한가격업소/인허가 데이터를 특정 지역에 대량 적재한 뒤 — 새
+    매장이 이웃 표본이 되어 주변 기존 오퍼가 ai/gov에서 region으로 승격될 수 있다.
+    region으로 그 지역만 좁혀 돌리면 된다.
+
+    **정기 실행**: 주 1회 전체. Render 무료 플랜엔 크론이 없으므로 응답의
+    next_offset/done을 보고 외부에서 done:true까지 이어서 호출해야 한다.
+
+    dry_run=true로 먼저 돌려서 benchmark_transitions(전이 행렬)를 보고 영향 범위를
+    가늠한 뒤, 실제로(dry_run=false) 실행하는 걸 권장한다. 멱등이라 여러 번 돌려도
+    안전하다."""
+    return await resync_offers(
+        session, region=region, offset=offset, limit=limit, source=source, dry_run=dry_run
+    )
 
 
 @router.get("/places/stats")

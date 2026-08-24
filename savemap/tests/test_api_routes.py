@@ -143,6 +143,14 @@ def test_admin_places_stats_rejects_without_key_before_touching_db(client, monke
     assert resp.status_code == 401
 
 
+def test_admin_resync_offers_rejects_without_key_before_touching_db(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/maintenance/resync-offers")
+    assert resp.status_code == 401
+
+
 def test_admin_endpoints_disabled_when_key_not_configured(client, monkeypatch):
     from app.core.config import settings
 
