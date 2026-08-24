@@ -18,10 +18,15 @@ def build_search_result_item(
     루프 본문에 있던 코드를 그대로 옮긴 것."""
     c = r.candidate
     place_items = menu_items_by_place.get(c.place_id, [])
-    signature = next(
-        (item for item in place_items if item.id == c.menu_item_id),
-        place_items[0] if place_items else None,
-    )
+    if c.menu_item_id is not None:
+        # 절약률을 계산한 바로 그 메뉴만 대표로 보여준다 — 예전엔 못 찾으면(메뉴
+        # 삭제 등으로 링크가 끊기면) "가장 먼저 등록된 메뉴"로 조용히 폴백해서,
+        # 카드에 뜬 대표메뉴 가격과 실제 절약률 계산 근거가 다를 수 있었다. 링크가
+        # 끊긴 경우 엉뚱한 메뉴를 대표로 세우느니 대표메뉴 없이 보여준다(지어내지 않기).
+        signature = next((item for item in place_items if item.id == c.menu_item_id), None)
+    else:
+        # 메뉴에서 파생되지 않은 오퍼(사장님 직접 등록 할인 등)만 이 폴백을 쓴다.
+        signature = place_items[0] if place_items else None
     report = build_savings_report(
         savings_rate=r.breakdown.savings_rate,
         discover_count=c.discover_count,

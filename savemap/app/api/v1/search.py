@@ -71,9 +71,11 @@ async def search(
     deduped = dedupe_by_place(ranked, max_results=settings.search_max_results)
     seen_places = {r.candidate.place_id for r in deduped}
 
-    # 대표메뉴: 실제 등록된 메뉴 가격에서만 뽑는다 — 대표 오퍼에 연결된 메뉴가 있으면
-    # 그것(절약이 가장 큰 메뉴), 없으면 가장 먼저 등록된 메뉴. 등록된 메뉴가 하나도
-    # 없으면 표시하지 않는다 (지어내지 않기).
+    # 대표메뉴: 실제 등록된 메뉴 가격에서만 뽑는다 — 대표 오퍼가 메뉴에서 파생됐으면
+    # (menu_item_id 있음) 반드시 그 메뉴만 보여준다(절약률 계산 근거와 화면 표시가
+    # 어긋나지 않게). 링크가 끊겼거나 메뉴에서 파생 안 된 오퍼(사장님 직접 등록 할인
+    # 등)만 "가장 먼저 등록된 메뉴"로 대체한다. 등록된 메뉴가 하나도 없으면 표시하지
+    # 않는다 (지어내지 않기).
     menu_items_by_place = await list_menu_items_by_place(session, list(seen_places))
 
     results = [
