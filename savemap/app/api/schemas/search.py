@@ -13,7 +13,7 @@ class SavingsReportItem(BaseModel):
     score: int | None = None
     grade: str | None = None
     confidence_tier: str
-    confidence_stars: int
+    confidence_stars: int  # 0, 2, 3, 4, 5 중 하나 (0 = 데이터 부족, 별을 그리지 않음)
     confidence_label: str
     reasons: list[str] = []
     one_line: str = ""

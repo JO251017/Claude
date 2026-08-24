@@ -30,6 +30,7 @@ def build_search_result_item(
         verification_count=c.verification_count,
         last_verified_at=c.last_verified_at,
         benchmark_source=c.benchmark_source,
+        benchmark_sample_count=c.benchmark_sample_count,
     )
     status = (status_by_place or {}).get(c.place_id)
     return SearchResultItem(
