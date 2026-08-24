@@ -2472,9 +2472,12 @@ async function confirmMenuPhotoResults(placeId) {
     }
   }
 
+  // "자동으로 떠요"라고 하면 안 된다 — 절약 계산은 등록/갱신되는 그 순간에만 다시
+  // 돌고, 나중에 주변 매장이 더 등록돼도 이 항목이 저절로 재계산되지는 않는다
+  // (관리자가 재동기화를 돌려야 반영된다, 2026-08-22).
   statusEl.textContent = listed
-    ? `${success}/${toSave.length}개 메뉴 등록 완료! 그중 ${listed}개는 지역 평균보다 저렴해서 지도에 절약 정보로 떴어요.`
-    : `${success}/${toSave.length}개 메뉴 등록 완료! 아직 지도에 뜬 항목은 없어요 — 지역 평균보다 저렴하거나 비교할 주변 매장이 더 모이면 자동으로 떠요.`;
+    ? `${success}/${toSave.length}개 메뉴 등록 완료! 그중 ${listed}개는 주변 매장 평균보다 저렴해서 지도에 절약 정보로 떴어요.`
+    : `${success}/${toSave.length}개 메뉴 등록 완료! 아직 지도에 뜬 항목은 없어요 — 주변 매장 평균보다 저렴하거나 비교할 주변 매장이 더 모이면 다음 확인 때 반영돼요.`;
   document.getElementById('mi-photo-results').innerHTML = '';
   loadMenuItems();
 }

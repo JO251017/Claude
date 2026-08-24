@@ -11,8 +11,9 @@ from app.domain.place import Place
 from app.engine.menu_name import canonical_dish, normalize_menu_name
 from app.sources.public_api.dine_out_price import get_regional_price, region_from_address
 
-# 이 개수 미만이면 평균/중앙값을 신뢰할 수 없다고 보고 "비교 데이터 부족"으로 표시한다
-# (기획서 §5). 사용자 지시로 2건까지는 비교 가능하다고 판단.
+# 이 개수(=이웃 매장 수, 비교 대상 매장 자신은 빼고 센다) 미만이면 평균/중앙값을
+# 신뢰할 수 없다고 보고 "비교 데이터 부족"으로 표시한다(기획서 §5). 사용자 지시로
+# 이웃 2곳까지는 비교 가능하다고 판단.
 MIN_RELIABLE_SAMPLE = 2
 
 
@@ -42,14 +43,9 @@ class MenuPriceComparison:
     benchmark_period: str | None = None
 
 
-async def _region_prices(
-    session: AsyncSession, name: str, lat: float, lng: float, radius_km: float
-) -> list[float]:
-    """주변 반경에서 같은 메뉴를 파는 매장들의 실제 등록가.
-
-    예전엔 메뉴명이 글자 하나까지 같아야 매칭돼서, "아메리카노"와 "아메리카노(ICE)"가
-    서로 다른 메뉴로 갈렸다 — 실제 가격이 12,000건 넘게 있는데도 비교가 안 돼서
-    대부분 AI 추정 통상가로 떨어지던 원인이다. 정규화된 이름으로 매칭한다."""
+def _region_prices_stmt(name: str, lat: float, lng: float, radius_km: float, exclude_place_id: int | None):
+    """쿼리 생성만 순수 함수로 뺐다 — 샌드박스에 DB가 없어서, 자기표본 제외 조건이
+    실제로 SQL에 들어가는지 검증할 수 있는 유일한 지점이 컴파일된 문자열이다."""
     point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), WGS84_SRID)
     place_geog = cast(Place.geom, Geography)
     point_geog = cast(point, Geography)
@@ -61,6 +57,35 @@ async def _region_prices(
             func.ST_DWithin(place_geog, point_geog, radius_km * 1000.0),
         )
     )
+    if exclude_place_id is not None:
+        stmt = stmt.where(MenuItem.place_id != exclude_place_id)
+    return stmt
+
+
+async def _region_prices(
+    session: AsyncSession,
+    name: str,
+    lat: float,
+    lng: float,
+    radius_km: float,
+    *,
+    exclude_place_id: int | None = None,
+) -> list[float]:
+    """주변 반경에서 같은 메뉴를 파는 "다른" 매장들의 실제 등록가.
+
+    예전엔 메뉴명이 글자 하나까지 같아야 매칭돼서, "아메리카노"와 "아메리카노(ICE)"가
+    서로 다른 메뉴로 갈렸다 — 실제 가격이 12,000건 넘게 있는데도 비교가 안 돼서
+    대부분 AI 추정 통상가로 떨어지던 원인이다. 정규화된 이름으로 매칭한다.
+
+    exclude_place_id: 비교 대상 매장 자신을 표본에서 뺀다(2026-08-22 수정 — 원래
+    빠져 있지 않아서, 매장 자신은 항상 반경 0에 있으니 표본에 항상 포함됐다. 그러면
+    MIN_RELIABLE_SAMPLE=2가 실제론 "이웃 1곳"만 있어도 만족됐고, 표본이 정확히
+    2건(자기+이웃1)이면 median이 (내가격+이웃가격)/2가 돼서 실제 가격차의 절반만
+    절약으로 계산되는 버그가 있었다). menu_item_id가 아니라 place_id로 빼는 이유는,
+    한 매장이 같은 메뉴를 표기만 다르게(예: "아메리카노"/"아메리카노(ICE)") 여러 행
+    등록해도 전부 같은 normalized_name으로 묶이기 때문 — id로만 빼면 자기 매장의
+    다른 행이 표본에 남아 편향이 재발한다."""
+    stmt = _region_prices_stmt(name, lat, lng, radius_km, exclude_place_id)
     rows = (await session.execute(stmt)).scalars().all()
     return [float(r) for r in rows]
 
@@ -101,7 +126,9 @@ async def _government_stat(session: AsyncSession, menu_item: MenuItem):
 async def compare_menu_item(
     session: AsyncSession, menu_item: MenuItem, lat: float, lng: float, radius_km: float = 3.0
 ) -> MenuPriceComparison:
-    prices = await _region_prices(session, menu_item.name, lat, lng, radius_km)
+    prices = await _region_prices(
+        session, menu_item.name, lat, lng, radius_km, exclude_place_id=menu_item.place_id
+    )
     sample_count = len(prices)
     reliable = sample_count >= MIN_RELIABLE_SAMPLE
 
@@ -109,8 +136,9 @@ async def compare_menu_item(
     region_median = round(statistics.median(prices), 0) if prices else None
 
     # 비교 기준 사다리: 주변 실측 > 정부 통계(참가격 외식비) > AI 추정.
-    # 근거가 강한 쪽을 항상 먼저 쓰고, 아래 등급으로는 위가 없을 때만 내려간다 —
-    # 주변 매장이 나중에 등록되면 자동으로 실측 기준으로 승격된다.
+    # 근거가 강한 쪽을 항상 먼저 쓴다. 다만 이 함수가 다시 불릴 때만 사다리가
+    # 재평가된다 — 주변 매장이 나중에 등록돼도 "자동 승격"은 아니고, 이미 만들어진
+    # 오퍼는 재동기화 배치(app/engine/offer_resync.py)가 돌 때 승격된다.
     benchmark_source = None
     benchmark_price = None
     benchmark_period = None
