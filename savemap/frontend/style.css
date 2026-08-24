@@ -1115,6 +1115,13 @@ select:focus {
   color: var(--primary-dark);
 }
 
+/* gov(한국소비자원 참가격) — 예전엔 이 색이 없어서 기본 회색(뉴트럴) 배경으로
+   떨어졌고, region과 시각적으로 구분이 안 됐다. */
+.route-stop-source-badge--gov {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+}
+
 /* --- 정보 신뢰도(최신 상태) 표시 --- */
 .fresh-dot {
   display: inline-block;

@@ -901,6 +901,21 @@ document.getElementById('detail-close-btn').addEventListener('click', () => {
 // "얼마나 절약되고 얼마나 믿을 수 있는지"만 실제 데이터로 분석해 보여준다. ---
 const CONFIDENCE_ICONS = { high: '🟢', medium: '🟡', low: '⚪' };
 
+// 절약을 무엇과 비교해 계산했는지 라벨 — 백엔드 app/engine/savings_report.py의
+// BENCHMARK_LABELS와 1:1로 맞춘 단일 소스. 예전엔 화면마다 `=== 'ai' ? A : B`
+// 식으로 이분법으로만 나눠서, "gov"(참가격 정부통계) 기준 절약도 전부 "실측"으로
+// 표시되고 있었다 — 같은 카드 안에서 report.reasons(정확히 구분됨)와 라벨이
+// 서로 모순되던 버그(2026-08-22 확인). 값을 추가/변경할 땐 이 객체 하나만 고치면
+// 모든 화면이 같이 바뀐다.
+const SAVINGS_SOURCE = {
+  region: { full: '주변 매장 실측가', short: '실측', badge: '📊 실측' },
+  gov: { full: '한국소비자원 참가격 시도 평균가', short: '참가격 통계', badge: '📈 참가격' },
+  ai: { full: 'AI(Gemini) 추정 통상가', short: 'AI 추정', badge: '🤖 AI 추정' },
+};
+function savingsSourceLabel(source, key = 'full') {
+  return (SAVINGS_SOURCE[source] || {})[key] || '비교 기준가';
+}
+
 function confidenceStarsHtml(stars) {
   if (!stars) return '';
   return `<span class="report-stars">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span>`;
@@ -916,7 +931,7 @@ function savingsReportHtml(r) {
     // 비교 자체(실측이든 AI 추정이든)는 이미 끝났을 수 있다 — 그 경우엔 "계산 중"으로
     // 뭉개지 않고 실제로 나온 숫자를 출처와 함께 그대로 보여준다.
     const hasEstimate = r.total_savings > 0;
-    const sourceLabel = r.savings_source === 'ai' ? 'AI(Gemini) 추정 통상가' : '주변 매장 실측가';
+    const sourceLabel = savingsSourceLabel(r.savings_source);
     // 발견/방문 인증이 하나도 없는 완전 콜드스타트 매장은 "계산 중"이라는 수동적
     // 문구 대신 방문을 요청하는 문구로 바꾼다 — 실제 카운트 기반이라 지어낸 게
     // 아니다(현장 활동 유도 기획안 §3-B, 2026-08-13).
@@ -951,7 +966,7 @@ function savingsReportHtml(r) {
       <div class="ai-report-title">💰 AI 절약 리포트</div>
       ${r.total_savings > 0 ? `
       <div class="ai-report-hero">
-        <div class="ai-report-rate">평균보다 <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
+        <div class="ai-report-rate">${savingsSourceLabel(r.savings_source, 'short')} 대비 <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
         <div class="ai-report-amount">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>
       </div>` : `
       <div class="ai-report-hero">
@@ -1377,13 +1392,13 @@ function renderRoutePlanResult(data, conditionChips = []) {
       // (검색 결과 카드의 sourceLabel 표기와 동일한 원칙).
       let savingsNote = '';
       if (s.savings_rate > 0) {
-        const sourceLabel = s.savings_source === 'ai' ? 'AI 추정' : '실측';
+        const sourceLabel = savingsSourceLabel(s.savings_source, 'short');
         savingsNote = ` · ${sourceLabel} 대비 ${Math.round(s.savings_rate)}% 저렴`;
       }
       // 거리 + 실측/AI 출처 배지(6번 항목) — RouteStopItem에 이미 있던 필드를
       // 결과 카드에 추가 노출("결과 카드가 얇다"는 지난 감사 지적과 직접 연결).
       const sourceBadge = s.savings_source
-        ? `<span class="route-stop-source-badge route-stop-source-badge--${s.savings_source}">${s.savings_source === 'ai' ? '🤖 AI 추정' : '📊 실측'}</span>`
+        ? `<span class="route-stop-source-badge route-stop-source-badge--${s.savings_source}">${savingsSourceLabel(s.savings_source, 'badge')}</span>`
         : '';
       return `
       <div class="route-stop-card" data-idx="${i}">
@@ -1884,10 +1899,10 @@ async function runSearch() {
               <span class="card-grade">${escapeHtml(report.grade)}</span>
             </div>
             ${r.total_savings > 0
-              ? `<div class="card-savings-line">평균보다 <strong>${Math.round(r.savings_rate)}% 저렴</strong> · 예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>`
+              ? `<div class="card-savings-line">${savingsSourceLabel(r.savings_source, 'short')} 대비 <strong>${Math.round(r.savings_rate)}% 저렴</strong> · 예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>`
               : ''}`
           : hasEstimate
-            ? `<div class="card-score-line card-score-line--ai">🤖 ${r.savings_source === 'ai' ? 'AI 추정' : '실측 비교'} <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
+            ? `<div class="card-score-line card-score-line--ai">🤖 ${savingsSourceLabel(r.savings_source, 'short')} <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
               <div class="card-savings-line">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong> · 방문 데이터가 쌓이면 신뢰도가 표시돼요</div>`
             : isUnverified
               ? `<div class="card-score-line card-score-line--unverified">🙋 아직 아무도 확인 안 한 곳 · 가보시면 첫 인증자가 돼요</div>`
@@ -2614,11 +2629,10 @@ document.getElementById('menu-item-form').addEventListener('submit', async (e) =
 // --- 메뉴 가격 등록 결과가 실제로 지도에 절약 정보로 뜨는지, 안 뜬다면 왜인지를
 // 그 자리에서 알려준다 (지어내지 않기: 비교 표본이 2곳 미만이면 절약을 단정하지 않음). ---
 function menuSavingsMessage(item) {
-  const basis = item.benchmark_source === 'region'
-    ? `지역 평균(${Math.round(item.benchmark_price).toLocaleString()}원)`
-    : item.benchmark_source === 'ai'
-      ? `AI 추정 통상가(약 ${Math.round(item.benchmark_price).toLocaleString()}원)`
-      : null;
+  // "약"은 근사치(AI 추정)에만 붙인다 — region/gov는 실제 조사·등록된 값이라 근사가 아니다.
+  const basis = item.benchmark_source
+    ? `${savingsSourceLabel(item.benchmark_source)}(${item.benchmark_source === 'ai' ? '약 ' : ''}${Math.round(item.benchmark_price).toLocaleString()}원)`
+    : null;
 
   if (item.listed_on_map) {
     return `메뉴 등록 완료! "${item.name}"이(가) ${basis}보다 ${Math.round(item.savings_amount)}원(${item.savings_rate}%) 저렴해서 지도에 절약 정보로 떴어요.`;
@@ -2645,7 +2659,7 @@ async function loadMenuItems() {
     const rows = perPlace.flatMap(({ place, items }) =>
       items.map((m) => {
         const status = m.listed_on_map
-          ? `<span class="menu-status menu-status--on">지도에 절약 정보로 표시 중 (-${Math.round(m.savings_amount)}원${m.benchmark_source === 'ai' ? ', AI 추정' : ''})</span>`
+          ? `<span class="menu-status menu-status--on">지도에 절약 정보로 표시 중 (-${Math.round(m.savings_amount)}원${m.benchmark_source && m.benchmark_source !== 'region' ? ', ' + savingsSourceLabel(m.benchmark_source, 'short') : ''})</span>`
           : m.benchmark_source
             ? `<span class="menu-status menu-status--off">비교 기준보다 비싸거나 같음</span>`
             : `<span class="menu-status menu-status--pending">비교 기준 없음 (주변 등록 ${m.sample_count}곳)</span>`;
