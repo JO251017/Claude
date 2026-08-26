@@ -44,3 +44,6 @@ class OfferCandidate:
     benchmark_sample_count: int | None = None
     place_category_name: str | None = None
     place_kakao_id: str | None = None
+    # 전국지역화폐가맹점표준데이터와 매칭돼 검증된 매장인지 — 가격/할인 계산과는
+    # 무관하다(이 데이터엔 금액이 없다). 검색 결과에 정보성 배지로만 노출된다.
+    accepts_local_currency: bool = False

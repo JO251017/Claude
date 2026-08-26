@@ -83,4 +83,5 @@ def build_search_result_item(
         discover_count=c.discover_count,
         dining_count=c.dining_count,
         score=round(r.score, 4),
+        accepts_local_currency=c.accepts_local_currency,
     )

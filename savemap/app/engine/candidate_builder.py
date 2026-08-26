@@ -31,6 +31,7 @@ def build_candidate(offer: Offer, place: Place, distance_m: float) -> OfferCandi
         menu_item_id=offer.menu_item_id,
         benchmark_source=offer.benchmark_source,
         benchmark_sample_count=offer.benchmark_sample_count,
+        accepts_local_currency=place.accepts_local_currency,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,

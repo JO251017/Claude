@@ -177,6 +177,20 @@ def test_admin_resync_offers_rejects_without_key_before_touching_db(client, monk
     assert resp.status_code == 401
 
 
+def test_admin_local_currency_endpoints_reject_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    assert client.post("/v1/admin/sync/local-currency-merchants").status_code == 401
+    assert client.post("/v1/admin/apply/local-currency-merchants").status_code == 401
+    # 업로드 엔드포인트도 파일 파싱 전에 인증으로 먼저 막혀야 한다.
+    resp = client.post(
+        "/v1/admin/import/local-currency-csv",
+        files={"file": ("m.csv", b"garbage", "text/csv")},
+    )
+    assert resp.status_code == 401
+
+
 def test_admin_endpoints_disabled_when_key_not_configured(client, monkeypatch):
     from app.core.config import settings
 

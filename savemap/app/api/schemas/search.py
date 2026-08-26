@@ -61,6 +61,11 @@ class SearchResultItem(BaseModel):
     discover_count: int = 0
     dining_count: int = 0
     score: float
+    # 전국지역화폐가맹점표준데이터(지자체 공식 명단)와 매칭돼 검증된 매장인지 —
+    # 가격/할인 계산과는 무관한 정보 확인용 값이다(이 데이터엔 금액이 없어서
+    # savings_* 필드 어디에도 영향을 주지 않는다). False가 곧 "미가맹"을 뜻하진
+    # 않는다 — 아직 매칭을 안 돌렸거나 명단에 없을 수 있다(지어내지 않기).
+    accepts_local_currency: bool = False
 
 
 class DiscoveredPlaceItem(BaseModel):

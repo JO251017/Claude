@@ -1034,6 +1034,11 @@ function openOfferDetail(r) {
   // 무료주차 배지(10번 항목) — offer.category가 free_parking일 때만, 실제 등록된
   // 조건 그대로.
   const freeParkingBadge = r.category === 'free_parking' ? '<span class="badge badge--parking">🅿️ 무료주차</span>' : '';
+  // 전국지역화폐가맹점표준데이터(지자체 공식 명단) 매칭 결과 — 가격/절약 계산과는
+  // 완전히 분리된 정보성 배지다(SAVINGS_SOURCE와 무관, 금액에 영향 없음).
+  const localCurrencyBadge = r.accepts_local_currency
+    ? '<span class="badge badge--local-currency">🪙 지역화폐 가맹점 확인됨</span>'
+    : '';
   // 기준가 vs 실제가 숫자 나란히 표시(10번 항목) — 둘 다 있고 서로 다를 때만.
   const priceCompareHtml =
     r.base_price > 0 && r.final_price > 0 && r.base_price !== r.final_price
@@ -1051,6 +1056,7 @@ function openOfferDetail(r) {
       <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
       ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
       ${freeParkingBadge}
+      ${localCurrencyBadge}
       ${isFlash ? `<span class="flash-badge" data-expires="${r.expires_at || ''}">⏰ ${flashCountdownLabel(r.expires_at)}</span>` : ''}
     </div>
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
@@ -1886,6 +1892,7 @@ async function runSearch() {
           <div class="badge-group">
             <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
             ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
+            ${r.accepts_local_currency ? '<span class="badge badge--local-currency">🪙 지역화폐</span>' : ''}
             ${isFlash ? `<span class="flash-badge" data-expires="${r.expires_at || ''}">⏰ ${flashCountdownLabel(r.expires_at)}</span>` : ''}
           </div>
           <span class="distance">${r.distance_m.toFixed(0)}m</span>

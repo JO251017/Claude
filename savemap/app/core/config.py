@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # 이유로 코드에 박지 않고 환경변수로 받는다 — 미설정이면 정부 통계 기준 없이
     # 기존 동작(실측 → AI 추정)을 그대로 유지한다.
     dine_out_price_api_url: str = ""
+    # 전국지역화폐가맹점표준데이터(data.go.kr/data/15100062) 오픈API 요청 URL. 지자체가
+    # 매달 갱신하는 지역화폐/지역사랑상품권 가맹점 명단 — 같은 이유로 코드에 박지 않고
+    # 환경변수로 받는다. 미설정이면 기존 매장의 결제수단 검증 배지를 그대로 비워둔다
+    # (자기신고만 남고 검증은 안 붙는다, 지어내지 않기).
+    local_currency_api_url: str = ""
 
     supabase_url: str = ""
     supabase_anon_key: str = ""

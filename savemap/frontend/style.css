@@ -1609,6 +1609,13 @@ select:focus {
   color: #2563eb;
 }
 
+/* 전국지역화폐가맹점표준데이터 매칭 배지 — 가격/절약 계산과 무관한 정보성 배지라
+   savings_source 계열(.route-stop-source-badge--*) 색과는 겹치지 않는 골드 계열로. */
+.badge--local-currency {
+  background: rgba(180, 130, 6, 0.14);
+  color: #92660a;
+}
+
 .visit-buttons {
   display: flex;
   gap: 6px;

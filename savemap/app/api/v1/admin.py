@@ -39,6 +39,13 @@ from app.sources.public_api.franchise_price import (
 from app.sources.public_api.franchise_price import (
     parse_csv_bytes as parse_franchise_csv_bytes,
 )
+from app.sources.public_api.local_currency import (
+    apply_local_currency_rows,
+    get_cached_raw_rows as get_cached_local_currency_rows,
+    import_rows as import_local_currency_rows,
+    parse_csv_bytes as parse_local_currency_csv_bytes,
+    sync_local_currency_merchants,
+)
 from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
 from app.engine.offer_resync import resync_offers
@@ -201,6 +208,66 @@ async def apply_franchise_prices_endpoint(
     offset=next_offset으로 이어서 호출한다. 사용자가 사진으로 제보한 가격은 덮어쓰지
     않고 그대로 둔다(menu_items_kept_user_reported로 몇 건인지 보고한다)."""
     return await apply_franchise_prices(session, region=region, offset=offset, limit=limit)
+
+
+@router.post("/sync/local-currency-merchants")
+async def trigger_local_currency_sync(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="이 지역 매장 중 몇 번째부터 매칭을 시도할지"),
+    limit: int = Query(default=500, ge=1, le=2000, description="한 번에 훑을 매장 수"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """전국지역화폐가맹점표준데이터를 가져와 상호명이 일치하는 기존 매장에
+    accepts_local_currency 배지를 붙인다. 가격 정보는 없어 MenuItem/Offer는
+    건드리지 않는다 — 검색 결과에 정보성 배지로만 노출된다.
+
+    LOCAL_CURRENCY_API_URL이 설정돼 있어야 동작하고, 미설정이면 아무것도 지어내지
+    않고 skipped로 응답한다. 매장이 많으면 done이 false로 오니 offset=next_offset으로
+    이어서 호출한다. 상호명은 같은데 주소가 다른 지점이면 unmatched로 집계되고
+    배지는 안 붙는다(잘못된 매장에 붙이느니 안 붙이는 쪽을 택함)."""
+    return await sync_local_currency_merchants(session, region=region, offset=offset, limit=limit)
+
+
+@router.post("/import/local-currency-csv")
+async def import_local_currency_csv(
+    file: UploadFile = File(...),
+    _admin: None = RequireAdminDep,
+) -> dict:
+    """data.go.kr이 점검 중이거나 활용신청 전이어도, 직접 받은 지역화폐 가맹점
+    CSV를 올려서 같은 매칭 파이프라인을 태울 수 있다(착한가격업소·참가격과 동일한
+    우회 경로). 올린 뒤 /admin/apply/local-currency-merchants를 호출해야 실제로
+    매장에 배지가 붙는다 — 이 엔드포인트는 파싱 가능 여부만 확인하고 캐시해둔다."""
+    content = await file.read()
+    try:
+        raw_rows = parse_local_currency_csv_bytes(content)
+    except ValueError as exc:
+        raise InvalidCsvError(str(exc)) from exc
+    if not raw_rows:
+        raise InvalidCsvError("파일에서 데이터 행을 찾지 못했습니다")
+    return import_local_currency_rows(raw_rows)
+
+
+@router.post("/apply/local-currency-merchants")
+async def apply_local_currency_merchants_endpoint(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    offset: int = Query(default=0, ge=0, description="매장 목록 중 몇 번째부터 처리할지"),
+    limit: int = Query(default=500, ge=1, le=2000, description="한 번에 훑을 매장 수"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """/sync/local-currency-merchants 또는 /import/local-currency-csv로 이미 가져와
+    캐시해둔 가맹점 명단을 다시 매칭만 재실행한다 — 관리자가 매칭 로직 조정 후
+    재적용하거나, 새 지역으로 다시 훑을 때 데이터를 다시 안 받아도 되게 한다."""
+    raw_rows = get_cached_local_currency_rows()
+    if not raw_rows:
+        return {
+            "skipped": True,
+            "reason": "가져온 지역화폐 가맹점 데이터가 없습니다. 먼저 "
+            "/admin/sync/local-currency-merchants 또는 /admin/import/local-currency-csv로 "
+            "데이터를 가져와주세요.",
+        }
+    return await apply_local_currency_rows(session, raw_rows, region=region, offset=offset, limit=limit)
 
 
 @router.post("/maintenance/backfill-menu-normalized-names")
