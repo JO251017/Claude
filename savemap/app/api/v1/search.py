@@ -1,3 +1,4 @@
+import asyncio
 from urllib.parse import quote
 
 from fastapi import APIRouter, Query
@@ -5,7 +6,7 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
-from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse
+from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse, WeatherInfo
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
 from app.domain.enums import Category, PaymentMethodType, SearchSort
@@ -19,6 +20,7 @@ from app.engine.result_assembly import build_search_result_item
 from app.engine.rule_filter import rule_filter
 from app.engine.spatial_query import query_places_without_offer, query_within_radius
 from app.gamification.service import get_dining_counts
+from app.integrations.weather import WeatherSnapshot, get_current_weather
 from app.sources.store_visit.service import (
     get_discover_counts,
     get_latest_status,
@@ -27,6 +29,23 @@ from app.sources.store_visit.service import (
 from app.sources.user_verification.service import get_offer_trust_map
 
 router = APIRouter(tags=["search"])
+
+_WEATHER_ICON = {"rain": "🌧️", "snow": "❄️", "clear": "☀️"}
+_WEATHER_LABEL = {"rain": "비", "snow": "눈", "clear": "맑음"}
+
+
+def _weather_info(snapshot: WeatherSnapshot) -> WeatherInfo:
+    label = _WEATHER_LABEL[snapshot.condition]
+    if snapshot.is_hot:
+        label += " · 무더움"
+    elif snapshot.is_cold:
+        label += " · 한파"
+    return WeatherInfo(
+        condition=snapshot.condition,
+        temp_c=snapshot.temp_c,
+        icon=_WEATHER_ICON[snapshot.condition],
+        label=label,
+    )
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -46,7 +65,12 @@ async def search(
     if radius <= 0 or radius > settings.search_max_radius_km:
         raise RadiusOutOfRangeError()
 
-    rows = await query_within_radius(session, lat, lng, radius, row_limit=settings.search_row_fetch_limit)
+    # 날씨 조회는 DB 쿼리와 서로 무관한 I/O라 gather로 동시에 돌려서, 랭킹에 날씨를
+    # 반영하느라 응답이 느려지는 일이 없게 한다(키 미설정/실패 시 weather=None).
+    rows, weather = await asyncio.gather(
+        query_within_radius(session, lat, lng, radius, row_limit=settings.search_row_fetch_limit),
+        get_current_weather(lat, lng),
+    )
     rows = rule_filter(rows, category=category)
 
     candidates = [build_candidate(o, p, d) for o, p, d in rows]
@@ -68,7 +92,7 @@ async def search(
         c.recommend_count = recommend_counts.get(c.place_id, 0)
 
     combine(candidates, set(payment_methods))
-    ranked = rank_candidates(candidates)
+    ranked = rank_candidates(candidates, weather=weather)
 
     # 매장 단위 중복 제거는 반드시 점수순 상태에서 먼저 한다 — 그래야 매장 하나당
     # "가장 좋은 조건" 오퍼가 대표로 남는다(dedupe_by_place는 ranked에서 그 매장이
@@ -143,5 +167,9 @@ async def search(
     discovered_places = no_offer_items + kakao_discovered_items
 
     return SearchResponse(
-        count=len(results), radius_km=radius, results=results, discovered_places=discovered_places
+        count=len(results),
+        radius_km=radius,
+        results=results,
+        discovered_places=discovered_places,
+        weather=_weather_info(weather) if weather else None,
     )

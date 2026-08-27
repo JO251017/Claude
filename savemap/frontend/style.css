@@ -250,6 +250,27 @@ body {
   pointer-events: none;
 }
 
+/* --- 날씨 배지(2026-08-27) --- */
+/* zoom-radius-badge 바로 아래, 같은 스타일 톤 — 검색 응답에 weather가 없으면
+   (키 미설정/조회 실패) app.js가 hidden을 유지한다. */
+.weather-badge {
+  position: absolute;
+  top: 128px;
+  right: 16px;
+  z-index: 10;
+  background: rgba(30, 34, 51, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
 /* --- RPG XP badge --- */
 .xp-badge {
   display: flex;

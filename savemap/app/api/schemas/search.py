@@ -87,11 +87,23 @@ class DiscoveredPlaceItem(BaseModel):
     kakao_url: str | None = None
 
 
+class WeatherInfo(BaseModel):
+    """검색 중심 좌표의 현재 날씨(기상청 초단기실황). 랭킹에 쓰인 것과 같은 값을
+    그대로 노출해서 "왜 카페가 위로 왔지"를 프론트/사용자가 그대로 확인할 수 있게
+    한다 — 조회에 실패하거나 키 미설정이면 이 필드 자체가 null(지어내지 않기)."""
+
+    condition: str  # "rain" | "snow" | "clear"
+    temp_c: float | None = None
+    icon: str
+    label: str
+
+
 class SearchResponse(BaseModel):
     count: int
     radius_km: float
     results: list[SearchResultItem]
     discovered_places: list[DiscoveredPlaceItem] = []
+    weather: WeatherInfo | None = None
 
 
 class SearchQuery(BaseModel):

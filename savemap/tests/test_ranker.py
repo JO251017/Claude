@@ -1,6 +1,9 @@
+from datetime import datetime, timezone
+
 from app.domain.enums import Category, Layer
 from app.engine.models import OfferCandidate
-from app.engine.ranker import _distance_norm, dedupe_by_place, rank_candidates
+from app.engine.ranker import _distance_norm, _weather_norm, dedupe_by_place, rank_candidates
+from app.integrations.weather import WeatherSnapshot
 
 
 def _c(offer_id: int, base: float, discount: float, trust: float) -> OfferCandidate:
@@ -107,3 +110,60 @@ def test_completely_tied_candidates_break_ties_by_distance_then_offer_id():
     backward = rank_candidates([b, a])
     assert [r.candidate.offer_id for r in forward] == [3, 5]
     assert [r.candidate.offer_id for r in backward] == [3, 5]
+
+
+# --- 날씨 기반 추천(2026-08-27) — 날씨 데이터가 없으면 기존 순위가 완전히
+# 그대로여야 하고, 있을 때만 실제로 맞는 업종에만 살짝 가중치가 붙어야 한다. ---
+
+
+def test_weather_norm_is_neutral_without_weather_data():
+    assert _weather_norm("음식점 > 카페 > 커피전문점", None) == 0.5
+
+
+def test_weather_norm_is_neutral_when_category_unclassifiable():
+    rain = WeatherSnapshot("rain", 20.0, datetime.now(timezone.utc))
+    assert _weather_norm(None, rain) == 0.5
+    assert _weather_norm("휴게음식점", rain) == 0.5  # activity_classifier가 못 알아내는 업종
+
+
+def test_weather_norm_boosts_cafe_on_rain_but_not_dining():
+    rain = WeatherSnapshot("rain", 20.0, datetime.now(timezone.utc))
+    assert _weather_norm("음식점 > 카페 > 커피전문점", rain) > 0.5
+    assert _weather_norm("일반음식점 > 한식", rain) == 0.5
+
+
+def test_weather_norm_boosts_cafe_and_dessert_on_heat():
+    hot = WeatherSnapshot("clear", 31.0, datetime.now(timezone.utc), is_hot=True)
+    assert _weather_norm("카페", hot) > 0.5
+    assert _weather_norm("휴게음식점 > 제과점영업", hot) > 0.5  # 디저트류
+    assert _weather_norm("일반음식점 > 한식", hot) == 0.5
+
+
+def test_weather_norm_boosts_dining_on_cold():
+    cold = WeatherSnapshot("clear", -1.0, datetime.now(timezone.utc), is_cold=True)
+    assert _weather_norm("일반음식점 > 국밥", cold) > 0.5
+    assert _weather_norm("카페", cold) == 0.5
+
+
+def test_rank_candidates_without_weather_matches_default_ranking():
+    """weather 인자를 안 넘기면(기존 호출부 route.py 등) 결과가 예전과 완전히
+    동일해야 한다 — 하위호환 보장."""
+    cafe = _c(1, 10000, 2000, 0.5)
+    cafe.place_category_name = "카페"
+    dining = _c(2, 10000, 2000, 0.5)
+    dining.place_category_name = "일반음식점 > 한식"
+
+    without_arg = rank_candidates([cafe, dining])
+    with_none = rank_candidates([cafe, dining], weather=None)
+    assert [r.score for r in without_arg] == [r.score for r in with_none]
+
+
+def test_rank_candidates_with_rain_favors_cafe_when_otherwise_tied():
+    cafe = _c(1, 10000, 2000, 0.5)
+    cafe.place_category_name = "카페"
+    dining = _c(2, 10000, 2000, 0.5)
+    dining.place_category_name = "일반음식점 > 한식"
+
+    rain = WeatherSnapshot("rain", 20.0, datetime.now(timezone.utc))
+    ranked = rank_candidates([dining, cafe], weather=rain)
+    assert ranked[0].candidate.offer_id == 1  # 카페가 비 오는 날 위로 옴

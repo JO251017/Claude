@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260827b" />
+  <link rel="stylesheet" href="style.css?v=20260827c" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -62,6 +62,10 @@
            그 줌 레벨에 맞는 반경(km)을 지도 옆에 계속 보여준다(7번 항목,
            2026-08-13). zoom_changed에서 값을 갱신한다. -->
       <div class="zoom-radius-badge" id="zoom-radius-badge">🔍 3km</div>
+      <!-- 날씨 기반 추천(2026-08-27, 사용자 지시 — 기상청 초단기실황). 검색 응답에
+           weather가 없으면(키 미설정/조회 실패) hidden 유지 — 지어낸 날씨를 보여주지
+           않는다. -->
+      <div class="weather-badge hidden" id="weather-badge"></div>
 
       <button type="button" id="research-btn" class="research-btn hidden">
         <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg></span>
@@ -670,6 +674,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260827b"></script>
+  <script src="app.js?v=20260827c"></script>
 </body>
 </html>

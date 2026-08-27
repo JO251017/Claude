@@ -1159,6 +1159,20 @@ const ZOOM_LEVEL_TO_KM = [
 let currentRadiusKm = 3; // /search 호출용 (clamp됨)
 let currentZoomDisplayKm = 3; // 배지 표시용 (clamp 안 됨, 실제 지도 축척)
 const zoomRadiusBadge = document.getElementById('zoom-radius-badge');
+const weatherBadge = document.getElementById('weather-badge');
+
+// 날씨 기반 추천(2026-08-27, 사용자 지시). 서버가 weather를 안 주면(키 미설정/
+// 조회 실패) 배지를 그대로 숨긴다 — 지어낸 날씨를 보여주지 않는다.
+function renderWeatherBadge(weather) {
+  if (!weatherBadge) return;
+  if (!weather) {
+    weatherBadge.classList.add('hidden');
+    return;
+  }
+  const tempText = weather.temp_c != null ? ` ${Math.round(weather.temp_c)}°C` : '';
+  weatherBadge.textContent = `${weather.icon} ${weather.label}${tempText}`;
+  weatherBadge.classList.remove('hidden');
+}
 const MAX_MAP_LEVEL = 14; // 이 레벨까지는 축소해도 재검색 반경 표시가 국토 전체 스케일까지 따라간다
 
 function radiusKmForZoomLevel(level) {
@@ -2325,6 +2339,7 @@ async function runSearch() {
     const data = await apiFetch(`/search?${params.toString()}`);
     lastResults = data.results;
     lastDiscovered = data.discovered_places || [];
+    renderWeatherBadge(data.weather);
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results, lastDiscovered);
 
     if (data.results.length === 0 && lastDiscovered.length === 0) {

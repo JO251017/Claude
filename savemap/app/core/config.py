@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # 환경변수로 받는다. 미설정이면 기존 매장의 결제수단 검증 배지를 그대로 비워둔다
     # (자기신고만 남고 검증은 안 붙는다, 지어내지 않기).
     local_currency_api_url: str = ""
+    # 기상청 단기예보 조회서비스(공공데이터포털 apis.data.go.kr, "일반 인증키(Decoding)")
+    # — 초단기실황(getUltraSrtNcst)으로 현재 날씨(강수형태/기온)를 가져온다. 이 상품은
+    # good_price/local_currency처럼 UDDI가 회차마다 바뀌는 파일데이터가 아니라 안정된
+    # 엔드포인트라 URL은 코드에 고정하고 키만 환경변수로 받는다. 미설정이면 날씨를 아예
+    # 조회하지 않는다 — 검색/랭킹은 지금과 완전히 동일하게 동작한다(지어내지 않기).
+    weather_api_key: str = ""
 
     supabase_url: str = ""
     supabase_anon_key: str = ""
@@ -72,8 +78,16 @@ class Settings(BaseSettings):
     # 값을 키우면 먼 매장도 덜 불리해진다.
     rank_savings_weight: float = 0.55
     rank_trust_weight: float = 0.25
-    rank_distance_weight: float = 0.20
+    rank_distance_weight: float = 0.12
     rank_distance_half_m: float = 500.0
+    # 날씨 가중치(2026-08-27, "날씨 기반 추천"). rank_distance_weight를 0.20→0.12로
+    # 줄여서 4개 가중치 합이 여전히 1.0이 되게 재배분했다(score가 API 응답에 그대로
+    # 노출되는 값이라 스케일을 흔들고 싶지 않았다). 날씨 데이터가 없거나(키 미설정/조회
+    # 실패) 매장의 업종을 분류 못 하면 모든 후보가 동일한 중립값을 받아 가중치를 곱해도
+    # 순위가 기존과 완전히 동일하게 유지된다(app/engine/ranker.py의 _weather_norm 참고) —
+    # 비/눈 오는 날 카페, 무더운 날 카페·디저트, 추운 날 식사류처럼 실제로 맞을 때만
+    # 살짝 우대한다.
+    rank_weather_weight: float = 0.08
 
     # AI 절약 플랜(/v1/route/suggest) — 예산 입력값 검증 범위와 코스에 담을 최대
     # 스톱 수. 최대 스톱 수는 기획서 예시(무료주차→무료체험→할인카페→마감할인식당,
