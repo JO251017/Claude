@@ -94,51 +94,64 @@ function avatarGrowthStageFor(growthScore) {
   };
 }
 
-// --- 아바타 스프라이트: 귀여운 강아지, 도트(픽셀아트) 스타일 (사용자 지시,
-// 2026-08-13) --- 예전엔 성장 단계마다 서로 다른 라인아이콘(새싹→나침반→...→
-// 왕관)으로 아예 바뀌었다. 다마고치는 "같은 아이가 자란다"는 감각이 핵심이라,
-// 이제는 강아지 하나를 도트 그리드로 그리고 성장 단계에 따라 목줄/리본 같은
-// 장식만 덧그린다. 처음엔 얼굴(머리)만 그렸더니 "프로필 사진처럼 보인다"는
-// 지적을 받아, 목/가슴/앞발/꼬리까지 있는 전신으로 다시 그렸다.
-// 해상도 2배 상향(13x16 -> 22x25, 사용자 지시: "조잡하네... 픽셀 단위를 더
-// 줄여서 좀 더 정밀하게", 2026-08-18) — 칸 수를 늘려 한 칸(픽셀)이 화면에서
-// 차지하는 비중을 줄이면 같은 그림도 더 정교해 보인다. 코/입을 4칸짜리
-// 뭉툭한 바 2개(로봇 입처럼 보인다는 문제가 있었다)에서 2칸짜리 작은 점으로
-// 줄여 진짜 강아지 주둥이처럼 보이게 다시 그렸다. 좌우 대칭이라 절반만 손으로
-// 그리지 않고 그대로 다 적었다(한 줄이 22칸인지 눈으로도 세기 쉽게, 각 줄을
-// 뒤집어도 같은 문자열이 되는지로 검증했다).
-const DOG_PIXEL_ROWS = [
-  '...ee............ee...', // 귀 끝
-  '..eeee..........eeee..',
-  '..eeeee........eeeee..',
-  '.eeeeeehhhhhhhheeeeee.', // 귀 → 머리로 이어짐
-  'eehhhhhhhhhhhhhhhhhhee',
-  'hhhhhhhhhhhhhhhhhhhhhh', // 머리
-  'hhhhhhkhhhhhhhhkhhhhhh', // 눈 위쪽
-  'hhhhkkkhhhhhhhhkkkhhhh', // 눈 (아기 백구용으로 한 칸씩 넓힘, MY탭 개편 2026-08-27)
-  'hhbhhhhhhhhhhhhhhhhbhh', // 볼 발그레(같은 개편) — 눈 바로 아래 좌우 대칭 위치
-  'hhhhhwwwwwwwwwwwwhhhhh', // 주둥이 시작
-  'hhhhhwwwwwkkwwwwwhhhhh', // 코 (작은 점)
-  'hhhhhwwwwwwwwwwwwhhhhh',
-  'hhhhhwwwwwkkwwwwwhhhhh', // 입 (작은 점)
-  '..hhhhhhhhhhhhhhhhhh..', // 턱
-  '.....hhhhhhhhhhhh.....', // 목 (목줄이 여기 얹힌다)
-  '.....hhhhhhhhhhhh.....',
-  '.hhhhhhhhhhhhhhhhhhhh.', // 어깨
-  '.hhhhhhwwwwwwwwhhhhhh.', // 가슴 흰 무늬
-  '.hhhhhhwwwwwwwwhhhhhh.',
-  '.hhhhhhhwwwwwwhhhhhhh.',
-  '..hhhhhhh....hhhhhhh..', // 앞발 두 개
-  '..hhhhhhh....hhhhhhh..',
-  '..wwwwwww....wwwwwww..',
-  '...wwwww......wwwww...',
-  '....www........www....', // 앞발 바닥
-].map((row) => row.slice(0, 22)); // 각 행이 반드시 22칸이 되도록 안전장치
-// 리컬러(MY탭 개편, 2026-08-27: "시바견이 아닌 귀여운 아기 백구로, 하얀색") —
-// 그리드(DOG_PIXEL_ROWS)는 그대로 두고 팔레트만 흰 강아지 톤으로 바꿨다. 이전
-// 시바견 톤(귀 그림자 #c98a4b/몸통 #e3a765)에서 채도 낮은 아이보리/화이트로
-// 바꾸되, 눈·코·입(k)만 검정을 유지해야 뭉개지지 않고 또렷하게 보인다.
-const DOG_PALETTE = { e: '#ded6c4', h: '#f6f3ea', w: '#ffffff', k: '#2b2119', b: '#ffb4b0' };
+// --- 아바타 스프라이트: 귀여운 아기 백구, 도트(픽셀아트) 스타일 ---
+// 손으로 22×25칸을 채워 그리던 이전 방식은 "조잡하다"는 피드백을 두 번 받았다
+// (2026-08-18 해상도 2배 상향 이후, 2026-08-27 흰색 리컬러 이후). 원인은
+// 해상도가 아니라 (1) 외곽선이 없어 흰 강아지가 흰/연한 배경에 묻히고 (2) 손으로
+// 그린 계단형 실루엣이라 곡선이 없었다는 것 — 42×48로 격자만 키운다고 저절로
+// 안 고쳐진다(단순 확대는 계단만 커짐). 그래서 이번엔 원/타원/삼각형 "도형"을
+// 42×48 격자에 매 프레임 다시 래스터화한다 — 칸이 늘어난 만큼 귀·발끝이 실제로
+// 둥글게 보이고, 몸통에 은은한 명암(밝은 베이지 톤)도 넣을 수 있다. 외곽선은
+// SVG feMorphology(dilate)로 실루엣 바깥에 자동으로 둘러서 배경에 안 묻힌다.
+// (실제 렌더 검토는 아바타 모델시트 아티팩트로 먼저 확인받았다, 2026-08-27.)
+const DOG_GRID_W = 42;
+const DOG_GRID_H = 48;
+const DOG_SHAPE_W = 100; // 도형 좌표계 폭 — 격자 크기와 무관하게 고정
+const DOG_SHAPE_H = 112;
+
+function _dogInCircle(x, y, cx, cy, r) {
+  return (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
+}
+function _dogInEllipse(x, y, cx, cy, rx, ry) {
+  return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+}
+function _dogTriSign(px, py, ax, ay, bx, by) {
+  return (px - bx) * (ay - by) - (ax - bx) * (py - by);
+}
+function _dogInTriangle(px, py, a, b, c) {
+  const d1 = _dogTriSign(px, py, a[0], a[1], b[0], b[1]);
+  const d2 = _dogTriSign(px, py, b[0], b[1], c[0], c[1]);
+  const d3 = _dogTriSign(px, py, c[0], c[1], a[0], a[1]);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
+}
+function _dogQuadPoint(t, p0, p1, p2) {
+  const mt = 1 - t;
+  return [
+    mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0],
+    mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1],
+  ];
+}
+// 2차 베지어 곡선(부드러운 입/목줄 곡선)에 가까운 칸만 색칠한다 — 곡선 자체를
+// 채우기(fill)로 그릴 수 없는 얇은 선이라, 곡선 위 여러 점을 뽑아 그 근처
+// 칸인지 거리로 판정한다.
+function _dogNearQuad(x, y, p0, p1, p2, thickness) {
+  for (let t = 0; t <= 1; t += 0.06) {
+    const [qx, qy] = _dogQuadPoint(t, p0, p1, p2);
+    if ((x - qx) ** 2 + (y - qy) ** 2 <= thickness * thickness) return true;
+  }
+  return false;
+}
+
+const DOG_DENSE_PAL = {
+  body: '#ffffff',
+  shade: '#efe9db', // 몸통/머리 명암 — 반투명 대신 살짝 톤 낮은 별도 색으로 대체
+  ink: '#241b12', // 눈·코·입·외곽선
+  earIn: '#ffd9d4',
+  blush: '#ffc9c5',
+  tag: '#f5c451', // 목줄 인식표
+};
 
 // --- 아바타 꾸미기 커스터마이징(2026-08-26) --- 목줄(3단계+)/리본(6단계+)
 // 색은 그동안 고정값이었다. 잠금해제 조건(해당 단계 도달)은 그대로 두고 그
@@ -208,14 +221,14 @@ let lastSavingsSummaryData = null;
 function renderClosetPreview() {
   const el = document.getElementById('closet-avatar-preview');
   if (!el || !lastGrowthInfo) return;
-  // avatarSvgFor(장식 없는 svg만)을 쓴다 — characterAvatarHtmlFor가 붙이는
-  // avatar-deco는 .character-avatar 크기·위치를 기준으로 절대좌표를 잡으므로,
-  // 다른 컨테이너(.closet-preview)에 그대로 넣으면 반짝임이 엉뚱한 자리로
-  // 튀어나간다. 옷장은 "지금 무슨 옷을 입었는지"만 보여주면 충분하다.
+  // avatarSvgFor는 장식(avatar-deco) 없이 svg만 준다 — avatarDecosHtmlFor가
+  // 만드는 장식은 절대좌표라 .character-avatar 기준인데, 다른 컨테이너
+  // (.closet-preview)에 넣으면 반짝임이 엉뚱한 자리로 튀어나간다. 옷장은
+  // "지금 무슨 옷을 입었는지"만 보여주면 충분하다.
   el.innerHTML = avatarSvgFor(lastGrowthInfo.stageIndex);
 }
 
-// 잠금 여부는 characterAvatarHtmlFor의 collar/bandana 임계값(2, 5)과 반드시
+// 잠금 여부는 avatarSvgFor의 collar/bandana 임계값(2, 5)과 반드시
 // 같아야 한다 — 여기서 숫자를 새로 지어내지 않고 AVATAR_GROWTH_STAGES의 실제
 // 단계 이름을 그대로 인용해서 "그 이름이 되면 열린다"를 정확히 알려준다.
 function updateClosetLockHints() {
@@ -333,73 +346,101 @@ document.getElementById('avatar-title-close-btn')?.addEventListener('click', () 
   document.getElementById('avatar-title-overlay')?.classList.add('hidden');
 });
 
-// blink(눈 감기)/tailWag(꼬리 흔들기) — 프레임마다 바뀌는 두 파츠. 정적인
-// 그림 하나를 CSS로 흔드는 대신, 실제 예전 다마고치처럼 "그림 자체가 몇
-// 프레임을 반복 재생"하는 방식이 필요하다(사용자 지시: "진짜 예전
-// 다마고치처럼 2D로 적용하지만 움직이고 이런게 필요해", 2026-08-18).
-function pixelDogSvg({
-  collar = false,
-  bandana = false,
-  blink = false,
-  tailWag = false,
-  bark = false,
-  collarColor,
-  bandanaColor,
-} = {}) {
-  // 눈(row 6-7의 'k')을 얼굴색으로 덮으면 "눈을 감은" 프레임이 된다 — 코/입
-  // (row 10, 12)의 'k'는 건드리면 안 되니 row index로만 골라서 바꾼다.
-  let rows = blink
-    ? DOG_PIXEL_ROWS.map((row, y) => ((y === 6 || y === 7) ? row.replace(/k/g, 'h') : row))
-    : DOG_PIXEL_ROWS;
-  // 짖는 프레임(방문 인증 반응, 2026-08-26) — 입(row 12)의 점 2칸을 양옆으로
-  // 넓혀서 입을 벌린 것처럼 보이게 한다. 새 파츠를 그리지 않고 기존 코/입
-  // 자리의 점만 넓히는 정도라 강아지 실루엣 자체는 안 바뀐다.
-  if (bark) {
-    rows = rows.map((row, y) => {
-      if (y !== 12) return row;
-      const chars = row.split('');
-      for (let x = 9; x <= 12; x++) chars[x] = 'k';
-      return chars.join('');
-    });
+// 한 칸(px, py — 도형 좌표계 기준)이 무슨 색이어야 하는지 뒤(꼬리)→앞(리본)
+// 순서로 도형을 검사해 정한다 — 나중에 검사한 도형이 겹치는 자리를 덮어써서
+// "더 앞에 있다"를 표현한다(레이어를 위에서 아래로 쌓아 그리는 것과 동일한
+// 원리). blink/tailWag/bark로 프레임을 바꿀 수 있어 이전 pixelDogSvg의 행
+// 문자열 치환 방식과 같은 역할을 하되, 도형 파라미터만 바꾸면 되어 더 안전하다.
+function _dogCellColor(px, py, o) {
+  let color = null;
+
+  // 꼬리 — 꼬리 흔들기(tailWag) 프레임에서 자리를 살짝 옮겨 "휙" 움직이는 것처럼.
+  const tailCx = o.tailWag ? 74 : 78;
+  const tailCy = o.tailWag ? 59 : 63;
+  if (_dogInEllipse(px, py, tailCx, tailCy, 9, 17)) color = DOG_DENSE_PAL.body;
+
+  // 귀(바깥 흰색 + 안쪽 분홍)
+  const earL = [[26, 32], [40, 26], [24, 4]];
+  const earLIn = [[30, 26], [38, 23], [29, 10]];
+  const earR = [[74, 32], [60, 26], [76, 4]];
+  const earRIn = [[70, 26], [62, 23], [71, 10]];
+  if (_dogInTriangle(px, py, ...earL)) color = DOG_DENSE_PAL.body;
+  if (_dogInTriangle(px, py, ...earR)) color = DOG_DENSE_PAL.body;
+  if (_dogInTriangle(px, py, ...earLIn)) color = DOG_DENSE_PAL.earIn;
+  if (_dogInTriangle(px, py, ...earRIn)) color = DOG_DENSE_PAL.earIn;
+
+  // 뒷발
+  if (_dogInEllipse(px, py, 34, 95, 10, 8)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 66, 95, 10, 8)) color = DOG_DENSE_PAL.body;
+
+  // 몸통 + 명암(오른쪽으로 치우친 밝은 베이지 톤 — 완전 평면이 아니라 입체로 보이게)
+  if (_dogInEllipse(px, py, 50, 68, 28, 24)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 50, 68, 28, 24) && _dogInEllipse(px, py, 63, 73, 17, 19)) {
+    color = DOG_DENSE_PAL.shade;
   }
-  const width = rows[0].length;
-  const height = rows.length;
-  const rects = [];
-  rows.forEach((row, y) => {
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (ch === '.') continue;
-      rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="${DOG_PALETTE[ch]}"/>`);
-    }
-  });
-  // 꼬리 — 몸통 오른쪽에 항상 붙어 있는 기본 파츠(성장 단계와 무관). tailWag
-  // 프레임에서는 아래쪽 칸을 한 칸 안쪽으로 당겨 좌우로 흔드는 것처럼 보이게
-  // 한다 — 진짜 스프라이트 두 장을 번갈아 그리는 애니메이션의 핵심 파츠.
-  rects.push(`<rect x="${width - 1}" y="19" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  rects.push(`<rect x="${tailWag ? width - 2 : width - 1}" y="20" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  // 목줄(3단계 이상) — 목(row 14) 색을 포인트 컬러로 덧그린다. 색은 사용자가
-  // 고른 커스터마이징 색(collarColor)이 있으면 그걸, 없으면 기본 빨강.
-  if (collar) {
-    for (let x = 6; x <= 15; x++) {
-      rects.push(`<rect x="${x}" y="15" width="1" height="1" fill="${collarColor || '#ef6f6f'}"/>`);
-    }
+
+  // 앞발
+  if (_dogInEllipse(px, py, 38, 98, 9, 8)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 62, 98, 9, 8)) color = DOG_DENSE_PAL.body;
+
+  // 목줄(2단계 이상) — 곡선(목 아래로 살짝 처지는 띠) + 인식표.
+  if (o.collar) {
+    if (_dogNearQuad(px, py, [26, 60], [50, 74], [74, 60], 3.6)) color = o.collarColor;
+    if (_dogInCircle(px, py, 50, 73, 3.5)) color = DOG_DENSE_PAL.tag;
   }
-  // 리본(6단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
-  if (bandana) {
-    for (let x = 8; x <= 13; x++) {
-      rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="${bandanaColor || '#7c3aed'}"/>`);
-    }
+
+  // 머리 + 명암
+  if (_dogInCircle(px, py, 50, 38, 27)) color = DOG_DENSE_PAL.body;
+  if (_dogInCircle(px, py, 50, 38, 27) && _dogInEllipse(px, py, 63, 43, 15, 17)) {
+    color = DOG_DENSE_PAL.shade;
   }
-  return `<svg viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
+
+  // 리본(5단계 이상) — 귀 사이 맨 위, 매듭까지.
+  if (o.bandana) {
+    if (_dogInTriangle(px, py, [44, 10], [34, 4], [44, 18])) color = o.bandanaColor;
+    if (_dogInTriangle(px, py, [56, 10], [66, 4], [56, 18])) color = o.bandanaColor;
+    if (_dogInCircle(px, py, 50, 11, 4)) color = o.bandanaColor;
+  }
+
+  // 볼 발그레
+  if (_dogInEllipse(px, py, 31, 46, 5.5, 3.2)) color = DOG_DENSE_PAL.blush;
+  if (_dogInEllipse(px, py, 69, 46, 5.5, 3.2)) color = DOG_DENSE_PAL.blush;
+
+  // 눈 — 깜빡임(blink) 프레임이면 동그란 눈 대신 감은 눈(가로선)을 그린다.
+  if (o.blink) {
+    if (_dogNearQuad(px, py, [37.5, 36], [41, 37.3], [44.5, 36], 0.9)) color = DOG_DENSE_PAL.ink;
+    if (_dogNearQuad(px, py, [55.5, 36], [59, 37.3], [62.5, 36], 0.9)) color = DOG_DENSE_PAL.ink;
+  } else {
+    if (_dogInCircle(px, py, 41, 36, 4.5)) color = DOG_DENSE_PAL.ink;
+    if (_dogInCircle(px, py, 59, 36, 4.5)) color = DOG_DENSE_PAL.ink;
+    if (_dogInCircle(px, py, 39.3, 34.2, 1.5)) color = DOG_DENSE_PAL.body; // 눈 하이라이트
+    if (_dogInCircle(px, py, 57.3, 34.2, 1.5)) color = DOG_DENSE_PAL.body;
+  }
+
+  // 코 + 인중
+  if (_dogInEllipse(px, py, 50, 49, 4.5, 3.2)) color = DOG_DENSE_PAL.ink;
+  if (_dogNearQuad(px, py, [50, 52], [50, 53.5], [50, 55], 0.8)) color = DOG_DENSE_PAL.ink;
+
+  // 입 — 짖는(bark) 프레임(방문 인증 반응, 2026-08-26)이면 웃는 곡선 대신
+  // 작게 벌어진 입을 그린다. 아니면 평소의 웃는 곡선.
+  if (o.bark) {
+    if (_dogInEllipse(px, py, 50, 58, 4.2, 4.5)) color = DOG_DENSE_PAL.ink;
+  } else if (_dogNearQuad(px, py, [43, 55], [50, 60], [57, 55], 1.1)) {
+    color = DOG_DENSE_PAL.ink;
+  }
+
+  return color;
 }
 
+let _dogFilterSeq = 0;
+
 // 단계 인덱스는 AVATAR_GROWTH_STAGES 튜닝(9단계, 2026-08-26)에 맞춰
-// 목줄=2("목줄 찬 강아지"), 리본=5("리본 두른 강아지") 시작으로 갱신했다.
-// svg만 만드는 부분을 따로 빼서(2026-08-27) 지도 마커(mapAvatarSvgFor)도
-// 장식(avatar-deco) 없이 같은 collar/bandana 규칙을 그대로 재사용한다 —
-// 임계값(2, 5)을 두 곳에 따로 적지 않기 위함.
+// 목줄=2("목줄 찬 강아지"), 리본=5("리본 두른 강아지") 시작이다. 지도 마커·
+// 옷장 미리보기도 이 함수 하나만 부른다 — 임계값(2, 5)을 두 곳에 따로 적지
+// 않기 위함. filter id는 호출마다 새로 만든다 — 같은 화면에 아바타가 여러 개
+// (무대/지도 마커/옷장 미리보기) 동시에 떠 있을 수 있어 SVG id가 겹치면 안 된다.
 function avatarSvgFor(stageIndex, frame = {}) {
-  return pixelDogSvg({
+  const o = {
     collar: stageIndex >= 2,
     bandana: stageIndex >= 5,
     blink: !!frame.blink,
@@ -407,18 +448,39 @@ function avatarSvgFor(stageIndex, frame = {}) {
     bark: !!frame.bark,
     collarColor: getAvatarColorPref('collar'),
     bandanaColor: getAvatarColorPref('bandana'),
-  });
+  };
+  let rects = '';
+  for (let gy = 0; gy < DOG_GRID_H; gy++) {
+    const py = (gy + 0.5) * (DOG_SHAPE_H / DOG_GRID_H);
+    for (let gx = 0; gx < DOG_GRID_W; gx++) {
+      const px = (gx + 0.5) * (DOG_SHAPE_W / DOG_GRID_W);
+      const color = _dogCellColor(px, py, o);
+      if (color) rects += `<rect x="${gx}" y="${gy}" width="1" height="1" fill="${color}"/>`;
+    }
+  }
+  const filterId = `dogOutline${_dogFilterSeq++}`;
+  return `<svg viewBox="0 0 ${DOG_GRID_W} ${DOG_GRID_H}" shape-rendering="crispEdges">
+    <defs><filter id="${filterId}" x="-30%" y="-30%" width="160%" height="160%">
+      <feMorphology operator="dilate" radius="1" in="SourceAlpha" result="d"/>
+      <feFlood flood-color="${DOG_DENSE_PAL.ink}" result="c"/>
+      <feComposite in="c" in2="d" operator="in" result="o"/>
+      <feMerge><feMergeNode in="o"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+    <g filter="url(#${filterId})">${rects}</g>
+  </svg>`;
 }
 
-// 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
-// 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
-function characterAvatarHtmlFor(stageIndex, frame = {}) {
-  const svg = avatarSvgFor(stageIndex, frame);
+// 성장 단계가 오를수록 아바타 주변 장식(별)이 하나씩 늘어난다 — 다마고치처럼
+// "같은 아이가 자라고 꾸며진다"는 느낌을 낸다. svg와 분리된 함수다(2026-08-27,
+// 아래 renderAvatarSpriteFrame 참고) — 장식은 절대좌표라 홉 애니메이션이 흔드는
+// 안쪽 래퍼(avatar-hop-rig)가 아니라 바깥 #character-avatar 기준으로 그려야
+// 점프할 때 장식만 안 따라오는 일이 없다.
+function avatarDecosHtmlFor(stageIndex) {
   const decos = [];
   if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 5) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 7) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
-  return svg + decos.join('');
+  return decos.join('');
 }
 
 // --- 아바타 스프라이트 애니메이션 루프 (다마고치식 프레임 재생, 2026-08-18) ---
@@ -441,10 +503,18 @@ let avatarSpriteTimer = null;
 let avatarBarking = false;
 
 function renderAvatarSpriteFrame() {
-  const el = document.getElementById('character-avatar');
-  if (!el) return;
+  // svg는 avatar-hop-rig 안에, 장식(avatar-deco)은 그 바깥 형제(avatar-decos)에
+  // 따로 그린다(2026-08-27) — hop-rig는 홉 애니메이션 중 transform이 계속
+  // 바뀌는데, CSS transform이 걸린 요소는 그 자손의 position:absolute 기준점이
+  // 되어버려서(스펙) 장식을 hop-rig 안에 같이 넣으면 점프할 때마다 장식
+  // 위치가 튄다. 장식은 stageIndex에만 달려 있어(프레임 blink/tailWag/bark와
+  // 무관) 매번 다시 그려도 눈에 띄는 낭비는 아니다.
+  const rig = document.getElementById('avatar-hop-rig');
+  if (!rig) return;
   const frame = { ...AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx], bark: avatarBarking };
-  el.innerHTML = characterAvatarHtmlFor(avatarSpriteStageIndex, frame);
+  rig.innerHTML = avatarSvgFor(avatarSpriteStageIndex, frame);
+  const decosEl = document.getElementById('avatar-decos');
+  if (decosEl) decosEl.innerHTML = avatarDecosHtmlFor(avatarSpriteStageIndex);
 }
 
 // loadMyProfile()이 성장 단계를 바꿀 때마다 새로 부르는 게 아니라, 페이지에
@@ -463,26 +533,97 @@ function ensureAvatarSpriteLoopStarted() {
 
 // --- 아바타 자유 이동(사용자 지시: "테두리 없애고 캐릭터가 자유자재로
 // 돌아다니게", 2026-08-18) --- .character-stage 안에서 무작위 위치로
-// 슬라이드해 걸어다니는 것처럼 보이게 한다. 처음엔 바닥에 고정한 채 좌우로만
-// 움직였는데 "그렇게 움직이는게 아니라 동작 범위를 넓히라는거야"라는 후속
-// 지시를 받아 세로 방향(top)까지 포함한 2차원 이동으로 넓혔다 — .character-stage
-// 도 같이 키워서(style.css) 실제로 돌아다닐 만한 공간을 준다.
+// 걸어다니는 것처럼 보이게 한다. 처음엔 바닥에 고정한 채 좌우로만 움직였는데
+// "그렇게 움직이는게 아니라 동작 범위를 넓히라는거야"라는 후속 지시를 받아
+// 세로 방향(top)까지 포함한 2차원 이동으로 넓혔다 — .character-stage도 같이
+// 키워서(style.css) 실제로 돌아다닐 만한 공간을 준다.
 //
-// 움직임 자연스럽게 개선(MY탭 개편, 2026-08-27: "아바타 움직임 너무 촌스러움") —
-// 예전엔 (1) 정확히 3.6초마다 (2) 화면 어디로든 완전 무작위로 순간이동하듯
-// 미끄러졌다. 실제 동물처럼 보이도록 세 가지를 바꿨다:
-//   1) 방향 반전 — 왼쪽으로 이동할 땐 그림을 좌우로 뒤집어(scaleX(-1), CSS의
-//      .avatar-facing-left) "그 쪽을 보고 걷는" 신호를 준다. 정면 그림이라 진짜
-//      옆모습 걷기 스프라이트는 아니지만 방향 신호만으로도 훨씬 자연스럽다.
-//   2) 무작위 대기 — 매번 똑같은 간격이 아니라 2.5~6초 사이로 들쭉날쭉하게
-//      다음 이동을 예약한다(setInterval 대신 재귀 setTimeout).
-//   3) 근거리 이동 — 화면 전체를 한 번에 건너뛰지 않고, 현재 위치에서 가까운
-//      범위(stage 크기의 절반 정도) 안으로만 다음 자리를 고른다. CSS
-//      트랜지션도 약한 오버슈트(cubic-bezier)를 줘서 도착할 때 살짝 튕기듯
-//      멈춘다 — 그 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통 튐
-//      (avatar-breathe)이 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
+// 홉(hop) 물리 이동으로 교체(2026-08-27: "사진만 둥둥 띄우는게 아닌 캐릭터가
+// 진짜 입체감있게 움직이듯이 해") — CSS transition으로 left/top만 갈아주면
+// 그림 한 장이 그대로 미끄러지는 것처럼 보인다("사진이 둥둥 떠다닌다"는 지적이
+// 정확히 이 지점). 대신 목적지까지를 여러 번의 짧은 "홉"으로 쪼개고, 매 홉마다
+// requestAnimationFrame으로 직접 계산해서 세 가지를 동시에 맞춰 돌린다 —
+// (1) 포물선 점프 높이 (2) 이륙/착지 순간 눌리고(squash) 공중에서 늘어나는
+// (stretch) 정도 (3) 발밑 그림자 크기·진하기. 이 세 가지가 같이 움직여야
+// "무게가 있는 것이 실제로 뛰어오른다"는 인상이 생긴다 — 하나라도 빠지면
+// 다시 "이미지가 슬라이드"로 보인다. 방향 반전(왼쪽 이동 시 좌우 뒤집기)은
+// 그대로 유지한다.
 const AVATAR_ROAM_RADIUS_RATIO = 0.55;
 let avatarRoamTimer = null;
+let _avatarHopToken = 0;
+
+function _dogEase(t) {
+  return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+}
+
+// fromLeft/Top → toLeft/Top까지 hopCount번의 짧은 도약으로 나눠 이동시킨다.
+// 도중에 새 이동이 시작되면(roamAvatarToRandomSpot이 다시 불리면) 토큰이
+// 바뀌어 이전 시퀀스는 다음 프레임에서 스스로 멈춘다 — 두 이동이 동시에
+// left/top을 건드려 위치가 튀는 걸 막는다.
+function animateAvatarHops(fromLeft, fromTop, toLeft, toTop) {
+  const avatarEl = document.getElementById('character-avatar');
+  const rigEl = document.getElementById('avatar-hop-rig');
+  if (!avatarEl || !rigEl) return;
+
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    avatarEl.style.left = `${toLeft}px`;
+    avatarEl.style.top = `${toTop}px`;
+    return;
+  }
+
+  const shadowEl = document.getElementById('avatar-ground-shadow');
+  const myToken = ++_avatarHopToken;
+  const dx = toLeft - fromLeft;
+  const dy = toTop - fromTop;
+  const hopCount = Math.max(2, Math.min(5, Math.round(Math.hypot(dx, dy) / 45)));
+  const hopDuration = 340; // ms, 홉 하나당
+  avatarEl.classList.add('avatar-hopping'); // 물리 연출 중엔 idle breathe를 잠깐 끔(이중으로 안 겹치게)
+
+  function runHop(hopIndex) {
+    if (myToken !== _avatarHopToken) return;
+    if (hopIndex >= hopCount) {
+      rigEl.style.transform = '';
+      if (shadowEl) {
+        shadowEl.style.transform = '';
+        shadowEl.style.opacity = '';
+      }
+      avatarEl.classList.remove('avatar-hopping');
+      return;
+    }
+    const segFromLeft = fromLeft + dx * (hopIndex / hopCount);
+    const segFromTop = fromTop + dy * (hopIndex / hopCount);
+    const segToLeft = fromLeft + dx * ((hopIndex + 1) / hopCount);
+    const segToTop = fromTop + dy * ((hopIndex + 1) / hopCount);
+    const start = performance.now();
+
+    function frame(now) {
+      if (myToken !== _avatarHopToken) return;
+      const t = Math.min(1, (now - start) / hopDuration);
+      const eased = _dogEase(t);
+      avatarEl.style.left = `${segFromLeft + (segToLeft - segFromLeft) * eased}px`;
+      avatarEl.style.top = `${segFromTop + (segToTop - segFromTop) * eased}px`;
+
+      const arc = Math.sin(t * Math.PI); // 홉 중간(t=0.5)에 최고, 이착륙(t=0/1)에 0
+      const edgePulse = Math.max(0, 1 - Math.abs(t) * 9) + Math.max(0, 1 - Math.abs(t - 1) * 9);
+      const scaleY = 1 + 0.14 * arc - 0.16 * edgePulse;
+      const scaleX = 1 - 0.09 * arc + 0.14 * edgePulse;
+      rigEl.style.transform = `translateY(${-10 * arc}px) scale(${scaleX}, ${scaleY})`;
+
+      if (shadowEl) {
+        shadowEl.style.transform = `translateX(-50%) scale(${1 - 0.45 * arc})`;
+        shadowEl.style.opacity = String(1 - 0.55 * arc);
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        runHop(hopIndex + 1);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  runHop(0);
+}
 
 function roamAvatarToRandomSpot() {
   const stage = document.getElementById('character-stage');
@@ -499,8 +640,7 @@ function roamAvatarToRandomSpot() {
   const nextTop = Math.min(Math.max(curTop + (Math.random() * 2 - 1) * radiusY, 0), maxTop);
 
   avatarEl.classList.toggle('avatar-facing-left', nextLeft < curLeft - 2); // 2px 이내 오차는 방향전환으로 안 침
-  avatarEl.style.left = `${Math.round(nextLeft)}px`;
-  avatarEl.style.top = `${Math.round(nextTop)}px`;
+  animateAvatarHops(curLeft, curTop, nextLeft, nextTop);
 }
 
 function ensureAvatarRoamStarted() {

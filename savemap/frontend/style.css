@@ -1806,11 +1806,14 @@ select:focus {
    무대 안 어디로든 걸어다닌다(사용자 지시: "동작 범위를 넓히라는거야",
    2026-08-18 — 처음엔 바닥에 고정한 채 좌우로만 움직였는데, 그건 "돌아다닌다"는
    느낌을 주기엔 범위가 너무 좁았다. 이제 무대 안 세로 방향으로도 움직인다).
-   left/top은 app.js가 주기적으로 바꾸고(roamAvatarToRandomSpot, 3.6초 간격)
-   여기서 transition으로 부드럽게 슬라이드시킨다. transform은 avatar-breathe
-   (통통 튐/갸웃)·avatar-bounce(탭 반응)·avatar-halo(최고단계 후광)가 쓰므로
-   left/top과 절대 안 겹친다 — 서로 다른 프로퍼티라 두 애니메이션이 동시에
-   자연스럽게 합쳐진다. */
+   left/top은 이제 app.js의 animateAvatarHops()가 requestAnimationFrame으로
+   매 프레임 직접 계산해서 넣는다(2026-08-27, "사진만 둥둥 띄우는게 아닌
+   캐릭터가 진짜 입체감있게 움직이듯이") — CSS transition은 일부러 안 쓴다.
+   JS가 프레임마다 값을 새로 넣는데 transition까지 걸려 있으면 둘이 서로를
+   쫓아가며 버벅이는 값이 나온다(매 프레임이 "새 목표"가 되어버림). transform은
+   이 요소에서 avatar-breathe(통통 튐/갸웃)·avatar-bounce(탭 반응)·avatar-halo
+   (최고단계 후광)가 쓰고, 점프 높이·찌그러짐은 안쪽 #avatar-hop-rig가 따로
+   맡는다 — 서로 다른 요소라 절대 안 겹친다. */
 .character-avatar {
   position: absolute;
   top: 40%;
@@ -1820,11 +1823,14 @@ select:focus {
   justify-content: center;
   cursor: pointer;
   animation: avatar-breathe 3.6s ease-in-out infinite;
-  /* 이동 자연스럽게(2026-08-27) — 표준 ease 대신 살짝 오버슈트가 있는
-     커브(ease-out-back류)를 써서 도착할 때 그냥 멈추지 않고 한 번 살짝
-     튕기듯 자리를 잡는다. 근거리 이동(app.js AVATAR_ROAM_RADIUS_RATIO)과
-     같이 써야 "여기저기 정처없이 걷는" 인상이 완성된다. */
-  transition: left 1.6s cubic-bezier(0.34, 1.56, 0.64, 1), top 1.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 홉(점프) 이동 중엔 idle breathe를 잠깐 끈다 — animateAvatarHops()가 토글.
+   breathe(작은 상하 흔들림)와 홉의 포물선 점프가 동시에 돌면 두 움직임이
+   겹쳐 보여 오히려 산만해진다 — "걷는 중"과 "가만히 서서 숨쉬는 중"을 명확히
+   구분한다. */
+.character-avatar.avatar-hopping {
+  animation: none;
 }
 
 /* 왼쪽으로 이동할 때 그림을 뒤집어 "그 쪽을 보고 걷는다"는 신호를 준다
@@ -1858,13 +1864,39 @@ select:focus {
   100% { transform: translateY(0) rotate(0deg); }
 }
 
+/* 점프 물리(2026-08-27) — 실제 그림(svg)이 들어가는 안쪽 래퍼. 홉 도중엔
+   app.js가 매 프레임 여기 transform(translateY 점프 높이 + scale 찌그러짐)만
+   직접 써넣는다. transform-origin을 발밑(하단 중앙)으로 둬야 찌그러질 때
+   발이 땅에 붙어있는 것처럼 보인다 — 기본값(중앙)이면 몸 전체가 위아래로
+   같이 밀리는 것처럼 보여 "땅을 딛고 뛴다"는 느낌이 안 산다. */
+.avatar-hop-rig {
+  transform-origin: 50% 100%;
+}
+
 .character-avatar svg {
-  /* 도트(픽셀아트) 강아지. rect 기반 벡터라 확대해도 흐려지지 않는다. 그림
-     해상도를 22x25로 올린 만큼(DOG_PIXEL_ROWS, app.js) 화면 크기도 그 비율에
-     맞춰 다시 잡았다 — 한 칸(픽셀)이 이전(74/13≈5.7px)보다 작아져서(88/22=4px)
-     더 정교해 보인다(사용자 지시, 2026-08-18). */
+  /* 도트(픽셀아트) 강아지. rect 기반 벡터라 확대해도 흐려지지 않는다. 42×48
+     격자(app.js avatarSvgFor, 2026-08-27)에 맞춘 화면 크기 — 이전 22×25(0.88
+     비율)와 거의 같은 비율(0.875)이라 이 크기를 그대로 유지해도 비율이 거의
+     안 틀어진다. */
   width: 88px;
   height: 100px;
+}
+
+/* 발밑 그림자(2026-08-27) — 홉 도중 app.js가 크기·투명도를 바꿔서 "공중에
+   떴다/땅에 닿았다"를 알려준다. character-avatar 안에 두면 avatar-hop-rig의
+   점프 높이(translateY)에는 안 딸려가면서도 character-avatar 자체의 left/top
+   위치는 그대로 따라간다 — 그림자가 "땅"에, 그림이 "공중"에 있는 것처럼
+   분리되는 핵심 트릭. */
+.avatar-ground-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 46px;
+  height: 14px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0) 70%);
+  pointer-events: none;
 }
 
 /* 최고 성장 단계 후광(halo, 2-4) — 칭호 3종 합산이 최고 구간에 닿으면 붙는다.
@@ -1958,7 +1990,10 @@ select:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .character-avatar { animation: none; transition: none; }
+  /* 홉 이동 자체는 app.js의 animateAvatarHops()가 matchMedia로 직접 감지해
+     애니메이션 없이 즉시 최종 위치로 스냅한다(별도 CSS 불필요) — 여기서는
+     idle 쪽 애니메이션만 끈다. */
+  .character-avatar { animation: none; }
   .character-avatar.avatar-halo { animation: none; }
   .character-avatar.avatar-bounce,
   .character-avatar.avatar-bounce--discover,
