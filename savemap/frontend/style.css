@@ -1782,12 +1782,14 @@ select:focus {
   margin-bottom: 16px;
 }
 
-/* 캐릭터 무대(사용자 지시, 2026-08-18: "테두리 없애고 캐릭터가 자유자재로
-   돌아다니게" → 2026-08-27: "캐릭터 사진은 움직이지마" 이후로는 돌아다니지
-   않고 중앙 하단에 고정된다). 예전엔 원형 배경 + 성장 링이 캐릭터를 가운데
-   가둬놓은 모양이었다 — 그 테두리들을 걷어내고 그림만 남겼다. overflow는
+/* 캐릭터가 좌우로 돌아다니는 무대(사용자 지시, 2026-08-18: "테두리 없애고
+   캐릭터가 자유자재로 돌아다니게" — 2026-08-27에 한 번 없앴다가 "돌아다녀도
+   되는데 움직임 자체를 자연스럽게 해달라"는 정정을 받아 되살렸다). 예전엔
+   원형 배경 + 성장 링이 캐릭터를 가운데 가둬놓은 모양이었다 — 그 테두리들을
+   걷어내고, 이 영역 전체를 캐릭터가 걸어다닐 수 있는 폭으로 준다. overflow는
    hidden이 아니라 visible로 둔다 — 머리 위 칭호 배지가 이 영역 위로 살짝
-   걸치기 때문. */
+   걸치기 때문. 좌우 이동 범위는 어차피 app.js의 roamAvatarToRandomSpot()이
+   stage 너비 안으로 직접 계산해서 넣어주니 overflow로 자를 필요가 없다. */
 .character-stage {
   position: relative;
   height: 190px;
@@ -1801,20 +1803,19 @@ select:focus {
   background: radial-gradient(ellipse 70% 55% at 50% 82%, rgba(217, 119, 6, 0.09), transparent 70%);
 }
 
-/* 아바타는 무대 안을 돌아다니지 않는다(2026-08-27: "캐릭터 사진은 움직이지마
-   그냥 자연스러운 움직임만 하도록 해") — 예전엔 position:absolute + left/top을
-   app.js가 계속 바꿔서 무작위로 돌아다녔다(2026-08-18 도입 → 2026-08-27 홉
-   물리로 개선까지 거침). 자리 이동 자체가 "사진이 움직인다"는 인상을 줘서
-   완전히 없앴다 — 이제 무대 중앙 하단에 고정되고, transform은 avatar-breathe
-   (숨쉬기)·avatar-bounce(탭/이벤트 반응)·avatar-halo(최고단계 후광)만 쓴다.
-   가로 중앙 정렬은 transform: translateX(-50%) 대신 margin-left 음수값을
-   쓴다 — translateX를 쓰면 breathe 애니메이션이 매 프레임 transform을
-   통째로 새로 쓰기 때문에 중앙 정렬이 매 프레임 풀렸다 붙었다 한다. */
+/* 원형 배경/그림자(테두리)를 없애고 그림만 남긴다. position:absolute + left/top으로
+   무대 안 어디로든 걸어다닌다. left/top은 app.js의 animateAvatarHops()가
+   requestAnimationFrame으로 매 프레임 직접 계산해서 넣는다(2026-08-27,
+   "돌아다녀도 되는데 사진처럼 고정된 각도로 움직이는게 부자연스럽다") — CSS
+   transition은 일부러 안 쓴다. JS가 프레임마다 값을 새로 넣는데 transition까지
+   걸려 있으면 둘이 서로를 쫓아가며 버벅이는 값이 나온다(매 프레임이 "새 목표"가
+   되어버림). transform은 이 요소에서 avatar-breathe(통통 튐/갸웃)·avatar-bounce
+   (탭 반응)·avatar-halo(최고단계 후광)가 쓰고, 점프 높이·찌그러짐은 안쪽
+   #avatar-hop-rig가 따로 맡는다 — 서로 다른 요소라 절대 안 겹친다. */
 .character-avatar {
   position: absolute;
-  left: 50%;
-  margin-left: -44px; /* svg 폭(88px)의 절반 — 가로 중앙 정렬 */
-  bottom: 8px;
+  top: 40%;
+  left: 40%;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1822,10 +1823,18 @@ select:focus {
   animation: avatar-breathe 3.6s ease-in-out infinite;
 }
 
+/* 홉(점프) 이동 중엔 idle breathe를 잠깐 끈다 — animateAvatarHops()가 토글.
+   breathe(작은 상하 흔들림)와 홉의 포물선 점프가 동시에 돌면 두 움직임이
+   겹쳐 보여 오히려 산만해진다 — "걷는 중"과 "가만히 서서 숨쉬는 중"을 명확히
+   구분한다. */
+.character-avatar.avatar-hopping {
+  animation: none;
+}
+
 /* 무대 꾸미기(2026-08-27: "강아지 용품들로 채워") — 밥그릇/뼈다귀/공/발자국을
-   구석에 고정 배치한다. pointer-events:none이라 클릭을 절대 안 막는다.
-   아바타(character-avatar)보다 DOM에서 먼저 나와서 항상 소품 위로 아바타가
-   보인다. */
+   구석에 고정 배치한다. pointer-events:none이라 클릭·roam 동선을 절대 안
+   막는다. 아바타(character-avatar)보다 DOM에서 먼저 나와서 항상 소품 위로
+   아바타가 지나간다. */
 .stage-prop {
   position: absolute;
   pointer-events: none;
@@ -1853,14 +1862,19 @@ select:focus {
   width: 22px;
 }
 .stage-prop--paws {
-  /* 아바타가 무대 중앙 하단에 고정되면서(2026-08-27) 발자국을 가운데 두면
-     아바타 그림과 그대로 겹친다 — 밥그릇 쪽에서 가운데로 걸어온 흔적처럼
-     보이도록 자리를 옮겼다. */
-  left: 70px;
-  bottom: 4px;
-  width: 50px;
+  left: 50%;
+  bottom: 2px;
+  width: 74px;
   opacity: 0.75;
-  transform: rotate(-3deg);
+  transform: translateX(-58%) rotate(-3deg);
+}
+
+/* 왼쪽으로 이동할 때 그림을 뒤집어 "그 쪽을 보고 걷는다"는 신호를 준다
+   (2026-08-27) — .character-avatar 자체는 breathe/bounce 애니메이션이 transform을
+   계속 갱신하므로, 그 위에서 충돌 없이 뒤집으려면 안쪽 svg에만 건다. 장식
+   (avatar-deco)은 절대 위치라 같이 안 뒤집혀도 어색하지 않다. */
+.character-avatar.avatar-facing-left svg {
+  transform: scaleX(-1);
 }
 
 /* 탭-투-펫(디자인 스킬 4.5 Tactile Feedback 적용) — 눌렀을 때 살짝
@@ -1886,9 +1900,11 @@ select:focus {
   100% { transform: translateY(0) rotate(0deg); }
 }
 
-/* 실제 그림(svg)이 들어가는 안쪽 래퍼 — app.js의 renderAvatarSpriteFrame()이
-   여기 innerHTML을 채운다. 장식(avatar-deco)을 이 요소가 아니라 바깥
-   #character-avatar에 두는 이유는 app.js 쪽 주석(avatarDecosHtmlFor) 참고. */
+/* 점프 물리(2026-08-27) — 실제 그림(svg)이 들어가는 안쪽 래퍼. 홉 도중엔
+   app.js가 매 프레임 여기 transform(translateY 점프 높이 + scale 찌그러짐)만
+   직접 써넣는다. transform-origin을 발밑(하단 중앙)으로 둬야 찌그러질 때
+   발이 땅에 붙어있는 것처럼 보인다 — 기본값(중앙)이면 몸 전체가 위아래로
+   같이 밀리는 것처럼 보여 "땅을 딛고 뛴다"는 느낌이 안 산다. */
 .avatar-hop-rig {
   transform-origin: 50% 100%;
 }
@@ -1902,9 +1918,11 @@ select:focus {
   height: 100px;
 }
 
-/* 발밑 그림자(2026-08-27) — 아바타가 허공에 떠 있지 않고 바닥을 딛고 서
-   있다는 걸 보여주는 정적인 장식. 자리 이동 애니메이션은 없앴지만(아래
-   .character-avatar 주석 참고) 그림자 자체는 그대로 둔다. */
+/* 발밑 그림자(2026-08-27) — 홉 도중 app.js가 크기·투명도를 바꿔서 "공중에
+   떴다/땅에 닿았다"를 알려준다. character-avatar 안에 두면 avatar-hop-rig의
+   점프 높이(translateY)에는 안 딸려가면서도 character-avatar 자체의 left/top
+   위치는 그대로 따라간다 — 그림자가 "땅"에, 그림이 "공중"에 있는 것처럼
+   분리되는 핵심 트릭. */
 .avatar-ground-shadow {
   position: absolute;
   left: 50%;
@@ -2008,6 +2026,9 @@ select:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* 홉 이동 자체는 app.js의 animateAvatarHops()가 matchMedia로 직접 감지해
+     애니메이션 없이 즉시 최종 위치로 스냅한다(별도 CSS 불필요) — 여기서는
+     idle 쪽 애니메이션만 끈다. */
   .character-avatar { animation: none; }
   .character-avatar.avatar-halo { animation: none; }
   .character-avatar.avatar-bounce,

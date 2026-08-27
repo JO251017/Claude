@@ -531,13 +531,125 @@ function ensureAvatarSpriteLoopStarted() {
   }, 450);
 }
 
-// --- 아바타는 무대 안을 돌아다니지 않는다(2026-08-27: "캐릭터 사진은
-// 움직이지마 그냥 자연스러운 움직임만 하도록 해") --- 예전엔 여기서 무작위
-// 위치로 돌아다니게 했다(2026-08-18 도입 → 2026-08-27 홉 물리로 개선까지
-// 거쳤다). 위치 자체가 계속 바뀌는 게 "사진이 움직인다"는 인상을 줘서,
-// 자리 이동은 완전히 없애고 제자리에서의 움직임(숨쉬기 avatar-breathe,
-// 눈 깜빡임/꼬리 흔들기 스프라이트 루프, 발견·방문·추천 반응 바운스)만
-// 남긴다 — 고정 위치는 style.css의 .character-avatar(무대 중앙 하단)가 정한다.
+// --- 아바타 자유 이동 + 홉(hop) 물리(2026-08-27: "돌아다녀도 되는데 사진처럼
+// 고정된 각도로 움직이는게 부자연스럽다 — 움직임도 자연스러운 동작을 넣어라")
+// --- 한 번은 "캐릭터 사진은 움직이지마"라는 피드백을 받아 이동 자체를 없앤
+// 적이 있는데(같은 날, 캐시가 안 갱신돼 사용자가 실제로는 이 홉 물리를 못 본
+// 채로 준 피드백이었을 가능성이 크다 — 그 직후 캐시 버스터 문제를 발견/수정),
+// 바로 다음 메시지에서 "돌아다녀도 된다"고 정정하며 "움직임 자체가 자연스러워야
+// 한다"는 원래 요지를 다시 확인해줬다. 그래서 이동은 그대로 두고 자연스러움에
+// 집중한 홉 물리를 복원한다: 목적지까지를 여러 번의 짧은 "홉"으로 쪼개고, 매
+// 홉마다 requestAnimationFrame으로 (1) 포물선 점프 높이 (2) 이륙/착지 순간
+// 눌리고(squash) 공중에서 늘어나는(stretch) 정도 (3) 발밑 그림자 크기·진하기를
+// 동시에 맞춰 돌린다 — 이 세 가지가 같이 움직여야 "무게가 있는 것이 실제로
+// 뛰어오른다"는 인상이 생긴다. 방향 반전(왼쪽 이동 시 좌우 뒤집기)도 유지.
+const AVATAR_ROAM_RADIUS_RATIO = 0.55;
+let avatarRoamTimer = null;
+let _avatarHopToken = 0;
+
+function _dogEase(t) {
+  return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+}
+
+// fromLeft/Top → toLeft/Top까지 hopCount번의 짧은 도약으로 나눠 이동시킨다.
+// 도중에 새 이동이 시작되면(roamAvatarToRandomSpot이 다시 불리면) 토큰이
+// 바뀌어 이전 시퀀스는 다음 프레임에서 스스로 멈춘다 — 두 이동이 동시에
+// left/top을 건드려 위치가 튀는 걸 막는다.
+function animateAvatarHops(fromLeft, fromTop, toLeft, toTop) {
+  const avatarEl = document.getElementById('character-avatar');
+  const rigEl = document.getElementById('avatar-hop-rig');
+  if (!avatarEl || !rigEl) return;
+
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    avatarEl.style.left = `${toLeft}px`;
+    avatarEl.style.top = `${toTop}px`;
+    return;
+  }
+
+  const shadowEl = document.getElementById('avatar-ground-shadow');
+  const myToken = ++_avatarHopToken;
+  const dx = toLeft - fromLeft;
+  const dy = toTop - fromTop;
+  const hopCount = Math.max(2, Math.min(5, Math.round(Math.hypot(dx, dy) / 45)));
+  const hopDuration = 340; // ms, 홉 하나당
+  avatarEl.classList.add('avatar-hopping'); // 물리 연출 중엔 idle breathe를 잠깐 끔(이중으로 안 겹치게)
+
+  function runHop(hopIndex) {
+    if (myToken !== _avatarHopToken) return;
+    if (hopIndex >= hopCount) {
+      rigEl.style.transform = '';
+      if (shadowEl) {
+        shadowEl.style.transform = '';
+        shadowEl.style.opacity = '';
+      }
+      avatarEl.classList.remove('avatar-hopping');
+      return;
+    }
+    const segFromLeft = fromLeft + dx * (hopIndex / hopCount);
+    const segFromTop = fromTop + dy * (hopIndex / hopCount);
+    const segToLeft = fromLeft + dx * ((hopIndex + 1) / hopCount);
+    const segToTop = fromTop + dy * ((hopIndex + 1) / hopCount);
+    const start = performance.now();
+
+    function frame(now) {
+      if (myToken !== _avatarHopToken) return;
+      const t = Math.min(1, (now - start) / hopDuration);
+      const eased = _dogEase(t);
+      avatarEl.style.left = `${segFromLeft + (segToLeft - segFromLeft) * eased}px`;
+      avatarEl.style.top = `${segFromTop + (segToTop - segFromTop) * eased}px`;
+
+      const arc = Math.sin(t * Math.PI); // 홉 중간(t=0.5)에 최고, 이착륙(t=0/1)에 0
+      const edgePulse = Math.max(0, 1 - Math.abs(t) * 9) + Math.max(0, 1 - Math.abs(t - 1) * 9);
+      const scaleY = 1 + 0.14 * arc - 0.16 * edgePulse;
+      const scaleX = 1 - 0.09 * arc + 0.14 * edgePulse;
+      rigEl.style.transform = `translateY(${-10 * arc}px) scale(${scaleX}, ${scaleY})`;
+
+      if (shadowEl) {
+        shadowEl.style.transform = `translateX(-50%) scale(${1 - 0.45 * arc})`;
+        shadowEl.style.opacity = String(1 - 0.55 * arc);
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        runHop(hopIndex + 1);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  runHop(0);
+}
+
+function roamAvatarToRandomSpot() {
+  const stage = document.getElementById('character-stage');
+  const avatarEl = document.getElementById('character-avatar');
+  if (!stage || !avatarEl) return;
+  const maxLeft = Math.max(stage.clientWidth - (avatarEl.offsetWidth || 88), 0);
+  const maxTop = Math.max(stage.clientHeight - (avatarEl.offsetHeight || 100), 0);
+  const curLeft = parseFloat(avatarEl.style.left) || 0;
+  const curTop = parseFloat(avatarEl.style.top) || 0;
+
+  const radiusX = Math.max(maxLeft * AVATAR_ROAM_RADIUS_RATIO, 40);
+  const radiusY = Math.max(maxTop * AVATAR_ROAM_RADIUS_RATIO, 40);
+  const nextLeft = Math.min(Math.max(curLeft + (Math.random() * 2 - 1) * radiusX, 0), maxLeft);
+  const nextTop = Math.min(Math.max(curTop + (Math.random() * 2 - 1) * radiusY, 0), maxTop);
+
+  avatarEl.classList.toggle('avatar-facing-left', nextLeft < curLeft - 2); // 2px 이내 오차는 방향전환으로 안 침
+  animateAvatarHops(curLeft, curTop, nextLeft, nextTop);
+}
+
+function ensureAvatarRoamStarted() {
+  if (avatarRoamTimer) return;
+  roamAvatarToRandomSpot(); // 첫 자리부터 무작위로 — 항상 가운데 고정이면 "돌아다닌다"는 느낌이 안 난다
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return; // 한 자리에 고정
+  const scheduleNext = () => {
+    avatarRoamTimer = setTimeout(() => {
+      roamAvatarToRandomSpot();
+      scheduleNext();
+    }, 2500 + Math.random() * 3500);
+  };
+  scheduleNext();
+}
 
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
 // 반응" 감각) — 별도 API 호출 없이 이미 성공한 응답 시점에 클래스만 토글.
@@ -736,6 +848,10 @@ if (supabaseClient) {
 function switchScreen(name) {
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === name));
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
+  // MY 탭은 display:none이었다가 막 보이는 순간이라 그전까지 roamAvatarToRandomSpot()이
+  // 재던 clientWidth가 0이었을 수 있다(화면이 안 보이면 폭도 0) — 진짜로 보이는
+  // 시점에 한 번 더 굴려서 처음 봤을 때부터 자리가 잡혀 있게 한다.
+  if (name === 'my') roamAvatarToRandomSpot();
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -756,6 +872,7 @@ document.getElementById('character-avatar')?.addEventListener('click', () => tri
 // 전 자리표시자 단계에서도 이미 눈 깜빡이고 꼬리를 흔들어야 "다마고치가
 // 계속 살아있다"는 느낌이 유지된다(사용자 지시, 2026-08-18).
 ensureAvatarSpriteLoopStarted();
+ensureAvatarRoamStarted();
 
 // --- RPG 희귀도 등급 (예상 절약률 기준, MAP 카드 표시용) ---
 function getRarityTier(savingsRate) {
