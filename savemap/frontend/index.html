@@ -283,6 +283,48 @@
                    더 이상 링이 아니라 아래 saving-bar 하나로만 보여준다. -->
               <div class="character-stage" id="character-stage">
                 <div class="avatar-title-badge" id="my-title">씨앗</div>
+                <!-- 무대 꾸미기(2026-08-27: "아바타 있는 공간을 강아지 용품들로
+                     채워") — 실제 동선(roamAvatarToRandomSpot)이나 클릭을
+                     방해하면 안 되므로 전부 pointer-events:none, 구석에 고정
+                     배치. 아바타보다 먼저 그려서(DOM 순서) 항상 아바타가
+                     소품들 앞으로 지나간다. -->
+                <div class="stage-prop stage-prop--bowl" aria-hidden="true">
+                  <svg viewBox="0 0 28 20">
+                    <ellipse cx="14" cy="14" rx="12" ry="5" fill="#c9d0d8" stroke="#2b2119" stroke-width="1.6"/>
+                    <ellipse cx="14" cy="11" rx="9" ry="3.2" fill="#8a95a3" stroke="#2b2119" stroke-width="1.4"/>
+                    <circle cx="10" cy="10.5" r="1.1" fill="#c98a4b"/>
+                    <circle cx="14" cy="9.8" r="1.1" fill="#c98a4b"/>
+                    <circle cx="18" cy="10.6" r="1.1" fill="#c98a4b"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--bone" aria-hidden="true">
+                  <svg viewBox="0 0 32 18">
+                    <rect x="8" y="7" width="16" height="4" rx="2" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="6" cy="6" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="6" cy="12" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="26" cy="6" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="26" cy="12" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--ball" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="#f5b942" stroke="#2b2119" stroke-width="1.6"/>
+                    <path d="M3 9 Q12 15 21 9" fill="none" stroke="#2b2119" stroke-width="1.3" opacity="0.55"/>
+                    <path d="M3 15 Q12 9 21 15" fill="none" stroke="#2b2119" stroke-width="1.3" opacity="0.55"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--paws" aria-hidden="true">
+                  <svg viewBox="0 0 60 20">
+                    <g fill="#c9c2b3">
+                      <ellipse cx="8" cy="14" rx="3" ry="2.2"/>
+                      <circle cx="4" cy="10" r="1.1"/><circle cx="7" cy="8.5" r="1.1"/><circle cx="10" cy="9" r="1.1"/>
+                      <ellipse cx="28" cy="8" rx="3" ry="2.2"/>
+                      <circle cx="24" cy="4" r="1.1"/><circle cx="27" cy="2.5" r="1.1"/><circle cx="30" cy="3" r="1.1"/>
+                      <ellipse cx="48" cy="14" rx="3" ry="2.2"/>
+                      <circle cx="44" cy="10" r="1.1"/><circle cx="47" cy="8.5" r="1.1"/><circle cx="50" cy="9" r="1.1"/>
+                    </g>
+                  </svg>
+                </div>
                 <!-- 촘촘한 픽셀 렌더러(42×48, 2026-08-27)로 바뀌면서 손으로
                      맞춘 정적 자리표시자 SVG는 유지 비용이 커져 없앴다 —
                      app.js가 ensureAvatarSpriteLoopStarted()에서 페이지 로드

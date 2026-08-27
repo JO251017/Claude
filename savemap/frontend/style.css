@@ -1833,6 +1833,44 @@ select:focus {
   animation: none;
 }
 
+/* 무대 꾸미기(2026-08-27: "강아지 용품들로 채워") — 밥그릇/뼈다귀/공/발자국을
+   구석에 고정 배치한다. pointer-events:none이라 클릭·roam 동선을 절대 안
+   막는다. 아바타(character-avatar)보다 DOM에서 먼저 나와서 항상 소품 위로
+   아바타가 지나간다. */
+.stage-prop {
+  position: absolute;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.2));
+}
+.stage-prop svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.stage-prop--bowl {
+  left: 8px;
+  bottom: 6px;
+  width: 34px;
+}
+.stage-prop--bone {
+  right: 10px;
+  bottom: 16px;
+  width: 34px;
+  transform: rotate(-14deg);
+}
+.stage-prop--ball {
+  right: 14px;
+  top: 10px;
+  width: 22px;
+}
+.stage-prop--paws {
+  left: 50%;
+  bottom: 2px;
+  width: 74px;
+  opacity: 0.75;
+  transform: translateX(-58%) rotate(-3deg);
+}
+
 /* 왼쪽으로 이동할 때 그림을 뒤집어 "그 쪽을 보고 걷는다"는 신호를 준다
    (2026-08-27) — .character-avatar 자체는 breathe/bounce 애니메이션이 transform을
    계속 갱신하므로, 그 위에서 충돌 없이 뒤집으려면 안쪽 svg에만 건다. 장식
