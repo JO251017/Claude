@@ -47,6 +47,8 @@ const ICONS = {
   // 썼는데 OS/폰트마다 색·모양이 달라 골드 톤(--gold-glow)과 안 맞았다 —
   // currentColor로 그려서 CSS에서 색을 통일한다(디자인 스킬 적용, 2026-08-18).
   sparkle: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c.7 3.4 1.9 5.6 3.6 7.3 1.7 1.7 3.9 2.9 7.3 3.6-3.4.7-5.6 1.9-7.3 3.6-1.7 1.7-2.9 3.9-3.6 7.3-.7-3.4-1.9-5.6-3.6-7.3-1.7-1.7-3.9-2.9-7.3-3.6 3.4-.7 5.6-1.9 7.3-3.6 1.7-1.7 2.9-3.9 3.6-7.3Z"/></svg>`,
+  // 추천 완료 파티클용 하트(아바타 반응 다양화, 2026-08-26).
+  heart: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.5 8.5 3 4.5 7 4.5c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4 0 6.5 4 4.5 8-2.5 4.15-9.5 8.5-9.5 8.5Z"/></svg>`,
 };
 
 // --- 아바타 성장(다마고치식, 2-4, 2026-08-13) ---
@@ -56,12 +58,18 @@ const ICONS = {
 // 추천(recommend_count) — 이미 실제 행동에서 결정론적으로 계산되는 세 칭호(2-2)의
 // 원본 카운트를 그대로 합산한 값 하나("성장치")로 단계를 정한다. 별도로 지어낸
 // 점수는 없다.
+// 단계 간격 튜닝(아바타 업그레이드, 2026-08-26): 25→60(35), 100→180(80) 두
+// 구간이 유독 넓어서 그 사이에 정체 구간처럼 느껴졌다. 실제 사용자 성장
+// 속도 데이터가 없어 "정답"은 아니고, 기존 7단계 이름/취지는 그대로 두고
+// 넓은 두 구간에만 중간 단계를 하나씩 끼워 넣어 간격을 고르게 만든 추측치다.
 const AVATAR_GROWTH_STAGES = [
   { minScore: 0, name: '씨앗 강아지' },
   { minScore: 10, name: '새싹 강아지' },
-  { minScore: 25, name: '목줄 찬 강아지' },
+  { minScore: 25, name: '목줄 찬 강아지' }, // 목줄 장식 시작
+  { minScore: 40, name: '산책 나온 강아지' }, // NEW: 25→60 구간 중간
   { minScore: 60, name: '배낭 여행자' },
-  { minScore: 100, name: '리본 두른 강아지' },
+  { minScore: 100, name: '리본 두른 강아지' }, // 리본 장식 시작
+  { minScore: 140, name: '든든한 파트너' }, // NEW: 100→180 구간 중간
   { minScore: 180, name: '수호자' },
   { minScore: 300, name: 'SaveMap 전설' },
 ];
@@ -128,16 +136,92 @@ const DOG_PIXEL_ROWS = [
 ].map((row) => row.slice(0, 22)); // 각 행이 반드시 22칸이 되도록 안전장치
 const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
 
+// --- 아바타 꾸미기 커스터마이징(2026-08-26) --- 목줄(3단계+)/리본(6단계+)
+// 색은 그동안 고정값이었다. 잠금해제 조건(해당 단계 도달)은 그대로 두고 그
+// 안에서 색만 고르게 한다. 서버에 저장할 만한 데이터가 아니라(취향 설정,
+// 계산에 안 쓰임) 기기별 localStorage에만 남긴다 — 새 백엔드 컬럼 없이 바로
+// 적용 가능하고, 없어져도(사파리 프라이빗 모드 등) 기본색으로 조용히 돌아간다.
+const AVATAR_COLOR_PRESETS = {
+  collar: ['#ef6f6f', '#3b82f6', '#f59e0b', '#10b981', '#a855f7'],
+  bandana: ['#7c3aed', '#ef4444', '#0ea5e9', '#f59e0b', '#ec4899'],
+};
+
+function getAvatarColorPref(part) {
+  try {
+    return localStorage.getItem(`savemap-avatar-${part}-color`) || AVATAR_COLOR_PRESETS[part][0];
+  } catch {
+    return AVATAR_COLOR_PRESETS[part][0];
+  }
+}
+
+function setAvatarColorPref(part, color) {
+  try {
+    localStorage.setItem(`savemap-avatar-${part}-color`, color);
+  } catch {
+    // 저장 실패해도(프라이빗 모드 등) 이번 화면에는 이미 반영돼 있으니 무시.
+  }
+}
+
+// 스와치 버튼은 한 번만 만들어 두고(dataset.built), loadMyProfile()이 부를 때마다
+// active 표시만 갱신한다 — 매번 새로 그리면 클릭 중 깜빡이는 문제가 생긴다.
+function renderAvatarSwatches(part) {
+  const row = document.getElementById(`avatar-swatch-${part}`);
+  if (!row) return;
+  const current = getAvatarColorPref(part);
+  if (row.dataset.built) {
+    row.querySelectorAll('.avatar-swatch').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.color === current);
+    });
+    return;
+  }
+  row.dataset.built = '1';
+  const label = part === 'collar' ? '목줄' : '리본';
+  AVATAR_COLOR_PRESETS[part].forEach((color) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `avatar-swatch${color === current ? ' active' : ''}`;
+    btn.style.background = color;
+    btn.dataset.color = color;
+    btn.setAttribute('aria-label', `${label} 색상 선택`);
+    btn.addEventListener('click', () => {
+      setAvatarColorPref(part, color);
+      row.querySelectorAll('.avatar-swatch').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderAvatarSpriteFrame(); // 바뀐 색을 아바타에 바로 반영
+    });
+    row.appendChild(btn);
+  });
+}
+
 // blink(눈 감기)/tailWag(꼬리 흔들기) — 프레임마다 바뀌는 두 파츠. 정적인
 // 그림 하나를 CSS로 흔드는 대신, 실제 예전 다마고치처럼 "그림 자체가 몇
 // 프레임을 반복 재생"하는 방식이 필요하다(사용자 지시: "진짜 예전
 // 다마고치처럼 2D로 적용하지만 움직이고 이런게 필요해", 2026-08-18).
-function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag = false } = {}) {
+function pixelDogSvg({
+  collar = false,
+  bandana = false,
+  blink = false,
+  tailWag = false,
+  bark = false,
+  collarColor,
+  bandanaColor,
+} = {}) {
   // 눈(row 6-7의 'k')을 얼굴색으로 덮으면 "눈을 감은" 프레임이 된다 — 코/입
   // (row 10, 12)의 'k'는 건드리면 안 되니 row index로만 골라서 바꾼다.
-  const rows = blink
+  let rows = blink
     ? DOG_PIXEL_ROWS.map((row, y) => ((y === 6 || y === 7) ? row.replace(/k/g, 'h') : row))
     : DOG_PIXEL_ROWS;
+  // 짖는 프레임(방문 인증 반응, 2026-08-26) — 입(row 12)의 점 2칸을 양옆으로
+  // 넓혀서 입을 벌린 것처럼 보이게 한다. 새 파츠를 그리지 않고 기존 코/입
+  // 자리의 점만 넓히는 정도라 강아지 실루엣 자체는 안 바뀐다.
+  if (bark) {
+    rows = rows.map((row, y) => {
+      if (y !== 12) return row;
+      const chars = row.split('');
+      for (let x = 9; x <= 12; x++) chars[x] = 'k';
+      return chars.join('');
+    });
+  }
   const width = rows[0].length;
   const height = rows.length;
   const rects = [];
@@ -153,16 +237,17 @@ function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag =
   // 한다 — 진짜 스프라이트 두 장을 번갈아 그리는 애니메이션의 핵심 파츠.
   rects.push(`<rect x="${width - 1}" y="19" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
   rects.push(`<rect x="${tailWag ? width - 2 : width - 1}" y="20" width="1" height="1" fill="${DOG_PALETTE.h}"/>`);
-  // 목줄(3단계 이상) — 목(row 14) 색을 포인트 컬러로 덧그린다.
+  // 목줄(3단계 이상) — 목(row 14) 색을 포인트 컬러로 덧그린다. 색은 사용자가
+  // 고른 커스터마이징 색(collarColor)이 있으면 그걸, 없으면 기본 빨강.
   if (collar) {
     for (let x = 6; x <= 15; x++) {
-      rects.push(`<rect x="${x}" y="15" width="1" height="1" fill="#ef6f6f"/>`);
+      rects.push(`<rect x="${x}" y="15" width="1" height="1" fill="${collarColor || '#ef6f6f'}"/>`);
     }
   }
-  // 리본(5단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
+  // 리본(6단계 이상) — 귀 사이 빈 틈을 리본으로 채운다.
   if (bandana) {
     for (let x = 8; x <= 13; x++) {
-      rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="#7c3aed"/>`);
+      rects.push(`<rect x="${x}" y="0" width="1" height="1" fill="${bandanaColor || '#7c3aed'}"/>`);
     }
   }
   return `<svg viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
@@ -170,17 +255,22 @@ function pixelDogSvg({ collar = false, bandana = false, blink = false, tailWag =
 
 // 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
 // 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
+// 단계 인덱스는 AVATAR_GROWTH_STAGES 튜닝(9단계, 2026-08-26)에 맞춰
+// 목줄=2("목줄 찬 강아지"), 리본=5("리본 두른 강아지") 시작으로 갱신했다.
 function characterAvatarHtmlFor(stageIndex, frame = {}) {
   const svg = pixelDogSvg({
     collar: stageIndex >= 2,
-    bandana: stageIndex >= 4,
+    bandana: stageIndex >= 5,
     blink: !!frame.blink,
     tailWag: !!frame.tailWag,
+    bark: !!frame.bark,
+    collarColor: getAvatarColorPref('collar'),
+    bandanaColor: getAvatarColorPref('bandana'),
   });
   const decos = [];
   if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
-  if (stageIndex >= 4) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
-  if (stageIndex >= 6) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
+  if (stageIndex >= 5) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
+  if (stageIndex >= 7) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
   return svg + decos.join('');
 }
 
@@ -199,11 +289,15 @@ const AVATAR_SPRITE_SEQUENCE = [
 let avatarSpriteStageIndex = 0;
 let avatarSpriteFrameIdx = 0;
 let avatarSpriteTimer = null;
+// 방문 인증 반응(2026-08-26)이 잠깐 짖는 프레임을 보여줄 때만 true — 기본
+// 눈 깜빡임/꼬리 흔들기 루프와 별개 상태라 시퀀스 프레임 위에 덧씌운다.
+let avatarBarking = false;
 
 function renderAvatarSpriteFrame() {
   const el = document.getElementById('character-avatar');
   if (!el) return;
-  el.innerHTML = characterAvatarHtmlFor(avatarSpriteStageIndex, AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx]);
+  const frame = { ...AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx], bark: avatarBarking };
+  el.innerHTML = characterAvatarHtmlFor(avatarSpriteStageIndex, frame);
 }
 
 // loadMyProfile()이 성장 단계를 바꿀 때마다 새로 부르는 게 아니라, 페이지에
@@ -251,12 +345,59 @@ function ensureAvatarRoamStarted() {
 
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
 // 반응" 감각) — 별도 API 호출 없이 이미 성공한 응답 시점에 클래스만 토글.
-function triggerAvatarGrowthFeedback() {
+// 반응 다양화(2026-08-26): 예전엔 세 이벤트가 전부 같은 바운스 하나였다.
+// growthScore를 이루는 실제 세 축(발견/방문/추천)에 맞춰서만 나눈다 — 지어낸
+// 네 번째 카테고리는 만들지 않는다(영수증 인증도 방문횟수 한 축에 합산되므로
+// certifyOffer/certifyWithReceipt는 둘 다 'visit'을 쓴다). kind가 없으면(탭-투-펫
+// 등) 기존 기본 바운스를 그대로 쓴다.
+const AVATAR_BOUNCE_CLASSES = ['avatar-bounce', 'avatar-bounce--discover', 'avatar-bounce--visit', 'avatar-bounce--recommend'];
+let avatarBarkTimer = null;
+
+function triggerAvatarGrowthFeedback(kind) {
   const el = document.getElementById('character-avatar');
   if (!el) return;
-  el.classList.remove('avatar-bounce');
+  el.classList.remove(...AVATAR_BOUNCE_CLASSES);
   void el.offsetWidth; // 리플로우를 강제해서 애니메이션을 처음부터 다시 재생
-  el.classList.add('avatar-bounce');
+  const cls = kind === 'discover' ? 'avatar-bounce--discover'
+    : kind === 'visit' ? 'avatar-bounce--visit'
+    : kind === 'recommend' ? 'avatar-bounce--recommend'
+    : 'avatar-bounce';
+  el.classList.add(cls);
+  spawnAvatarParticle(kind);
+
+  if (kind === 'visit') {
+    // 방문 인증만 짖는 프레임을 잠깐 보여준다 — 눈 깜빡임/꼬리 흔들기 루프는
+    // 그대로 두고 위에 덧씌운 뒤 원래대로 되돌린다.
+    avatarBarking = true;
+    renderAvatarSpriteFrame();
+    clearTimeout(avatarBarkTimer);
+    avatarBarkTimer = setTimeout(() => {
+      avatarBarking = false;
+      renderAvatarSpriteFrame();
+    }, 550);
+  }
+}
+
+// 발견=반짝임 1개, 방문=반짝임 2개(짖는 프레임과 같이), 추천=하트 2개 —
+// .character-stage 안에 잠깐 떴다 사라지는 파티클. kind가 없으면(탭-투-펫)
+// 아무것도 띄우지 않는다.
+function spawnAvatarParticle(kind) {
+  if (!kind) return;
+  const stage = document.getElementById('character-stage');
+  const avatarEl = document.getElementById('character-avatar');
+  if (!stage || !avatarEl) return;
+  const iconSvg = kind === 'recommend' ? ICONS.heart : ICONS.sparkle;
+  const count = kind === 'discover' ? 1 : 2;
+  for (let i = 0; i < count; i++) {
+    const span = document.createElement('span');
+    span.className = `avatar-particle avatar-particle--${kind}`;
+    span.innerHTML = iconSvg;
+    span.style.left = `${(avatarEl.offsetLeft || 0) + 16 + Math.random() * 40}px`;
+    span.style.top = `${(avatarEl.offsetTop || 0) + Math.random() * 24}px`;
+    span.style.animationDelay = `${i * 120}ms`;
+    stage.appendChild(span);
+    setTimeout(() => span.remove(), 1100);
+  }
 }
 
 let merchantPlaces = [];
@@ -476,6 +617,13 @@ async function loadMyProfile() {
     renderAvatarSpriteFrame();
     const avatarEl = document.getElementById('character-avatar');
     avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
+    // 꾸미기 커스터마이징(2026-08-26) — 목줄(단계 2+)/리본(단계 5+) 잠금해제
+    // 여부에 맞춰 스와치 영역을 보이거나 숨긴다. characterAvatarHtmlFor의
+    // collar/bandana 임계값(2, 5)과 반드시 같은 값이어야 한다.
+    document.getElementById('avatar-customize-collar')?.classList.toggle('hidden', growth.stageIndex < 2);
+    document.getElementById('avatar-customize-bandana')?.classList.toggle('hidden', growth.stageIndex < 5);
+    if (growth.stageIndex >= 2) renderAvatarSwatches('collar');
+    if (growth.stageIndex >= 5) renderAvatarSwatches('bandana');
     document.getElementById('my-title').textContent = growth.name;
     document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
     document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;
@@ -1460,7 +1608,7 @@ async function recommendPlace(r, btn) {
     // 새 추천일 때만 실제 recommend_count가 늘어나므로 아바타 성장치도 그때만
     // 갱신한다(2-4) — 중복 추천 클릭으로 지어낸 성장은 없다.
     if (data.is_new) {
-      triggerAvatarGrowthFeedback();
+      triggerAvatarGrowthFeedback('recommend');
       loadMyProfile();
       showSavingsToast('👍 추천 완료!');
     }
@@ -1703,7 +1851,7 @@ async function submitStatusUpdate(r, status, btn) {
         // 발견하기도 아바타 성장치(발견+방문+추천 합산, 2-4)에 들어간다. 휴무/임시
         // 휴무 제보는 같은 API를 쓰지만 "절약 행동"은 아니라 토스트는 발견(open)일
         // 때만 띄운다.
-        triggerAvatarGrowthFeedback();
+        triggerAvatarGrowthFeedback('discover');
         loadMyProfile();
         if (status === 'open') showSavingsToast('🧭 발견 완료!');
       } catch (err) {
@@ -1773,7 +1921,7 @@ async function certifyOffer(r) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
-    triggerAvatarGrowthFeedback();
+    triggerAvatarGrowthFeedback('visit');
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
     showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);
@@ -1825,7 +1973,7 @@ async function certifyWithReceipt(r, fileInput) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
-    triggerAvatarGrowthFeedback();
+    triggerAvatarGrowthFeedback('visit');
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
     showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);

@@ -1882,11 +1882,72 @@ select:focus {
   100% { transform: scale(1) rotate(0); }
 }
 
+/* 반응 다양화(2026-08-26) — 발견/방문/추천이 서로 다른 느낌으로 튄다.
+   발견은 가볍게, 방문(짖는 프레임과 같이)은 크고 무겁게, 추천은 꼬리를
+   흔들 듯 좌우로 통통 튄다. 기본 avatar-bounce(탭-투-펫 등)는 그대로 둔다. */
+.character-avatar.avatar-bounce--discover {
+  animation: avatar-bounce-discover 0.4s ease;
+}
+@keyframes avatar-bounce-discover {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.1) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.character-avatar.avatar-bounce--visit {
+  animation: avatar-bounce-visit 0.6s ease;
+}
+@keyframes avatar-bounce-visit {
+  0% { transform: scale(1) translateY(0); }
+  25% { transform: scale(1.22) translateY(-6px) rotate(-5deg); }
+  50% { transform: scale(0.92) translateY(0) rotate(4deg); }
+  75% { transform: scale(1.1) translateY(-3px) rotate(-2deg); }
+  100% { transform: scale(1) translateY(0) rotate(0); }
+}
+
+.character-avatar.avatar-bounce--recommend {
+  animation: avatar-bounce-recommend 0.55s ease;
+}
+@keyframes avatar-bounce-recommend {
+  0% { transform: scale(1) rotate(0); }
+  20% { transform: scale(1.12) rotate(8deg); }
+  40% { transform: scale(1.12) rotate(-8deg); }
+  60% { transform: scale(1.12) rotate(6deg); }
+  80% { transform: scale(1.05) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* 반응 파티클(발견=반짝임, 방문=반짝임, 추천=하트) — .character-stage 위에
+   잠깐 떴다가 위로 떠오르며 사라진다. avatar-deco(장식)와 달리 위치가
+   고정이 아니라 매번 spawnAvatarParticle()이 새로 만들고 지운다. */
+.avatar-particle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  animation: avatar-particle-float 1.1s ease-out forwards;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+.avatar-particle svg { width: 100%; height: 100%; }
+.avatar-particle--discover,
+.avatar-particle--visit { color: var(--gold-glow); }
+.avatar-particle--recommend { color: #ef4444; }
+
+@keyframes avatar-particle-float {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  20% { opacity: 1; transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-34px) scale(0.9); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .character-avatar { animation: none; transition: none; }
   .character-avatar.avatar-halo { animation: none; }
-  .character-avatar.avatar-bounce { animation: none; }
+  .character-avatar.avatar-bounce,
+  .character-avatar.avatar-bounce--discover,
+  .character-avatar.avatar-bounce--visit,
+  .character-avatar.avatar-bounce--recommend { animation: none; }
   .character-avatar:active { transform: none !important; }
+  .avatar-particle { animation: none; opacity: 0; }
 }
 
 /* 성장 단계가 오를수록 늘어나는 장식(반짝임) — 다마고치처럼 "장식이 늘어나는"
@@ -1907,6 +1968,39 @@ select:focus {
 .avatar-deco--1 { top: -6px; right: -8px; }
 .avatar-deco--2 { bottom: -2px; left: -10px; }
 .avatar-deco--3 { top: 2px; left: -13px; width: 13px; height: 13px; }
+
+/* 아바타 꾸미기 커스터마이징(2026-08-26) — 목줄/리본 잠금해제 후에만 보인다
+   (loadMyProfile()이 hidden 토글). 색상칩은 실제 클릭 가능한 버튼이라
+   최소 탭 영역(24px)을 확보한다. */
+.avatar-customize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.avatar-customize-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.avatar-swatch-row {
+  display: flex;
+  gap: 6px;
+}
+.avatar-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.avatar-swatch.active {
+  border-color: var(--ink, #1f2937);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--ink, #1f2937);
+}
 
 .character-level {
   display: block;
