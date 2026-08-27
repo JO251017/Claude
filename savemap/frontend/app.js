@@ -115,8 +115,8 @@ const DOG_PIXEL_ROWS = [
   'eehhhhhhhhhhhhhhhhhhee',
   'hhhhhhhhhhhhhhhhhhhhhh', // 머리
   'hhhhhhkhhhhhhhhkhhhhhh', // 눈 위쪽
-  'hhhhhkkhhhhhhhhkkhhhhh', // 눈
-  'hhhhhhhhhhhhhhhhhhhhhh',
+  'hhhhkkkhhhhhhhhkkkhhhh', // 눈 (아기 백구용으로 한 칸씩 넓힘, MY탭 개편 2026-08-27)
+  'hhbhhhhhhhhhhhhhhhhbhh', // 볼 발그레(같은 개편) — 눈 바로 아래 좌우 대칭 위치
   'hhhhhwwwwwwwwwwwwhhhhh', // 주둥이 시작
   'hhhhhwwwwwkkwwwwwhhhhh', // 코 (작은 점)
   'hhhhhwwwwwwwwwwwwhhhhh',
@@ -134,7 +134,11 @@ const DOG_PIXEL_ROWS = [
   '...wwwww......wwwww...',
   '....www........www....', // 앞발 바닥
 ].map((row) => row.slice(0, 22)); // 각 행이 반드시 22칸이 되도록 안전장치
-const DOG_PALETTE = { e: '#c98a4b', h: '#e3a765', w: '#fff6ea', k: '#2b2119' };
+// 리컬러(MY탭 개편, 2026-08-27: "시바견이 아닌 귀여운 아기 백구로, 하얀색") —
+// 그리드(DOG_PIXEL_ROWS)는 그대로 두고 팔레트만 흰 강아지 톤으로 바꿨다. 이전
+// 시바견 톤(귀 그림자 #c98a4b/몸통 #e3a765)에서 채도 낮은 아이보리/화이트로
+// 바꾸되, 눈·코·입(k)만 검정을 유지해야 뭉개지지 않고 또렷하게 보인다.
+const DOG_PALETTE = { e: '#ded6c4', h: '#f6f3ea', w: '#ffffff', k: '#2b2119', b: '#ffb4b0' };
 
 // --- 아바타 꾸미기 커스터마이징(2026-08-26) --- 목줄(3단계+)/리본(6단계+)
 // 색은 그동안 고정값이었다. 잠금해제 조건(해당 단계 도달)은 그대로 두고 그
@@ -187,11 +191,147 @@ function renderAvatarSwatches(part) {
       setAvatarColorPref(part, color);
       row.querySelectorAll('.avatar-swatch').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      renderAvatarSpriteFrame(); // 바뀐 색을 아바타에 바로 반영
+      renderAvatarSpriteFrame(); // 바뀐 색을 무대 위 아바타에 바로 반영
+      renderClosetPreview(); // 옷장 미리보기도 같이 갱신
     });
     row.appendChild(btn);
   });
 }
+
+// --- 아바타 옷장(2026-08-27: "아바타 옷장 이런게 안보임 추가할 것") --- 목줄/
+// 리본 색 스와치는 그대로 두되(위 renderAvatarSwatches), 별도 화면(.detail-overlay
+// 재사용)으로 옮겨서 카드가 스와치로 붐비지 않게 한다. loadMyProfile()이 채워둔
+// lastGrowthInfo를 그대로 참조 — 옷장을 열 때마다 API를 다시 부르지 않는다.
+let lastGrowthInfo = null;
+let lastSavingsSummaryData = null;
+
+function renderClosetPreview() {
+  const el = document.getElementById('closet-avatar-preview');
+  if (!el || !lastGrowthInfo) return;
+  // avatarSvgFor(장식 없는 svg만)을 쓴다 — characterAvatarHtmlFor가 붙이는
+  // avatar-deco는 .character-avatar 크기·위치를 기준으로 절대좌표를 잡으므로,
+  // 다른 컨테이너(.closet-preview)에 그대로 넣으면 반짝임이 엉뚱한 자리로
+  // 튀어나간다. 옷장은 "지금 무슨 옷을 입었는지"만 보여주면 충분하다.
+  el.innerHTML = avatarSvgFor(lastGrowthInfo.stageIndex);
+}
+
+// 잠금 여부는 characterAvatarHtmlFor의 collar/bandana 임계값(2, 5)과 반드시
+// 같아야 한다 — 여기서 숫자를 새로 지어내지 않고 AVATAR_GROWTH_STAGES의 실제
+// 단계 이름을 그대로 인용해서 "그 이름이 되면 열린다"를 정확히 알려준다.
+function updateClosetLockHints() {
+  if (!lastGrowthInfo) return;
+  const collarLocked = lastGrowthInfo.stageIndex < 2;
+  const bandanaLocked = lastGrowthInfo.stageIndex < 5;
+  document.getElementById('closet-section-collar')?.classList.toggle('closet-section--locked', collarLocked);
+  document.getElementById('closet-section-bandana')?.classList.toggle('closet-section--locked', bandanaLocked);
+  const collarHint = document.getElementById('closet-collar-hint');
+  const bandanaHint = document.getElementById('closet-bandana-hint');
+  if (collarHint) {
+    collarHint.textContent = collarLocked
+      ? `🔒 "${AVATAR_GROWTH_STAGES[2].name}" 단계에서 잠금해제`
+      : '사용 가능';
+  }
+  if (bandanaHint) {
+    bandanaHint.textContent = bandanaLocked
+      ? `🔒 "${AVATAR_GROWTH_STAGES[5].name}" 단계에서 잠금해제`
+      : '사용 가능';
+  }
+}
+
+function openAvatarCloset() {
+  renderAvatarSwatches('collar');
+  renderAvatarSwatches('bandana');
+  updateClosetLockHints();
+  renderClosetPreview();
+  document.getElementById('avatar-closet-overlay')?.classList.remove('hidden');
+}
+
+document.getElementById('avatar-closet-btn')?.addEventListener('click', openAvatarCloset);
+document.getElementById('avatar-closet-close-btn')?.addEventListener('click', () => {
+  document.getElementById('avatar-closet-overlay')?.classList.add('hidden');
+});
+
+// --- 칭호 선택(2026-08-27: "칭호는 클릭하면 여러개 보이게... 선택하면 체크되는
+// 걸로") --- 성장 단계 이름(펫 이름)과 탐험가/방문/추천 칭호(2-2, 이미
+// savings-summary가 내려주는 값) 중 무엇을 아바타 머리 위 배지로 보여줄지
+// 고른다. 아직 못 딴 상위 칭호를 목록에 넣지 않는다 — 지금 실제로 붙어 있는
+// 칭호 4개(트랙) 중에서만 고르게 해서 안 딴 걸 딴 것처럼 보여주지 않는다.
+const TITLE_TRACK_META = {
+  growth: { icon: '🐾', label: '펫 이름' },
+  explorer: { icon: '🧭', label: '탐험가 칭호' },
+  visit: { icon: '🔥', label: '방문 칭호' },
+  recommend: { icon: '👍', label: '추천 칭호' },
+};
+
+function getEquippedTitleTrack() {
+  try {
+    return localStorage.getItem('savemap-avatar-title-track') || 'growth';
+  } catch {
+    return 'growth';
+  }
+}
+
+function setEquippedTitleTrack(track) {
+  try {
+    localStorage.setItem('savemap-avatar-title-track', track);
+  } catch {
+    // 무시 — 이번 화면엔 이미 반영돼 있다.
+  }
+}
+
+function resolveEquippedTitleText() {
+  if (!lastGrowthInfo || !lastSavingsSummaryData) return '';
+  const byTrack = {
+    growth: lastGrowthInfo.name,
+    explorer: lastSavingsSummaryData.explorer_title,
+    visit: lastSavingsSummaryData.visit_title,
+    recommend: lastSavingsSummaryData.recommend_title,
+  };
+  return byTrack[getEquippedTitleTrack()] || lastGrowthInfo.name;
+}
+
+function renderTitlePicker() {
+  const list = document.getElementById('title-picker-list');
+  if (!list || !lastGrowthInfo || !lastSavingsSummaryData) return;
+  const current = getEquippedTitleTrack();
+  const options = [
+    { track: 'growth', text: lastGrowthInfo.name },
+    { track: 'explorer', text: lastSavingsSummaryData.explorer_title },
+    { track: 'visit', text: lastSavingsSummaryData.visit_title },
+    { track: 'recommend', text: lastSavingsSummaryData.recommend_title },
+  ];
+  list.innerHTML = options.map(({ track, text }) => {
+    const meta = TITLE_TRACK_META[track];
+    const active = track === current;
+    return `
+      <button type="button" class="title-picker-row${active ? ' active' : ''}" data-track="${track}">
+        <span class="title-picker-icon" aria-hidden="true">${meta.icon}</span>
+        <span class="title-picker-text">
+          <span class="title-picker-label">${meta.label}</span>
+          <span class="title-picker-value">${escapeHtml(text)}</span>
+        </span>
+        ${active ? `<span class="title-picker-check" aria-hidden="true">${ICONS.check}</span>` : ''}
+      </button>`;
+  }).join('');
+  list.querySelectorAll('.title-picker-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      setEquippedTitleTrack(row.dataset.track);
+      document.getElementById('my-title').textContent = resolveEquippedTitleText();
+      renderTitlePicker(); // 체크 표시만 다시 그림
+    });
+  });
+}
+
+function openTitlePicker() {
+  renderTitlePicker();
+  document.getElementById('avatar-title-overlay')?.classList.remove('hidden');
+}
+['my-title', 'title-badge-explorer', 'title-badge-visit', 'title-badge-recommend'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('click', openTitlePicker);
+});
+document.getElementById('avatar-title-close-btn')?.addEventListener('click', () => {
+  document.getElementById('avatar-title-overlay')?.classList.add('hidden');
+});
 
 // blink(눈 감기)/tailWag(꼬리 흔들기) — 프레임마다 바뀌는 두 파츠. 정적인
 // 그림 하나를 CSS로 흔드는 대신, 실제 예전 다마고치처럼 "그림 자체가 몇
@@ -253,12 +393,13 @@ function pixelDogSvg({
   return `<svg viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
 }
 
-// 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
-// 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
 // 단계 인덱스는 AVATAR_GROWTH_STAGES 튜닝(9단계, 2026-08-26)에 맞춰
 // 목줄=2("목줄 찬 강아지"), 리본=5("리본 두른 강아지") 시작으로 갱신했다.
-function characterAvatarHtmlFor(stageIndex, frame = {}) {
-  const svg = pixelDogSvg({
+// svg만 만드는 부분을 따로 빼서(2026-08-27) 지도 마커(mapAvatarSvgFor)도
+// 장식(avatar-deco) 없이 같은 collar/bandana 규칙을 그대로 재사용한다 —
+// 임계값(2, 5)을 두 곳에 따로 적지 않기 위함.
+function avatarSvgFor(stageIndex, frame = {}) {
+  return pixelDogSvg({
     collar: stageIndex >= 2,
     bandana: stageIndex >= 5,
     blink: !!frame.blink,
@@ -267,6 +408,12 @@ function characterAvatarHtmlFor(stageIndex, frame = {}) {
     collarColor: getAvatarColorPref('collar'),
     bandanaColor: getAvatarColorPref('bandana'),
   });
+}
+
+// 성장 단계가 오를수록 목줄/리본이 늘어나고, 아바타 주변 장식(별)도 하나씩
+// 늘어난다 — 다마고치처럼 "같은 아이가 자라고 꾸며진다"는 느낌을 낸다.
+function characterAvatarHtmlFor(stageIndex, frame = {}) {
+  const svg = avatarSvgFor(stageIndex, frame);
   const decos = [];
   if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 5) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
@@ -319,11 +466,22 @@ function ensureAvatarSpriteLoopStarted() {
 // 슬라이드해 걸어다니는 것처럼 보이게 한다. 처음엔 바닥에 고정한 채 좌우로만
 // 움직였는데 "그렇게 움직이는게 아니라 동작 범위를 넓히라는거야"라는 후속
 // 지시를 받아 세로 방향(top)까지 포함한 2차원 이동으로 넓혔다 — .character-stage
-// 도 같이 키워서(style.css) 실제로 돌아다닐 만한 공간을 준다. 실제 다리를
-// 움직이는 옆모습 걷기 스프라이트까진 아니지만(정면 캐릭터 그림이라 좌우
-// 반전으로는 걷는 느낌이 안 남), CSS transition으로 부드럽게 미끄러지듯
-// 자리를 옮기고 그 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통
-// 튐(avatar-breathe)이 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
+// 도 같이 키워서(style.css) 실제로 돌아다닐 만한 공간을 준다.
+//
+// 움직임 자연스럽게 개선(MY탭 개편, 2026-08-27: "아바타 움직임 너무 촌스러움") —
+// 예전엔 (1) 정확히 3.6초마다 (2) 화면 어디로든 완전 무작위로 순간이동하듯
+// 미끄러졌다. 실제 동물처럼 보이도록 세 가지를 바꿨다:
+//   1) 방향 반전 — 왼쪽으로 이동할 땐 그림을 좌우로 뒤집어(scaleX(-1), CSS의
+//      .avatar-facing-left) "그 쪽을 보고 걷는" 신호를 준다. 정면 그림이라 진짜
+//      옆모습 걷기 스프라이트는 아니지만 방향 신호만으로도 훨씬 자연스럽다.
+//   2) 무작위 대기 — 매번 똑같은 간격이 아니라 2.5~6초 사이로 들쭉날쭉하게
+//      다음 이동을 예약한다(setInterval 대신 재귀 setTimeout).
+//   3) 근거리 이동 — 화면 전체를 한 번에 건너뛰지 않고, 현재 위치에서 가까운
+//      범위(stage 크기의 절반 정도) 안으로만 다음 자리를 고른다. CSS
+//      트랜지션도 약한 오버슈트(cubic-bezier)를 줘서 도착할 때 살짝 튕기듯
+//      멈춘다 — 그 사이사이 눈 깜빡임/꼬리 흔들기(스프라이트 루프)와 통통 튐
+//      (avatar-breathe)이 계속 돌고 있어서 "가만히 서 있지 않는다"는 인상을 준다.
+const AVATAR_ROAM_RADIUS_RATIO = 0.55;
 let avatarRoamTimer = null;
 
 function roamAvatarToRandomSpot() {
@@ -332,15 +490,30 @@ function roamAvatarToRandomSpot() {
   if (!stage || !avatarEl) return;
   const maxLeft = Math.max(stage.clientWidth - (avatarEl.offsetWidth || 88), 0);
   const maxTop = Math.max(stage.clientHeight - (avatarEl.offsetHeight || 100), 0);
-  avatarEl.style.left = `${Math.round(Math.random() * maxLeft)}px`;
-  avatarEl.style.top = `${Math.round(Math.random() * maxTop)}px`;
+  const curLeft = parseFloat(avatarEl.style.left) || 0;
+  const curTop = parseFloat(avatarEl.style.top) || 0;
+
+  const radiusX = Math.max(maxLeft * AVATAR_ROAM_RADIUS_RATIO, 40);
+  const radiusY = Math.max(maxTop * AVATAR_ROAM_RADIUS_RATIO, 40);
+  const nextLeft = Math.min(Math.max(curLeft + (Math.random() * 2 - 1) * radiusX, 0), maxLeft);
+  const nextTop = Math.min(Math.max(curTop + (Math.random() * 2 - 1) * radiusY, 0), maxTop);
+
+  avatarEl.classList.toggle('avatar-facing-left', nextLeft < curLeft - 2); // 2px 이내 오차는 방향전환으로 안 침
+  avatarEl.style.left = `${Math.round(nextLeft)}px`;
+  avatarEl.style.top = `${Math.round(nextTop)}px`;
 }
 
 function ensureAvatarRoamStarted() {
   if (avatarRoamTimer) return;
   roamAvatarToRandomSpot(); // 첫 자리부터 무작위로 — 항상 가운데 고정이면 "돌아다닌다"는 느낌이 안 난다
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return; // 한 자리에 고정
-  avatarRoamTimer = setInterval(roamAvatarToRandomSpot, 3600);
+  const scheduleNext = () => {
+    avatarRoamTimer = setTimeout(() => {
+      roamAvatarToRandomSpot();
+      scheduleNext();
+    }, 2500 + Math.random() * 3500);
+  };
+  scheduleNext();
 }
 
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
@@ -617,14 +790,11 @@ async function loadMyProfile() {
     renderAvatarSpriteFrame();
     const avatarEl = document.getElementById('character-avatar');
     avatarEl.classList.toggle('avatar-halo', growth.isMaxStage);
-    // 꾸미기 커스터마이징(2026-08-26) — 목줄(단계 2+)/리본(단계 5+) 잠금해제
-    // 여부에 맞춰 스와치 영역을 보이거나 숨긴다. characterAvatarHtmlFor의
-    // collar/bandana 임계값(2, 5)과 반드시 같은 값이어야 한다.
-    document.getElementById('avatar-customize-collar')?.classList.toggle('hidden', growth.stageIndex < 2);
-    document.getElementById('avatar-customize-bandana')?.classList.toggle('hidden', growth.stageIndex < 5);
-    if (growth.stageIndex >= 2) renderAvatarSwatches('collar');
-    if (growth.stageIndex >= 5) renderAvatarSwatches('bandana');
-    document.getElementById('my-title').textContent = growth.name;
+    // 옷장/칭호 선택(2026-08-27) — 매번 새로 계산하지 않고 캐시해서, 모달을
+    // 열 때(openAvatarCloset/renderTitlePicker)는 API를 다시 안 부른다.
+    lastGrowthInfo = growth;
+    lastSavingsSummaryData = s;
+    document.getElementById('my-title').textContent = resolveEquippedTitleText();
     document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
     document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;
     document.getElementById('my-next-level-text').textContent = growth.isMaxStage
@@ -954,6 +1124,20 @@ function unverifiedTreasureMarkerImage() {
   return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(26, 26));
 }
 
+// 내 위치 = 내 아바타(2026-08-27, "미니맵에 아바타를 나타낼 수 있게") — 예전엔
+// 파란 원 하나였다. MY탭에서 키우는 그 강아지가 지도 위에서도 "나"를 나타내는
+// 게 가장 자연스러운 은유라고 판단해, 검색 기준점 마커를 avatarSvgFor()로
+// 그린 도트 강아지로 바꿨다(최적안 선정, 여러 화면에 흩어진 마커를 늘리는
+// 대신 이미 있는 "내 위치" 자리를 아바타로 대체). 로그인 전이거나 MY탭을 아직
+// 한 번도 안 열어서 lastGrowthInfo가 없으면 0단계(꾸밈 없는 기본 강아지)로
+// 보여준다 — 없는 성장치를 지어내지 않는다.
+function originAvatarOverlayContent() {
+  const el = document.createElement('div');
+  el.className = 'map-avatar-marker';
+  el.innerHTML = avatarSvgFor(lastGrowthInfo ? lastGrowthInfo.stageIndex : 0);
+  return el;
+}
+
 // 아직 절약 정보가 없는(카카오로만 발견된) 매장은 회색 마커로 구분한다.
 function discoveredMarkerImage() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18">
@@ -973,18 +1157,17 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
   const originPos = new kakao.maps.LatLng(originLat, originLng);
   bounds.extend(originPos);
 
-  // 내 위치(검색 기준점)는 파란 마커로 표현한다(사용자 지시, 2026-08-13) — 결과/
-  // 발견 마커와 확실히 구분되도록. 검색이 다시 실행될 때마다(내 위치 버튼, 주소
-  // 검색, 재검색 등 위치가 바뀔 때마다) 이 함수가 다시 그려서 항상 최신 위치를
+  // 내 위치(검색 기준점) = 내 아바타(2026-08-27, 위 originAvatarOverlayContent
+  // 참고) — 결과/발견 마커와는 색이 아니라 "다른 종류의 표시"(도트 강아지 vs
+  // 원형 마커)로 구분된다. 검색이 다시 실행될 때마다(내 위치 버튼, 주소 검색,
+  // 재검색 등 위치가 바뀔 때마다) 이 함수가 다시 그려서 항상 최신 위치를
   // 따라간다.
-  originMarker = new kakao.maps.Marker({
+  originMarker = new kakao.maps.CustomOverlay({
     map: kakaoMap,
     position: originPos,
-    image: new kakao.maps.MarkerImage(
-      'data:image/svg+xml;base64,' +
-        btoa('<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="#2563eb" stroke="white" stroke-width="3"/></svg>'),
-      new kakao.maps.Size(22, 22)
-    ),
+    content: originAvatarOverlayContent(),
+    yAnchor: 1,
+    zIndex: 3,
   });
 
   results.forEach((r) => {

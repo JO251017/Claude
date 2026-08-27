@@ -298,18 +298,13 @@
                    옮겨서 하나의 성장 모듈로 묶는다. -->
               <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
               <div class="saving-next" id="my-next-level-text">다음 성장까지 10</div>
-              <!-- 아바타 꾸미기 커스터마이징(2026-08-26) — 목줄/리본을 잠금해제한
-                   단계에 도달했을 때만 loadMyProfile()이 hidden을 뗀다. 색만
-                   고르는 취향 설정이라 서버 저장 없이 기기별 localStorage에만
-                   남는다(app.js getAvatarColorPref/setAvatarColorPref). -->
-              <div class="avatar-customize hidden" id="avatar-customize-collar">
-                <span class="avatar-customize-label">목줄 색</span>
-                <div class="avatar-swatch-row" id="avatar-swatch-collar"></div>
-              </div>
-              <div class="avatar-customize hidden" id="avatar-customize-bandana">
-                <span class="avatar-customize-label">리본 색</span>
-                <div class="avatar-swatch-row" id="avatar-swatch-bandana"></div>
-              </div>
+              <!-- 아바타 옷장(MY탭 개편, 2026-08-27: "아바타 옷장 이런게 안보임
+                   추가할 것") — 예전엔 목줄/리본 색 스와치가 카드 안에 바로
+                   나열돼 있었다. 실제 "옷장"처럼 별도 화면으로 분리해서 카드는
+                   깔끔하게 두고, 꾸미기는 이 버튼을 눌러야 보이게 했다. -->
+              <button type="button" id="avatar-closet-btn" class="avatar-closet-btn">
+                <span aria-hidden="true">👕</span> 옷장
+              </button>
             </div>
             <!-- 절약 요약 재구조화(2-1, 2026-08-13) — 예전엔 all-time 누적 절약
                  하나만 보여줬다. "오늘 얼마나 아꼈는지"가 매일 다시 켜고 싶어지는
@@ -340,25 +335,36 @@
           <!-- 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 기반 레벨/캐릭터와
                독립된 축이라 hidden 처리하지 않고 먼저 노출한다. 셋 다 "실제 현장
                행동을 더 하면 칭호가 오른다"는 같은 유도 구조라 나란히 묶었다. -->
+          <!-- 셋 다 클릭하면 칭호 선택 시트가 열린다(2026-08-27) — "칭호는
+               클릭하면 여러개 보이게" 요청에 맞춰, 아바타 머리 위 배지뿐 아니라
+               이 타일들도 같은 진입점으로 만들었다. -->
+          <div class="section-caption">
+            <h3>나의 칭호</h3>
+            <span class="section-caption-hint">탭해서 이름표 바꾸기</span>
+          </div>
           <div class="title-badge-row">
-            <div class="title-badge-tile glass">
+            <button type="button" class="title-badge-tile glass" id="title-badge-explorer">
               <span class="title-badge-icon" aria-hidden="true">🧭</span>
               <span class="title-badge-name" id="my-explorer-title">동네 초보</span>
               <span class="title-badge-progress" id="my-explorer-count">0곳</span>
-            </div>
-            <div class="title-badge-tile glass">
+            </button>
+            <button type="button" class="title-badge-tile glass" id="title-badge-visit">
               <span class="title-badge-icon" aria-hidden="true">🔥</span>
               <span class="title-badge-name" id="my-visit-title">방문 새내기</span>
               <span class="title-badge-progress" id="my-visit-count">0회</span>
-            </div>
-            <div class="title-badge-tile glass">
+            </button>
+            <button type="button" class="title-badge-tile glass" id="title-badge-recommend">
               <span class="title-badge-icon" aria-hidden="true">👍</span>
               <span class="title-badge-name" id="my-recommend-title">추천 새내기</span>
               <span class="title-badge-progress" id="my-recommend-count">0회</span>
-            </div>
+            </button>
           </div>
 
-          <div class="stats-grid">
+          <!-- my-asset-count 타일은 계속 hidden이라(EXCHANGE 탭 자체가 hidden,
+               아래 주석 참고) 실제로는 항상 이 한 칸만 보인다 — 2칸 그리드로
+               두면 옆에 빈 칸처럼 보여서(2026-08-27 정리) stats-grid--single로
+               한 칸만 있을 때 전용 레이아웃을 쓴다. -->
+          <div class="stats-grid stats-grid--single">
             <div class="stat-tile"><span id="my-cert-count">0</span><label>절약 인증</label></div>
             <!-- EXCHANGE 재도입과 같이 노출했다가 다시 hidden 처리(사용자 지시,
                  2026-08-18) — EXCHANGE 탭 자체가 hidden이라 이 통계만 남겨두면
@@ -374,6 +380,50 @@
                /users/me/merchant-status를 확인해서 조건부로 hidden을 뗀다. 서버도
                require_merchant_verified로 실제 접근을 막으므로 이 hidden은 UX용일 뿐이다. -->
           <button type="button" id="merchant-console-btn" class="btn-secondary hidden" data-goto="merchant">사업자 콘솔</button>
+        </div>
+      </div>
+
+      <!-- 아바타 옷장(2026-08-27) — .detail-overlay/.detail-sheet(다른 화면의
+           상세/AI 절약 플랜 시트와 동일한 패턴)을 그대로 재사용해 앱 전체
+           상호작용 언어를 하나로 맞춘다. 목줄/리본은 "슬롯" 단위로 잠금해제되고
+           (해당 단계 도달 시) 그 안에서 색만 고르는 구조라, 잠긴 슬롯은 섹션
+           전체를 흐리게 하고 안내 문구만 보여준다. -->
+      <div id="avatar-closet-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="avatar-closet-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="avatar-closet-content">
+            <h2 class="closet-title">👕 아바타 옷장</h2>
+            <div class="closet-preview" id="closet-avatar-preview"></div>
+            <div class="closet-section" id="closet-section-collar">
+              <div class="closet-section-header">
+                <span>목줄</span>
+                <span class="closet-lock-hint" id="closet-collar-hint"></span>
+              </div>
+              <div class="avatar-swatch-row" id="avatar-swatch-collar"></div>
+            </div>
+            <div class="closet-section" id="closet-section-bandana">
+              <div class="closet-section-header">
+                <span>리본</span>
+                <span class="closet-lock-hint" id="closet-bandana-hint"></span>
+              </div>
+              <div class="avatar-swatch-row" id="avatar-swatch-bandana"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 칭호 선택(2026-08-27: "칭호는 클릭하면 여러개 보이게... 선택하면
+           체크되는걸로") — 아바타 머리 위 배지(#my-title)를 누르면 열린다.
+           성장 단계 이름 + 탐험가/방문/추천 칭호 중 현재 실제로 획득한 것만
+           고를 수 있다(아직 못 딴 칭호를 보여주면 지어낸 성취처럼 보일 수
+           있어 목록에서 제외). -->
+      <div id="avatar-title-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="avatar-title-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="avatar-title-content">
+            <h2 class="closet-title">🏷️ 칭호 선택</h2>
+            <div class="title-picker-list" id="title-picker-list"></div>
+          </div>
         </div>
       </div>
     </section>
