@@ -795,6 +795,20 @@ body {
   margin-bottom: 8px;
 }
 
+/* --- KOSIS 물가 맥락 한 줄(2026-08-28) --- */
+/* location-fallback-notice와 같은 톤 — 매장 가격 계산과 무관한 전국 통계
+   맥락임을 시각적으로도 "경고성"이 아니라 "참고 정보"로 보이게 한다. */
+.market-context-notice {
+  color: var(--ink-soft);
+  text-align: center;
+  padding: 8px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
 /* --- Forms (제보/사업자 화면) --- */
 .card-form {
   background: var(--glass-bg-strong);

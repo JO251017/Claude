@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # 엔드포인트라 URL은 코드에 고정하고 키만 환경변수로 받는다. 미설정이면 날씨를 아예
     # 조회하지 않는다 — 검색/랭킹은 지금과 완전히 동일하게 동작한다(지어내지 않기).
     weather_api_key: str = ""
+    # KOSIS(국가통계포털) Open API — 소비자물가지수(총지수) 조회용 "완성된 요청 URL".
+    # good_price_api_url 등과 같은 이유로 코드에 orgId/tblId/itmId를 박지 않는다 —
+    # 이 값들은 KOSIS 활용신청 승인 후 통계표 화면에서 사용자가 직접 항목(총지수/
+    # 지역 등)을 고르면 KOSIS가 URL 생성기로 만들어주는 값이라, 미리 확정할 수
+    # 없다(코드로 확인 못 하는 값을 지어내지 않는다). URL 자체에 apiKey까지 포함된
+    # 상태로 그대로 받는다. 미설정이면 물가 맥락 문구를 아예 안 보여준다.
+    kosis_cpi_api_url: str = ""
 
     supabase_url: str = ""
     supabase_anon_key: str = ""

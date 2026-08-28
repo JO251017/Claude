@@ -98,12 +98,24 @@ class WeatherInfo(BaseModel):
     label: str
 
 
+class MarketContextInfo(BaseModel):
+    """국가통계포털(KOSIS) 소비자물가지수(총지수) 맥락 한 줄. 매장별 가격/절약
+    계산에는 전혀 쓰이지 않는다 — 전국 단일 통계를 그대로 보여줄 뿐이다(지어낸
+    "여기서 얼마 아꼈다"류 비교 아님). 조회 실패/키 미설정이면 null."""
+
+    label: str
+    period: str
+    index: float
+    yoy_pct: float | None = None
+
+
 class SearchResponse(BaseModel):
     count: int
     radius_km: float
     results: list[SearchResultItem]
     discovered_places: list[DiscoveredPlaceItem] = []
     weather: WeatherInfo | None = None
+    market_context: MarketContextInfo | None = None
 
 
 class SearchQuery(BaseModel):

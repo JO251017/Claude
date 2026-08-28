@@ -6,7 +6,7 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionDep
-from app.api.schemas.search import DiscoveredPlaceItem, SearchResponse, WeatherInfo
+from app.api.schemas.search import DiscoveredPlaceItem, MarketContextInfo, SearchResponse, WeatherInfo
 from app.core.config import settings
 from app.core.errors import RadiusOutOfRangeError
 from app.domain.enums import Category, PaymentMethodType, SearchSort
@@ -20,6 +20,7 @@ from app.engine.result_assembly import build_search_result_item
 from app.engine.rule_filter import rule_filter
 from app.engine.spatial_query import query_places_without_offer, query_within_radius
 from app.gamification.service import get_dining_counts
+from app.integrations.kosis import CpiSnapshot, get_latest_cpi
 from app.integrations.weather import WeatherSnapshot, get_current_weather
 from app.sources.store_visit.service import (
     get_discover_counts,
@@ -48,6 +49,16 @@ def _weather_info(snapshot: WeatherSnapshot) -> WeatherInfo:
     )
 
 
+def _market_context_info(snapshot: CpiSnapshot) -> MarketContextInfo:
+    year, month = snapshot.period[:4], snapshot.period[4:6].lstrip("0") or "0"
+    label = f"소비자물가지수 {year}년 {month}월 기준 {snapshot.index:.1f}(2020=100)"
+    if snapshot.yoy_pct is not None:
+        label += f" · 전년 동월 대비 {snapshot.yoy_pct:+.1f}%"
+    return MarketContextInfo(
+        label=label, period=snapshot.period, index=snapshot.index, yoy_pct=snapshot.yoy_pct
+    )
+
+
 @router.get("/search", response_model=SearchResponse)
 async def search(
     lat: float = Query(...),
@@ -65,11 +76,12 @@ async def search(
     if radius <= 0 or radius > settings.search_max_radius_km:
         raise RadiusOutOfRangeError()
 
-    # 날씨 조회는 DB 쿼리와 서로 무관한 I/O라 gather로 동시에 돌려서, 랭킹에 날씨를
-    # 반영하느라 응답이 느려지는 일이 없게 한다(키 미설정/실패 시 weather=None).
-    rows, weather = await asyncio.gather(
+    # 날씨/물가 조회는 DB 쿼리와 서로 무관한 I/O라 gather로 동시에 돌려서, 응답이
+    # 느려지는 일이 없게 한다(키 미설정/실패 시 각각 None).
+    rows, weather, cpi = await asyncio.gather(
         query_within_radius(session, lat, lng, radius, row_limit=settings.search_row_fetch_limit),
         get_current_weather(lat, lng),
+        get_latest_cpi(),
     )
     rows = rule_filter(rows, category=category)
 
@@ -172,4 +184,5 @@ async def search(
         results=results,
         discovered_places=discovered_places,
         weather=_weather_info(weather) if weather else None,
+        market_context=_market_context_info(cpi) if cpi else None,
     )

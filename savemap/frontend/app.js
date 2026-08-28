@@ -2342,9 +2342,16 @@ async function runSearch() {
     renderWeatherBadge(data.weather);
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results, lastDiscovered);
 
+    // KOSIS 소비자물가지수 맥락(2026-08-28) — 매장별 가격 계산과는 무관, 전국
+    // 단일 통계를 있는 그대로 한 줄로만 보여준다. 서버가 안 주면(키 미설정/조회
+    // 실패) 그냥 안 보인다.
+    const marketContextHtml = data.market_context
+      ? `<p class="market-context-notice">📊 ${escapeHtml(data.market_context.label)}</p>`
+      : '';
+
     if (data.results.length === 0 && lastDiscovered.length === 0) {
       countEl.textContent = '주변에 절약 기회가 없어요';
-      resultsEl.innerHTML = `${fallbackNoticeHtml}<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>`;
+      resultsEl.innerHTML = `${fallbackNoticeHtml}${marketContextHtml}<p class="empty-msg">반경을 넓혀서 다시 찾아보세요.</p>`;
       return;
     }
 
@@ -2418,7 +2425,7 @@ async function runSearch() {
       </div>`
       : '';
 
-    resultsEl.innerHTML = fallbackNoticeHtml + offerCardsHtml + discoveredHtml;
+    resultsEl.innerHTML = fallbackNoticeHtml + marketContextHtml + offerCardsHtml + discoveredHtml;
 
     resultsEl.querySelectorAll('.result-card').forEach((card) => {
       card.addEventListener('click', () => openOfferDetail(lastResults[Number(card.dataset.idx)]));
