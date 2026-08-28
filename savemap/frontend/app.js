@@ -852,6 +852,9 @@ function switchScreen(name) {
   // 재던 clientWidth가 0이었을 수 있다(화면이 안 보이면 폭도 0) — 진짜로 보이는
   // 시점에 한 번 더 굴려서 처음 봤을 때부터 자리가 잡혀 있게 한다.
   if (name === 'my') roamAvatarToRandomSpot();
+  // 날씨 이펙트 캔버스도 안 보이는 동안은 rAF를 꺼서 배터리를 안 축낸다(2026-08-28).
+  if (name === 'map') resumeWeatherFxIfNeeded();
+  else pauseWeatherFx();
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -1173,6 +1176,153 @@ function renderWeatherBadge(weather) {
   weatherBadge.textContent = `${weather.icon} ${weather.label}${tempText}`;
   weatherBadge.classList.remove('hidden');
 }
+
+// --- 날씨 다이나믹 이펙트(2026-08-28, "포켓몬고는 맵에 비가 내리던데 그렇게
+// 해봐") — 배지 하나로는 "단순하다"는 피드백을 받아, 지도 위에 실제로 비/눈이
+// 떨어지는 캔버스 파티클 + 하늘이 어두워지는 틴트를 얹는다. 지도 자체(카카오
+// SDK)는 전혀 안 건드리고 완전히 별개인 오버레이 레이어라 지도 조작과 무관하다. ---
+const weatherFxCanvas = document.getElementById('weather-fx-canvas');
+const weatherFxCtx = weatherFxCanvas ? weatherFxCanvas.getContext('2d') : null;
+const weatherFxTint = document.getElementById('weather-fx-tint');
+
+let weatherFxCondition = null; // 'rain' | 'snow' | null(꺼짐)
+let weatherFxParticles = [];
+let weatherFxRafId = null;
+let weatherFxResizeObserver = null;
+
+function _weatherFxReducedMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function _resizeWeatherFxCanvas() {
+  if (!weatherFxCanvas) return;
+  const rect = weatherFxCanvas.getBoundingClientRect();
+  weatherFxCanvas.width = Math.max(1, Math.round(rect.width));
+  weatherFxCanvas.height = Math.max(1, Math.round(rect.height));
+}
+
+function _seedWeatherFxParticles(condition) {
+  const w = weatherFxCanvas.width;
+  const h = weatherFxCanvas.height;
+  const count = condition === 'snow' ? 70 : 130;
+  weatherFxParticles = Array.from({ length: count }, () =>
+    condition === 'snow'
+      ? {
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: 1.5 + Math.random() * 2.5,
+          speed: 0.6 + Math.random() * 1.2,
+          drift: Math.random() * Math.PI * 2,
+        }
+      : {
+          x: Math.random() * w,
+          y: Math.random() * h,
+          len: 10 + Math.random() * 14,
+          speed: 7 + Math.random() * 6,
+        }
+  );
+}
+
+function _drawWeatherFxFrame() {
+  if (!weatherFxCtx || !weatherFxCondition) return;
+  const w = weatherFxCanvas.width;
+  const h = weatherFxCanvas.height;
+  weatherFxCtx.clearRect(0, 0, w, h);
+
+  if (weatherFxCondition === 'rain') {
+    weatherFxCtx.strokeStyle = 'rgba(191, 219, 254, 0.55)';
+    weatherFxCtx.lineWidth = 1.4;
+    weatherFxCtx.lineCap = 'round';
+    for (const p of weatherFxParticles) {
+      weatherFxCtx.beginPath();
+      weatherFxCtx.moveTo(p.x, p.y);
+      weatherFxCtx.lineTo(p.x - p.len * 0.28, p.y + p.len); // 살짝 비스듬한 빗줄기
+      weatherFxCtx.stroke();
+      p.y += p.speed * 2.4;
+      p.x -= p.speed * 0.28;
+      if (p.y > h) {
+        p.y = -20;
+        p.x = Math.random() * w;
+      }
+      if (p.x < -20) p.x = w + 20;
+    }
+  } else if (weatherFxCondition === 'snow') {
+    weatherFxCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    for (const p of weatherFxParticles) {
+      weatherFxCtx.beginPath();
+      weatherFxCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      weatherFxCtx.fill();
+      p.y += p.speed;
+      p.drift += 0.02;
+      p.x += Math.sin(p.drift) * 0.6;
+      if (p.y > h) {
+        p.y = -10;
+        p.x = Math.random() * w;
+      }
+    }
+  }
+
+  weatherFxRafId = requestAnimationFrame(_drawWeatherFxFrame);
+}
+
+function pauseWeatherFx() {
+  if (weatherFxRafId) {
+    cancelAnimationFrame(weatherFxRafId);
+    weatherFxRafId = null;
+  }
+}
+
+// 지도 화면이 안 보일 때도(다른 탭) 계속 rAF가 돌면 배터리만 축낸다 — switchScreen이
+// 화면을 벗어날 때 pauseWeatherFx, 돌아올 때 이걸 부른다.
+function resumeWeatherFxIfNeeded() {
+  if (weatherFxCondition && !weatherFxRafId && !_weatherFxReducedMotion()) {
+    _resizeWeatherFxCanvas();
+    _drawWeatherFxFrame();
+  }
+}
+
+function startWeatherFx(condition) {
+  if (!weatherFxCanvas || !weatherFxCtx) return;
+  if (weatherFxCondition === condition && weatherFxRafId) return; // 이미 같은 걸로 돌고 있음
+  pauseWeatherFx();
+  weatherFxCondition = condition;
+  weatherFxTint?.classList.add('active');
+  weatherFxTint?.classList.toggle('weather-fx-tint--snow', condition === 'snow');
+
+  if (_weatherFxReducedMotion()) return; // 하늘 틴트만 켜고 파티클 애니메이션은 생략
+
+  _resizeWeatherFxCanvas();
+  _seedWeatherFxParticles(condition);
+  _drawWeatherFxFrame();
+
+  if (!weatherFxResizeObserver && window.ResizeObserver) {
+    weatherFxResizeObserver = new ResizeObserver(() => {
+      _resizeWeatherFxCanvas();
+      if (weatherFxCondition) _seedWeatherFxParticles(weatherFxCondition);
+    });
+    weatherFxResizeObserver.observe(weatherFxCanvas);
+  }
+}
+
+function stopWeatherFx() {
+  weatherFxCondition = null;
+  weatherFxTint?.classList.remove('active');
+  pauseWeatherFx();
+  if (weatherFxCtx && weatherFxCanvas) {
+    weatherFxCtx.clearRect(0, 0, weatherFxCanvas.width, weatherFxCanvas.height);
+  }
+}
+
+// 서버가 준 weather 그대로만 반영한다 — 맑음/조회 실패/키 미설정이면 그냥 꺼둔다
+// (지어낸 비/눈을 보여주지 않는다).
+function applyWeatherFx(weather) {
+  if (weather && (weather.condition === 'rain' || weather.condition === 'snow')) {
+    startWeatherFx(weather.condition);
+  } else {
+    stopWeatherFx();
+  }
+}
+
 const MAX_MAP_LEVEL = 14; // 이 레벨까지는 축소해도 재검색 반경 표시가 국토 전체 스케일까지 따라간다
 
 function radiusKmForZoomLevel(level) {
@@ -2340,6 +2490,7 @@ async function runSearch() {
     lastResults = data.results;
     lastDiscovered = data.discovered_places || [];
     renderWeatherBadge(data.weather);
+    applyWeatherFx(data.weather);
     renderMapMarkers(parseFloat(lat), parseFloat(lng), data.results, lastDiscovered);
 
     // KOSIS 소비자물가지수 맥락(2026-08-28) — 매장별 가격 계산과는 무관, 전국

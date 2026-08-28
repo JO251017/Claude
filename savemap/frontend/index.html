@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260828a" />
+  <link rel="stylesheet" href="style.css?v=20260828b" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -16,6 +16,14 @@
     <!-- MAP: 어디서 아낄 수 있는가 -->
     <section id="screen-map" class="screen active">
       <div id="map" class="map-fullscreen"></div>
+
+      <!-- 날씨 다이나믹 이펙트(2026-08-28, 사용자 지시 — "포켓몬고는 맵에 비가
+           내리던데 그렇게 해봐"). 지도 위에 겹치는 레이어 2개 — 틴트(하늘 어두워지는
+           느낌)와 캔버스(빗줄기/눈 파티클). 둘 다 pointer-events:none이라 지도
+           드래그/클릭을 절대 막지 않는다. weather가 rain/snow가 아니면(맑음/조회
+           실패/키 미설정) app.js가 그대로 꺼둔다. -->
+      <div class="weather-fx-tint" id="weather-fx-tint"></div>
+      <canvas class="weather-fx-canvas" id="weather-fx-canvas"></canvas>
 
       <div class="floating-topbar">
         <div class="topbar-row">
@@ -674,6 +682,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260828a"></script>
+  <script src="app.js?v=20260828b"></script>
 </body>
 </html>
