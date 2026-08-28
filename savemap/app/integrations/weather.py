@@ -126,7 +126,12 @@ def _parse_snapshot(items: list[dict], observed_at: datetime) -> WeatherSnapshot
 async def get_current_weather(lat: float, lng: float) -> WeatherSnapshot | None:
     """현재 날씨를 가져온다. 키 미설정, 조회 실패, 응답 파싱 실패 등 어떤 이유로든
     실패하면 None을 준다 — 검색/랭킹 흐름을 절대 막지 않는 부가 기능이다."""
-    if not settings.weather_api_key:
+    # 기상청 API도 data.go.kr 소속이라, 착한가격업소/지역화폐 어댑터가 이미 쓰는
+    # 공용 인증키(DATA_GO_KR_KEY)로 그대로 조회된다(제품별 "활용신청" 승인만
+    # 별도로 필요) — dine_out_price.py/local_currency.py와 같은 폴백 패턴.
+    # 전용 키(WEATHER_API_KEY)를 따로 넣으면 그게 우선한다.
+    service_key = settings.weather_api_key or settings.data_go_kr_key
+    if not service_key:
         return None
 
     nx, ny = _latlng_to_grid(lat, lng)
@@ -140,7 +145,7 @@ async def get_current_weather(lat: float, lng: float) -> WeatherSnapshot | None:
             resp = await client.get(
                 KMA_BASE_URL,
                 params={
-                    "serviceKey": settings.weather_api_key,
+                    "serviceKey": service_key,
                     "pageNo": 1,
                     "numOfRows": 10,
                     "dataType": "JSON",

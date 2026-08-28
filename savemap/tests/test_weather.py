@@ -45,8 +45,9 @@ def test_parse_snapshot_missing_or_malformed_values_defaults_to_clear_with_no_te
     assert snap.is_cold is False
 
 
-def test_get_current_weather_skips_when_no_key(monkeypatch):
+def test_get_current_weather_skips_when_no_key_at_all(monkeypatch):
     monkeypatch.setattr(weather.settings, "weather_api_key", "")
+    monkeypatch.setattr(weather.settings, "data_go_kr_key", "")
     result = asyncio.run(weather.get_current_weather(37.5665, 126.9780))
     assert result is None
 
@@ -66,6 +67,47 @@ def _fake_kma_response(pty: str, t1h: str) -> httpx.Response:
         }
     }
     return httpx.Response(200, request=request, json=body)
+
+
+def test_get_current_weather_falls_back_to_shared_data_go_kr_key(monkeypatch):
+    """기상청 API도 data.go.kr 소속이라, 착한가격업소/지역화폐 어댑터가 이미
+    쓰는 공용 인증키로 조회돼야 한다 — 전용 키(WEATHER_API_KEY)를 새로 안 받아도
+    된다는 게 이 폴백의 핵심."""
+    weather._weather_cache.clear()
+    monkeypatch.setattr(weather.settings, "weather_api_key", "")
+    monkeypatch.setattr(weather.settings, "data_go_kr_key", "shared-data-go-kr-key")
+    response = _fake_kma_response("0", "18.0")
+
+    captured_params = {}
+
+    async def fake_get(self, url, params=None, **kwargs):
+        captured_params.update(params or {})
+        return response
+
+    with patch("httpx.AsyncClient.get", new=fake_get):
+        result = asyncio.run(weather.get_current_weather(37.5665, 126.9780))
+
+    assert result is not None
+    assert result.condition == "clear"
+    assert captured_params["serviceKey"] == "shared-data-go-kr-key"
+
+
+def test_get_current_weather_prefers_dedicated_key_over_shared(monkeypatch):
+    weather._weather_cache.clear()
+    monkeypatch.setattr(weather.settings, "weather_api_key", "dedicated-key")
+    monkeypatch.setattr(weather.settings, "data_go_kr_key", "shared-data-go-kr-key")
+    response = _fake_kma_response("0", "18.0")
+
+    captured_params = {}
+
+    async def fake_get(self, url, params=None, **kwargs):
+        captured_params.update(params or {})
+        return response
+
+    with patch("httpx.AsyncClient.get", new=fake_get):
+        asyncio.run(weather.get_current_weather(37.5665, 126.9780))
+
+    assert captured_params["serviceKey"] == "dedicated-key"
 
 
 def test_get_current_weather_returns_snapshot_and_caches(monkeypatch):

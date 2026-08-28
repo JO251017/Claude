@@ -33,11 +33,12 @@ class Settings(BaseSettings):
     # 환경변수로 받는다. 미설정이면 기존 매장의 결제수단 검증 배지를 그대로 비워둔다
     # (자기신고만 남고 검증은 안 붙는다, 지어내지 않기).
     local_currency_api_url: str = ""
-    # 기상청 단기예보 조회서비스(공공데이터포털 apis.data.go.kr, "일반 인증키(Decoding)")
-    # — 초단기실황(getUltraSrtNcst)으로 현재 날씨(강수형태/기온)를 가져온다. 이 상품은
-    # good_price/local_currency처럼 UDDI가 회차마다 바뀌는 파일데이터가 아니라 안정된
-    # 엔드포인트라 URL은 코드에 고정하고 키만 환경변수로 받는다. 미설정이면 날씨를 아예
-    # 조회하지 않는다 — 검색/랭킹은 지금과 완전히 동일하게 동작한다(지어내지 않기).
+    # 기상청 단기예보 조회서비스(공공데이터포털 apis.data.go.kr) — 초단기실황
+    # (getUltraSrtNcst)으로 현재 날씨(강수형태/기온)를 가져온다. 이 상품도 data.go.kr
+    # 소속이라 DATA_GO_KR_KEY(공용 인증키, 제품별 활용신청만 별도)로 이미 조회된다
+    # (app/integrations/weather.py의 폴백 참고) — 이 값은 그 공용 키와 별도로 전용
+    # 키를 쓰고 싶을 때만 채운다. 둘 다 없으면 날씨를 아예 조회하지 않는다 — 검색/
+    # 랭킹은 지금과 완전히 동일하게 동작한다(지어내지 않기).
     weather_api_key: str = ""
     # KOSIS(국가통계포털) Open API — 소비자물가지수(총지수) 조회용 "완성된 요청 URL".
     # good_price_api_url 등과 같은 이유로 코드에 orgId/tblId/itmId를 박지 않는다 —
