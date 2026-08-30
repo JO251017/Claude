@@ -38,6 +38,9 @@ def test_non_image_content_type_raises_report_image_fetch_error():
 
 
 def test_generate_content_failure_raises_ocr_service_error():
+    # 두 번 다 503이면(재시도 포함) 결국 OcrServiceError로 끝나야 한다 —
+    # AsyncMock의 return_value는 매 호출마다 같은 503을 재사용하므로 재시도가
+    # 있어도 최종 결과는 그대로 실패다.
     get_request = httpx.Request("GET", "https://example.com/a.jpg")
     get_response = httpx.Response(
         200, request=get_request, content=b"fake-bytes", headers={"content-type": "image/jpeg"}
@@ -47,9 +50,104 @@ def test_generate_content_failure_raises_ocr_service_error():
     with (
         patch("httpx.AsyncClient.get", new=AsyncMock(return_value=get_response)),
         patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)),
+        patch("asyncio.sleep", new=AsyncMock()),
     ):
         with pytest.raises(OcrServiceError):
             asyncio.run(_client().extract_from_image("https://example.com/a.jpg"))
+
+
+# --- 일시 과부하(429/503) 자동 재시도(2026-08-30) — 프로덕션에서 발견하기/추천은
+# 1초 안에 됐는데 사진 분석만 Gemini 쪽 503으로 15초 넘게 걸리다 실패한 사례를
+# 확인하고 추가. ---
+
+
+def test_generate_content_retries_once_on_503_then_succeeds():
+    get_request = httpx.Request("GET", "https://example.com/a.jpg")
+    get_response = httpx.Response(
+        200, request=get_request, content=b"fake-bytes", headers={"content-type": "image/jpeg"}
+    )
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    fail_response = httpx.Response(503, request=post_request)
+    ok_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": '{"price": 1000}'}]}}]},
+    )
+    mock_post = AsyncMock(side_effect=[fail_response, ok_response])
+    mock_sleep = AsyncMock()
+    with (
+        patch("httpx.AsyncClient.get", new=AsyncMock(return_value=get_response)),
+        patch("httpx.AsyncClient.post", new=mock_post),
+        patch("asyncio.sleep", new=mock_sleep),
+    ):
+        result = asyncio.run(_client().extract_from_image("https://example.com/a.jpg"))
+
+    assert result.price == 1000
+    assert mock_post.call_count == 2  # 재시도로 두 번째 시도에서 성공
+    mock_sleep.assert_awaited_once()
+
+
+def test_generate_content_retries_once_on_429_then_succeeds():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    fail_response = httpx.Response(429, request=post_request)
+    ok_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "설명 문장"}]}}]},
+    )
+    mock_post = AsyncMock(side_effect=[fail_response, ok_response])
+    with (
+        patch("httpx.AsyncClient.post", new=mock_post),
+        patch("asyncio.sleep", new=AsyncMock()),
+    ):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+            )
+        )
+    assert result == "설명 문장"
+    assert mock_post.call_count == 2
+
+
+def test_generate_content_does_not_retry_non_retryable_status():
+    # 400(잘못된 요청) 같은 건 재시도해도 똑같이 실패할 뿐이니 딱 한 번만 부른다.
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    bad_response = httpx.Response(400, request=post_request)
+    mock_post = AsyncMock(return_value=bad_response)
+    mock_sleep = AsyncMock()
+    with (
+        patch("httpx.AsyncClient.post", new=mock_post),
+        patch("asyncio.sleep", new=mock_sleep),
+    ):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+            )
+        )
+    assert result is None  # summarize_route는 fail-soft로 None
+    assert mock_post.call_count == 1
+    mock_sleep.assert_not_awaited()
+
+
+def test_generate_content_retries_on_network_error_then_succeeds():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    ok_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "복구됨"}]}}]},
+    )
+    mock_post = AsyncMock(side_effect=[httpx.ConnectTimeout("boom"), ok_response])
+    with (
+        patch("httpx.AsyncClient.post", new=mock_post),
+        patch("asyncio.sleep", new=AsyncMock()),
+    ):
+        result = asyncio.run(
+            _client().summarize_route(
+                _ROUTE_STOPS, budget=20000, party_size=1, total_spend=8000, total_savings=2000
+            )
+        )
+    assert result == "복구됨"
+    assert mock_post.call_count == 2
 
 
 def _mock_gemini_reply(get_response, text: str):

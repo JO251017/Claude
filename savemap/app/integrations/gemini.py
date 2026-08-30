@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import re
@@ -12,6 +13,14 @@ from app.domain.enums import Category
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com"
 GEMINI_MODEL = "gemini-flash-latest"
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+# 사진 분석 재시도(2026-08-30) — 프로덕션에서 발견하기/추천은 1초 안에 잘 됐는데
+# 사진 분석만 Gemini 쪽 일시 과부하(503)로 15초 넘게 걸리다 실패한 사례를 로그로
+# 확인했다. 429(속도제한)도 같은 성격 — 재시도하면 성공할 가능성이 있다. 그 외
+# 4xx(잘못된 키 등)는 몇 번을 다시 불러도 똑같이 실패할 뿐이라 재시도하지 않는다.
+_RETRYABLE_STATUS = {429, 503}
+_MAX_ATTEMPTS = 2
+_RETRY_DELAY_SEC = 1.5
 
 _VALID_CATEGORIES = {c.value for c in Category}
 
@@ -123,6 +132,31 @@ class GeminiVisionClient:
     def __init__(self, api_key: str | None = None):
         self._key = api_key or settings.gemini_api_key
 
+    async def _post_generate_content(self, client: httpx.AsyncClient, payload: dict) -> dict:
+        """generateContent 호출 — 일시 과부하(429/503) 또는 네트워크 오류(타임아웃 등)면
+        짧게 쉬었다가 한 번만 더 시도한다. 마지막 시도까지 실패하면(그 상태든, 네트워크
+        에러든) 그대로 올려서 호출부의 기존 httpx.HTTPError 처리(OcrServiceError 변환)가
+        그대로 먹게 한다 — 재시도 유무와 무관하게 최종 실패 처리 방식은 안 바뀐다."""
+        for attempt in range(_MAX_ATTEMPTS):
+            is_last = attempt == _MAX_ATTEMPTS - 1
+            try:
+                resp = await client.post(
+                    f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
+                    params={"key": self._key},
+                    json=payload,
+                )
+            except httpx.HTTPError:
+                if is_last:
+                    raise
+                await asyncio.sleep(_RETRY_DELAY_SEC)
+                continue
+            if resp.status_code in _RETRYABLE_STATUS and not is_last:
+                await asyncio.sleep(_RETRY_DELAY_SEC)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        raise AssertionError("unreachable")  # pragma: no cover — 루프가 항상 return/raise로 끝남
+
     async def _ask_about_image(self, image_url: str, prompt: str) -> str:
         if not self._key:
             raise OcrServiceError("사진 분석 서비스가 설정되지 않았습니다 (GEMINI_API_KEY 미설정)")
@@ -160,13 +194,7 @@ class GeminiVisionClient:
                 ]
             }
             try:
-                resp = await client.post(
-                    f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
-                    params={"key": self._key},
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
+                data = await self._post_generate_content(client, payload)
             except httpx.HTTPError as exc:
                 raise OcrServiceError(
                     f"사진 분석 요청에 실패했습니다: {exc.__class__.__name__}"
@@ -184,13 +212,7 @@ class GeminiVisionClient:
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         async with httpx.AsyncClient(timeout=15) as client:
             try:
-                resp = await client.post(
-                    f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
-                    params={"key": self._key},
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
+                data = await self._post_generate_content(client, payload)
             except httpx.HTTPError as exc:
                 raise OcrServiceError(f"AI 요청에 실패했습니다: {exc.__class__.__name__}") from exc
 
