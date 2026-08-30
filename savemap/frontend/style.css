@@ -2500,8 +2500,10 @@ select:focus {
    살아있는 표시"라는 인상을 준다 — MY탭의 avatar-breathe(회전 포함)보다
    진폭을 줄인 전용 keyframe이다. */
 .map-avatar-marker {
+  /* 2026-08-30: 얼굴만 크롭한 정사각형 아바타(avatarFaceSvgFor)로 바뀌면서
+     세로로 긴 전신 비율(32×36) 대신 정사각형에 맞췄다. */
   width: 32px;
-  height: 36px;
+  height: 32px;
   pointer-events: none;
   filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.35));
   animation: map-avatar-breathe 3.2s ease-in-out infinite;

@@ -470,6 +470,49 @@ function avatarSvgFor(stageIndex, frame = {}) {
   </svg>`;
 }
 
+// 얼굴만 크롭한 버전(2026-08-30, "캐릭터는 몸 전체가 나오는게 아닌 얼굴만
+// 나오게 하") — 지도 위 "내 위치" 마커처럼 작게 표시되는 자리에선 전신
+// 스프라이트가 오히려 잘 안 읽힌다. 새 그림을 새로 그리지 않고 _dogCellColor
+// (몸통 버전과 완전히 같은 도형 정의)를 머리 주변 영역만 잘라서 재샘플링한다 —
+// 성장 단계별 색상·리본 등은 몸통 버전과 항상 동일하게 유지된다. 목줄은
+// 크롭 경계에 어중간하게 걸쳐 잘려 보이는 게 더 어색해서 얼굴 버전에서는
+// 아예 그리지 않는다(o.collar를 강제로 false).
+const FACE_CROP_X0 = 20;
+const FACE_CROP_Y0 = 2;
+const FACE_CROP_SIZE = 60; // 정사각형 크롭(머리+귀+리본이 전부 들어가는 범위)
+const FACE_GRID = 28;
+
+function avatarFaceSvgFor(stageIndex, frame = {}) {
+  const o = {
+    collar: false,
+    bandana: stageIndex >= 5,
+    blink: !!frame.blink,
+    tailWag: false,
+    bark: !!frame.bark,
+    collarColor: getAvatarColorPref('collar'),
+    bandanaColor: getAvatarColorPref('bandana'),
+  };
+  let rects = '';
+  for (let gy = 0; gy < FACE_GRID; gy++) {
+    const py = FACE_CROP_Y0 + (gy + 0.5) * (FACE_CROP_SIZE / FACE_GRID);
+    for (let gx = 0; gx < FACE_GRID; gx++) {
+      const px = FACE_CROP_X0 + (gx + 0.5) * (FACE_CROP_SIZE / FACE_GRID);
+      const color = _dogCellColor(px, py, o);
+      if (color) rects += `<rect x="${gx}" y="${gy}" width="1" height="1" fill="${color}"/>`;
+    }
+  }
+  const filterId = `dogFaceOutline${_dogFilterSeq++}`;
+  return `<svg viewBox="0 0 ${FACE_GRID} ${FACE_GRID}" shape-rendering="crispEdges">
+    <defs><filter id="${filterId}" x="-30%" y="-30%" width="160%" height="160%">
+      <feMorphology operator="dilate" radius="1" in="SourceAlpha" result="d"/>
+      <feFlood flood-color="${DOG_DENSE_PAL.ink}" result="c"/>
+      <feComposite in="c" in2="d" operator="in" result="o"/>
+      <feMerge><feMergeNode in="o"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+    <g filter="url(#${filterId})">${rects}</g>
+  </svg>`;
+}
+
 // 성장 단계가 오를수록 아바타 주변 장식(별)이 하나씩 늘어난다 — 다마고치처럼
 // "같은 아이가 자라고 꾸며진다"는 느낌을 낸다. svg와 분리된 함수다(2026-08-27,
 // 아래 renderAvatarSpriteFrame 참고) — 장식은 절대좌표라 홉 애니메이션이 흔드는
@@ -853,8 +896,13 @@ function switchScreen(name) {
   // 시점에 한 번 더 굴려서 처음 봤을 때부터 자리가 잡혀 있게 한다.
   if (name === 'my') roamAvatarToRandomSpot();
   // 날씨 이펙트 캔버스도 안 보이는 동안은 rAF를 꺼서 배터리를 안 축낸다(2026-08-28).
-  if (name === 'map') resumeWeatherFxIfNeeded();
-  else pauseWeatherFx();
+  if (name === 'map') {
+    resumeWeatherFxIfNeeded();
+    startOriginLocationWatch();
+  } else {
+    pauseWeatherFx();
+    stopOriginLocationWatch();
+  }
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -1127,6 +1175,38 @@ let mapMarkers = [];
 let mapLabels = [];
 let originMarker = null;
 const researchBtn = document.getElementById('research-btn');
+
+// --- 실시간 위치 추적(2026-08-30, "이동시 GPS가 실제로 같이 안움직인거같아") ---
+// 기존엔 getCurrentPosition(1회성)만 써서 "내 위치" 버튼을 누르거나 검색을
+// 다시 실행해야만 위치가 갱신됐다 — 실제로 걸어서 이동해도 지도 위 내 아바타
+// 마커는 그 자리에 멈춰 있었다. watchPosition으로 GPS가 새 좌표를 줄 때마다
+// originMarker만 조용히 옮긴다 — 검색 자체를 자동으로 다시 돌리지는 않는다
+// (몇 미터 움직일 때마다 결과 목록이 계속 바뀌면 오히려 산만하다. 재검색은
+// 지금처럼 "이 지역에서 재검색" 버튼으로 사용자가 직접 트리거).
+let originWatchId = null;
+
+function updateOriginMarkerPosition(lat, lng) {
+  if (!kakaoMap || !originMarker) return;
+  originMarker.setPosition(new kakao.maps.LatLng(lat, lng));
+}
+
+function startOriginLocationWatch() {
+  if (!navigator.geolocation || originWatchId !== null) return;
+  originWatchId = navigator.geolocation.watchPosition(
+    (pos) => updateOriginMarkerPosition(pos.coords.latitude, pos.coords.longitude),
+    () => {}, // 추적 실패는 조용히 무시 — 마커가 마지막으로 알려진 위치에 그대로 남는다
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+}
+
+// 지도 화면이 안 보일 때도 GPS를 계속 물고 있으면 배터리만 축낸다 —
+// switchScreen에서 지도 화면을 벗어나면 멈추고 돌아오면 다시 켠다(날씨
+// 이펙트 pause/resume과 같은 패턴).
+function stopOriginLocationWatch() {
+  if (originWatchId === null) return;
+  navigator.geolocation.clearWatch(originWatchId);
+  originWatchId = null;
+}
 
 // --- 줌 레벨 기반 반경 (7번 항목, 2026-08-13 / 세분화 2026-08-13 추가 지시) ---
 // 드롭다운으로 반경을 고르는 대신, 지도를 줌인/줌아웃하면 카카오 지도의 레벨
@@ -1430,10 +1510,13 @@ function unverifiedTreasureMarkerImage() {
 // 대신 이미 있는 "내 위치" 자리를 아바타로 대체). 로그인 전이거나 MY탭을 아직
 // 한 번도 안 열어서 lastGrowthInfo가 없으면 0단계(꾸밈 없는 기본 강아지)로
 // 보여준다 — 없는 성장치를 지어내지 않는다.
+// 2026-08-30: 지도 마커 크기에선 전신이 잘 안 읽힌다는 지적을 받아 avatarSvgFor
+// (전신) 대신 avatarFaceSvgFor(얼굴만 크롭)로 바꿨다 — MY탭 무대의 전신
+// 아바타는 그대로 유지(거기선 전신이 맞다).
 function originAvatarOverlayContent() {
   const el = document.createElement('div');
   el.className = 'map-avatar-marker';
-  el.innerHTML = avatarSvgFor(lastGrowthInfo ? lastGrowthInfo.stageIndex : 0);
+  el.innerHTML = avatarFaceSvgFor(lastGrowthInfo ? lastGrowthInfo.stageIndex : 0);
   return el;
 }
 
@@ -2629,6 +2712,7 @@ async function initialLoad() {
   }
 
   initMap(lat, lng);
+  startOriginLocationWatch(); // 첫 화면이 지도라 switchScreen('map')을 안 거치므로 여기서 한 번 켜준다
   await runSearch().catch(() => {});
 
   // AI 절약 플랜을 첫 화면으로 승격(사용자 지시, 2026-08-18: "핵심 콘셉트
