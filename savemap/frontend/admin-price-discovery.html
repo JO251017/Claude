@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>쓸모 관리자 - 가격 발견(AI Price Discovery)</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  h2 { font-size: 1rem; margin-top: 28px; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=text], input[type=number] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  button.secondary { background: #64748b; margin-left: 8px; }
+  button.danger { background: #b91c1c; margin-left: 8px; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 420px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > div { flex: 1; }
+</style>
+</head>
+<body>
+  <h1>가격 발견(AI Price Discovery) 실행</h1>
+  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용).
+  가격 없는 매장을 Gemini 검색 그라운딩으로 조사해 공개 자료에서 실제 가격을 찾습니다 — 자료를 못 찾으면 가격을 지어내지 않고 그대로 실패로 남습니다.
+  한 번 클릭에 무제한 실행되지 않고 설정된 최대 건수(기본 20건)까지만 처리하므로, 전체를 처리하려면 "완료될 때까지 반복 실행"을 누르세요.</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label for="region">지역 필터 (비우면 전체, 예: 평택시)</label>
+  <input type="text" id="region" />
+
+  <div>
+    <button id="run-once-btn">한 번 실행</button>
+    <button id="run-loop-btn" class="secondary">완료될 때까지 반복 실행</button>
+    <button id="metrics-btn" class="secondary">현재 커버리지/성공률 조회</button>
+  </div>
+
+  <h2>검토 대기(manual_review) 작업 승인/거절</h2>
+  <div class="row">
+    <div>
+      <label for="job-id">Job ID</label>
+      <input type="number" id="job-id" />
+    </div>
+    <button id="approve-btn">승인(강제 재조사 후 게시)</button>
+    <button id="reject-btn" class="danger">거절</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += (typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)) + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function getKey() {
+  const key = document.getElementById('key').value;
+  if (!key) alert('ADMIN_SYNC_KEY를 입력해주세요.');
+  return key;
+}
+
+async function callAdmin(path, key, params = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin${path}${qs.toString() ? '?' + qs.toString() : ''}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function getAdmin(path, key, params = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin${path}${qs.toString() ? '?' + qs.toString() : ''}`;
+  const resp = await fetch(url, { headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runOnce() {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  try {
+    const result = await callAdmin('/price-discovery/run', key, { region });
+    log(result);
+    return result;
+  } catch (err) {
+    log(`오류: ${err.message}`);
+    return null;
+  }
+}
+
+async function runLoop() {
+  const btn = document.getElementById('run-loop-btn');
+  btn.disabled = true;
+  logEl.textContent = '';
+  log('반복 실행 시작...');
+  let round = 1;
+  // enqueued_this_run과 jobs_picked_up이 둘 다 0이면 더 조사할 매장이 없다는 뜻이라 멈춘다.
+  // 무한 루프 방지로 최대 50라운드까지만(각 라운드가 최대 설정값만큼 처리하므로 충분히 큼).
+  for (; round <= 50; round++) {
+    log(`\n▶ ${round}회차`);
+    const result = await runOnce();
+    if (!result) break;
+    if ((result.jobs_picked_up || 0) === 0 && (result.enqueued_this_run || 0) === 0) {
+      log('\n더 조사할 매장이 없습니다. 종료.');
+      break;
+    }
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('run-once-btn').addEventListener('click', runOnce);
+document.getElementById('run-loop-btn').addEventListener('click', runLoop);
+
+document.getElementById('metrics-btn').addEventListener('click', async () => {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  try {
+    log(await getAdmin('/price-discovery/metrics', key, { region }));
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+});
+
+document.getElementById('approve-btn').addEventListener('click', async () => {
+  const key = getKey();
+  if (!key) return;
+  const jobId = document.getElementById('job-id').value;
+  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
+  try {
+    log(await callAdmin(`/price-discovery/jobs/${jobId}/approve`, key));
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+});
+
+document.getElementById('reject-btn').addEventListener('click', async () => {
+  const key = getKey();
+  if (!key) return;
+  const jobId = document.getElementById('job-id').value;
+  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
+  if (!confirm(`Job ${jobId}를 거절합니다. 계속할까요?`)) return;
+  try {
+    log(await callAdmin(`/price-discovery/jobs/${jobId}/reject`, key));
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+});
+</script>
+</body>
+</html>

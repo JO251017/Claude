@@ -4,9 +4,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireAdminDep, SessionDep
 from app.api.schemas.merchant import MerchantVerificationGrant, MerchantVerificationResponse
-from app.core.errors import InvalidCsvError
+from app.core.errors import (
+    InvalidCsvError,
+    PriceDiscoveryJobNotFoundError,
+    PriceDiscoveryJobNotReviewableError,
+)
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
+from app.domain.price_discovery import DiscoveryJobStatus, PriceDiscoveryJob
+from app.engine.price_discovery.metrics import get_discovery_metrics
+from app.engine.price_discovery.orchestrator import (
+    approve_job,
+    enqueue_candidates,
+    reject_job,
+    run_discovery_batch,
+)
 from app.sources.merchant_console.service import (
     grant_merchant_verification,
     revoke_merchant_verification,
@@ -416,6 +428,102 @@ async def get_places_stats(
         },
         "recent_samples": recent_samples,
     }
+
+
+# --- AI Price Discovery Engine(2026-08-31) — 가격 없는 매장을 Gemini 검색
+# 그라운딩으로 조사해 공개 자료에서 실제 가격을 찾는다. 실제 파이프라인은
+# app/engine/price_discovery/*에 있고, 여기는 관리자 인증 + Render 무료
+# 플랜(상시 worker 없음)을 고려한 배치 실행 엔드포인트만 둔다. 일반 사용자에게는
+# 노출되지 않는다(28-21) — 다른 관리자 엔드포인트와 동일하게 RequireAdminDep. ---
+
+
+@router.post("/price-discovery/run")
+async def run_price_discovery_endpoint(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=100,
+        description="이번 실행에서 새로 큐에 넣고 처리할 최대 매장 수 (비우면 설정값 사용)",
+    ),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """가격 없는 매장을 candidate_selector로 큐에 채운 뒤(이미 큐에 있으면 건너뜀),
+    PENDING 큐에서 우선순위 순으로 처리한다. 한 번 클릭에 무제한 실행되지 않도록
+    limit(기본 PRICE_DISCOVERY_MAX_JOBS_PER_RUN, 기본 20)까지만 처리한다(28-22) —
+    Render 무료 플랜엔 크론이 없으므로 전체를 처리하려면 이 엔드포인트를 여러 번
+    반복 호출해야 한다(admin-import.html의 자동 이어호출 루프 패턴과 동일)."""
+    enqueued = await enqueue_candidates(session, region=region, limit=limit)
+    result = await run_discovery_batch(session, limit=limit)
+    result["enqueued_this_run"] = enqueued
+    return result
+
+
+@router.get("/price-discovery/status")
+async def price_discovery_status_endpoint(
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """큐 상태별 건수 — /run을 반복 호출해야 하는지(pending이 남아있는지) 바로
+    확인할 수 있다."""
+    rows = (
+        await session.execute(
+            select(PriceDiscoveryJob.status, func.count()).group_by(PriceDiscoveryJob.status)
+        )
+    ).all()
+    counts = {status_.value: 0 for status_ in DiscoveryJobStatus}
+    for status_, count in rows:
+        counts[status_.value] = count
+    return counts
+
+
+@router.get("/price-discovery/metrics")
+async def price_discovery_metrics_endpoint(
+    region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """가격 커버리지 + 발견 성공률(28-24/28-25) — 전부 실제 DB 집계, 하드코딩 없음.
+    region을 바꿔가며 여러 번 호출하면 지역별 발견률을 비교할 수 있다(28-25 —
+    이 저장소는 주소 문자열에서 시/군/구를 정규화해 자동 그룹핑하는 로직이
+    없어서, 다른 admin 엔드포인트와 같은 방식으로 region 필터를 그대로 재사용
+    했다)."""
+    return await get_discovery_metrics(session, region=region)
+
+
+async def _get_reviewable_job(session: AsyncSession, job_id: int) -> PriceDiscoveryJob:
+    job = await session.get(PriceDiscoveryJob, job_id)
+    if job is None:
+        raise PriceDiscoveryJobNotFoundError()
+    if job.status != DiscoveryJobStatus.MANUAL_REVIEW:
+        raise PriceDiscoveryJobNotReviewableError()
+    return job
+
+
+@router.post("/price-discovery/jobs/{job_id}/approve")
+async def approve_price_discovery_job_endpoint(
+    job_id: int,
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """manual_review 작업을 관리자가 승인 — 매장을 강제 모드로 재조사해서 이번엔
+    검토 보류 없이 게시한다(28-30, 복잡한 검토 UI 없이 최소 기능만). 매장 매칭
+    자체를 AI가 거절한 작업(FAILED)은 승인 대상이 아니다."""
+    job = await _get_reviewable_job(session, job_id)
+    published = await approve_job(session, job)
+    return {"job_id": job.id, "status": job.status.value, "prices_published": published}
+
+
+@router.post("/price-discovery/jobs/{job_id}/reject")
+async def reject_price_discovery_job_endpoint(
+    job_id: int,
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    job = await _get_reviewable_job(session, job_id)
+    await reject_job(session, job)
+    return {"job_id": job.id, "status": job.status.value}
 
 
 @router.post("/import/good-price-csv")

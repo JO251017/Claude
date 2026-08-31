@@ -7,14 +7,31 @@ class SourceType(str, enum.Enum):
     S3_MERCHANT = "s3_merchant"
     S4_REPORT = "s4_report"
     S5_VERIFICATION = "s5_verification"
+    # AI Price Discovery Engine(2026-08-31)이 공개 웹 자료에서 찾아낸 가격 —
+    # "누가/무엇이 이 가격을 알려줬는지" 축(S1~S5와 같은 축)에 추가한다. 기존
+    # benchmark_source("region"/"gov"/"ai" — "무엇과 비교했는지")의 "ai"와는 완전히
+    # 다른 개념이라 값을 겹치지 않게 한다: benchmark_source="ai"는 Gemini가 순수
+    # 추정만 한 값(최저 신뢰), 이 두 값은 AI가 실제 자료를 찾아 구조화한 값이다.
+    # 공식/공공 자료에서 찾았는지, 일반 공개 웹 자료에서 찾았는지에 따라 신뢰도
+    # 상한이 달라야 해서(지시서 28-14) 둘로 나눈다.
+    S6_AI_DISCOVERY_OFFICIAL = "s6_ai_discovery_official"  # 공식 홈페이지/공공기관 자료
+    S6_AI_DISCOVERY_WEB = "s6_ai_discovery_web"  # 일반 공개 블로그/게시물 등
 
 
+# 낮을수록 우선순위가 높다(app/ingestion/dedupe.py). 기존 값을 유지하되 10 단위로
+# 넓혀서 AI Discovery 두 값을 의미에 맞는 자리에 끼워 넣는다 — 상대적 순서만
+# 바뀌지 않으면 되므로(<, > 비교만 함) 기존 로직에 영향 없다: 공식 자료는
+# S2_PARTNER(프랜차이즈 등 공식 제휴)와 S3_MERCHANT(사장님 직접 등록) 사이,
+# 일반 웹 자료는 S4_REPORT(사용자 제보)보다 한 단계 낮다 — AI가 스스로 고른
+# 자료보다는 실제로 그 자리에 있었던 사람의 제보를 더 신뢰한다.
 SOURCE_PRIORITY: dict[SourceType, int] = {
-    SourceType.S1_PUBLIC: 1,
-    SourceType.S2_PARTNER: 2,
-    SourceType.S3_MERCHANT: 3,
-    SourceType.S4_REPORT: 4,
-    SourceType.S5_VERIFICATION: 5,
+    SourceType.S1_PUBLIC: 10,
+    SourceType.S2_PARTNER: 20,
+    SourceType.S6_AI_DISCOVERY_OFFICIAL: 25,
+    SourceType.S3_MERCHANT: 30,
+    SourceType.S4_REPORT: 40,
+    SourceType.S6_AI_DISCOVERY_WEB: 45,
+    SourceType.S5_VERIFICATION: 50,
 }
 
 

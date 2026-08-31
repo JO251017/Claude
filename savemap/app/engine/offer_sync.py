@@ -28,6 +28,7 @@ async def _record_price_history_if_changed(
     *,
     now: datetime,
     current: PriceHistory | None = _UNSET,  # type: ignore[assignment]
+    evidence_text: str | None = None,
 ) -> None:
     """MenuItem.price가 이전과 실제로 다를 때만 이력 한 줄을 남긴다(vNext 지시서,
     "가격이 변경될 때 기존 가격을 삭제하지 않는다"). Offer.base_price/store_discount가
@@ -62,6 +63,7 @@ async def _record_price_history_if_changed(
             source_type=item.source,
             source_url=item.source_url,
             observed_at=item.verified_at or now,
+            evidence_text=evidence_text,
             valid_from=now,
             is_current=True,
         )
@@ -76,6 +78,7 @@ async def sync_menu_offer(
     commit: bool = True,
     existing_offer: Offer | None = _UNSET,  # type: ignore[assignment]
     current_price_history: PriceHistory | None = _UNSET,  # type: ignore[assignment]
+    price_evidence_text: str | None = None,
 ) -> MenuPriceComparison:
     """메뉴 가격이 등록/제보되면(사장님 등록이든 사용자 제보든) 지도 검색에 뜨도록
     오퍼를 항상 생성/갱신한다 — 지도 검색(/v1/search)이 offer 테이블만 보는 구조라,
@@ -97,7 +100,9 @@ async def sync_menu_offer(
     (사용자 제보, 착한가격업소 임포트 등)는 기본값을 그대로 쓰면 예전과 동일하게
     동작한다. 배치는 여러 건을 한 트랜잭션에 묶고(commit=False), 기존 오퍼와 현재
     가격 이력을 IN절로 미리 조회해 넘겨서(existing_offer=, current_price_history=)
-    건당 SELECT를 없앤다."""
+    건당 SELECT를 없앤다. price_evidence_text는 이번에 새로 남을 이력 행에 실을
+    근거 요약(예: AI Price Discovery의 "공식 메뉴 페이지에서 확인: 8,000원") —
+    기본 None이면 예전과 동일하게 비워둔다."""
     point = to_shape(place.geom)
     cmp = await compare_menu_item(session, item, point.y, point.x)
 
@@ -149,7 +154,12 @@ async def sync_menu_offer(
         existing_offer.benchmark_synced_at = now
 
     await _record_price_history_if_changed(
-        session, place, item, now=now, current=current_price_history
+        session,
+        place,
+        item,
+        now=now,
+        current=current_price_history,
+        evidence_text=price_evidence_text,
     )
 
     if commit:

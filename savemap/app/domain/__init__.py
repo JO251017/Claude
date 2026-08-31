@@ -6,6 +6,7 @@ from app.domain.offer import Offer, OfferPaymentBenefit
 from app.domain.offer_verification import OfferVerification
 from app.domain.payment_method import PaymentMethodDerived
 from app.domain.place import Place
+from app.domain.price_discovery import DiscoveryJobStatus, PriceDiscoveryJob
 from app.domain.price_history import PriceHistory
 from app.domain.regional_price import RegionalPriceStat
 from app.domain.report import UserReport
@@ -36,4 +37,6 @@ __all__ = [
     "FranchiseBrand",
     "FranchisePrice",
     "PriceHistory",
+    "PriceDiscoveryJob",
+    "DiscoveryJobStatus",
 ]

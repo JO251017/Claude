@@ -104,6 +104,19 @@ class Settings(BaseSettings):
     route_max_budget: float = 500_000.0
     route_max_stops: int = 4
 
+    # AI Price Discovery Engine(2026-08-31) — 가격 없는 매장을 Gemini 검색
+    # 그라운딩으로 조사해 공개 자료에서 실제 가격을 찾는다. Render 무료 플랜엔
+    # 상시 worker가 없어(28-21) 관리자가 브라우저에서 배치를 반복 실행하는
+    # 구조라, 한 번 실행에 몇 건까지 처리할지/AI 호출을 몇 번까지 재시도할지를
+    # 보수적으로 제한한다(28-20).
+    price_discovery_max_jobs_per_run: int = 20
+    price_discovery_max_retry: int = 1
+    # 매장 매칭 신뢰도 임계값(28-8) — AI가 매긴 confidence는 이 채택/거절 판단
+    # 에만 쓰고, 가격 데이터 자체의 신뢰도 등급에는 절대 그대로 대입하지 않는다
+    # (28-14, confidence_engine.py 참고).
+    price_discovery_match_auto_threshold: float = 0.95
+    price_discovery_match_review_threshold: float = 0.80
+
     # AI 절약 플랜 기능 플래그(2026-08-31, "SaveMap vNext" 지시서 27번 — 가격 데이터가
     # 충분히 쌓이기 전엔 동선 추천을 사용자에게 보여주지 않는다). 이 저장소엔 이런
     # on/off 플래그가 하나도 없었다 — route_planner.py/route.py 로직 자체는 그대로

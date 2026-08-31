@@ -128,6 +128,86 @@ class MenuItemGuess:
     price: float
 
 
+@dataclass
+class GroundingCitation:
+    url: str
+    title: str
+
+
+@dataclass
+class GroundingResult:
+    text: str
+    citations: list[GroundingCitation]
+
+
+@dataclass
+class PriceDiscoveryStoreMatch:
+    matched: bool
+    confidence: float
+    reason: str
+
+
+@dataclass
+class PriceDiscoveryPriceItem:
+    menu_name: str
+    price: float
+    source_type: str  # "official" | "web" — 지시서 28-13, price_extractor가 이 값을
+    # SourceType.S6_AI_DISCOVERY_OFFICIAL/WEB으로 매핑한다(confidence_engine.py).
+    source_url: str | None
+    source_title: str | None
+    observed_at: str | None
+    evidence: str | None
+
+
+@dataclass
+class PriceDiscoveryExtraction:
+    store_match: PriceDiscoveryStoreMatch
+    prices: list[PriceDiscoveryPriceItem]
+
+
+_PRICE_DISCOVERY_SYSTEM_RULES = (
+    "너는 SaveMap 가격 데이터 추출 AI다.\n"
+    "목표: 제공된 공개 자료에서 실제 확인 가능한 매장 메뉴와 가격을 구조화한다.\n"
+    "규칙:\n"
+    "1. 자료에 명시된 가격만 반환한다.\n"
+    "2. 가격을 추측하지 않는다.\n"
+    "3. 일반적인 시장 가격을 사용하지 않는다.\n"
+    "4. 다른 매장의 가격을 현재 매장 가격으로 사용하지 않는다.\n"
+    "5. 매장 동일성이 불확실하면 matched=false를 반환한다.\n"
+    "6. 메뉴와 가격의 연결이 불확실하면 해당 항목을 제외한다.\n"
+    "7. 세트/옵션/2인 메뉴 등은 별도 메뉴로 구분한다.\n"
+    "8. 출처 URL을 반드시 반환한다.\n"
+    "9. 확인 날짜가 있으면 반환한다.\n"
+    "10. 가격이 없으면 빈 배열을 반환한다.\n"
+    "11. AI 자신의 지식만으로 가격을 생성하지 않는다.\n"
+    "12. 추정값을 실제 가격으로 반환하지 않는다.\n"
+)
+
+
+def _price_discovery_extraction_prompt(
+    store_name: str,
+    store_address: str | None,
+    store_category: str | None,
+    grounded_text: str,
+    citations: list[GroundingCitation],
+) -> str:
+    citation_lines = "\n".join(f"- {c.title}: {c.url}" for c in citations) or "(인용 없음)"
+    return (
+        f"{_PRICE_DISCOVERY_SYSTEM_RULES}\n"
+        f"매장 정보:\n이름: {store_name}\n주소: {store_address or '알 수 없음'}\n"
+        f"업종: {store_category or '알 수 없음'}\n\n"
+        f"검색으로 찾은 자료(요약):\n{grounded_text}\n\n"
+        f"인용된 출처:\n{citation_lines}\n\n"
+        "출력은 아래 JSON 스키마만 사용하고 다른 텍스트는 포함하지 마:\n"
+        '{"store_match": {"matched": true 또는 false, "confidence": 0.0~1.0 사이 숫자, '
+        '"reason": "판단 이유"}, '
+        '"prices": [{"menu_name": "메뉴명", "price": 숫자, "currency": "KRW", '
+        '"source_type": "official 또는 web", "source_url": "위 인용 목록에 있는 URL 중 하나", '
+        '"source_title": "출처 제목", "observed_at": "YYYY-MM-DD 또는 null", '
+        '"evidence": "이 가격을 확인한 근거 한 문장"}]}'
+    )
+
+
 class GeminiVisionClient:
     def __init__(self, api_key: str | None = None):
         self._key = api_key or settings.gemini_api_key
@@ -221,6 +301,45 @@ class GeminiVisionClient:
         except (KeyError, IndexError, TypeError) as exc:
             raise OcrServiceError("AI 응답을 이해할 수 없습니다") from exc
 
+    async def ground_search(self, query: str) -> GroundingResult | None:
+        """AI Price Discovery Engine의 source_discovery 단계(지시서 28-4/28-5) —
+        구글 검색 그라운딩으로 공개 웹에서 실제 자료를 찾는다. 일반 generateContent와
+        같은 엔드포인트를 쓰되 tools=[{"google_search": {}}]를 실어서, 모델이
+        직접 검색을 수행하고 응답에 인용(citation) 목록을 함께 돌려주게 한다 —
+        _ask_text와 달리 모델의 사전지식만으로 답하지 않는다.
+        키 미설정/요청 실패/응답 구조가 예상과 다르면 None — 다음 단계(추출)로
+        넘기지 않는다. "자료를 못 찾았다"를 "AI가 알아서 추정"으로 이어붙이지
+        않기 위함(핵심 원칙: AI가 가격을 만들어내지 않는다)."""
+        if not self._key:
+            return None
+
+        payload = {
+            "contents": [{"parts": [{"text": query}]}],
+            "tools": [{"google_search": {}}],
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            try:
+                data = await self._post_generate_content(client, payload)
+            except httpx.HTTPError:
+                return None
+
+        try:
+            candidate = data["candidates"][0]
+            text = candidate["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError):
+            return None
+
+        citations: list[GroundingCitation] = []
+        grounding_chunks = (candidate.get("groundingMetadata") or {}).get("groundingChunks") or []
+        for chunk in grounding_chunks:
+            web = chunk.get("web") or {}
+            url = web.get("uri")
+            if not url:
+                continue
+            citations.append(GroundingCitation(url=url, title=web.get("title") or url))
+
+        return GroundingResult(text=text, citations=citations)
+
     async def extract_from_image(self, image_url: str) -> OcrResult:
         raw_text = await self._ask_about_image(image_url, _EXTRACTION_PROMPT)
 
@@ -309,6 +428,81 @@ class GeminiVisionClient:
                 continue
             guesses.append(MenuItemGuess(name=str(name).strip(), price=float(price)))
         return guesses
+
+    async def extract_price_discovery(
+        self,
+        store_name: str,
+        store_address: str | None,
+        store_category: str | None,
+        grounded_text: str,
+        citations: list[GroundingCitation],
+    ) -> PriceDiscoveryExtraction | None:
+        """AI Price Discovery Engine의 price_extractor 단계(지시서 28-6) —
+        ground_search가 찾은 텍스트+인용을 지정된 JSON 스키마로 구조화한다.
+        _ask_text를 그대로 재사용하고(새 HTTP 경로 안 만듦), 파싱/검증에 실패하면
+        전부 None을 돌려준다 — 스키마가 안 맞는 응답을 억지로 해석해서 가격을
+        만들어내지 않는다(28-29 "AI 출력은 절대 DB에 직접 저장하지 않는다"의
+        첫 관문)."""
+        prompt = _price_discovery_extraction_prompt(
+            store_name, store_address, store_category, grounded_text, citations
+        )
+        try:
+            raw_text = await self._ask_text(prompt)
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+
+        try:
+            parsed = json.loads(_strip_code_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return None
+        if not isinstance(parsed, dict):
+            return None
+
+        match_raw = parsed.get("store_match")
+        if not isinstance(match_raw, dict):
+            return None
+        confidence = match_raw.get("confidence")
+        if not isinstance(confidence, (int, float)):
+            return None
+        store_match = PriceDiscoveryStoreMatch(
+            matched=bool(match_raw.get("matched")),
+            confidence=max(0.0, min(float(confidence), 1.0)),
+            reason=str(match_raw.get("reason") or ""),
+        )
+
+        cited_urls = {c.url for c in citations}
+        prices: list[PriceDiscoveryPriceItem] = []
+        for row in parsed.get("prices") or []:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("menu_name")
+            price = row.get("price")
+            source_type = row.get("source_type")
+            source_url = row.get("source_url")
+            # 규칙 8 "출처 URL을 반드시 반환한다" + 규칙 1 "자료에 명시된 가격만" —
+            # 이 그라운딩 호출에서 실제로 인용된 URL이 아니면(모델이 지어냈거나
+            # 다른 자료를 섞었을 가능성) 그 항목은 버린다.
+            if (
+                not name
+                or not isinstance(price, (int, float))
+                or price <= 0
+                or source_type not in ("official", "web")
+                or source_url not in cited_urls
+            ):
+                continue
+            prices.append(
+                PriceDiscoveryPriceItem(
+                    menu_name=str(name).strip(),
+                    price=float(price),
+                    source_type=source_type,
+                    source_url=source_url,
+                    source_title=(str(row["source_title"]) if row.get("source_title") else None),
+                    observed_at=(str(row["observed_at"]) if row.get("observed_at") else None),
+                    evidence=(str(row["evidence"])[:500] if row.get("evidence") else None),
+                )
+            )
+
+        return PriceDiscoveryExtraction(store_match=store_match, prices=prices)
 
     async def review_price_update(
         self, item_name: str, image_url: str, old_price: float, old_verified_at: str, new_price: float

@@ -404,3 +404,48 @@ def test_submit_report_requires_login(client):
     resp = client.post("/v1/reports", json={"image_url": "https://example.com/x.jpg"})
     assert resp.status_code == 401
     assert resp.json()["detail"]["code"] == "SM4011"
+
+
+# --- AI Price Discovery Engine 관리자 엔드포인트 — 다른 admin.py 엔드포인트와
+# 동일하게 X-Admin-Key 없이는 DB에 닿기 전에 401로 막혀야 한다. ---
+
+
+def test_price_discovery_run_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/price-discovery/run")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_price_discovery_status_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.get("/v1/admin/price-discovery/status")
+    assert resp.status_code == 401
+
+
+def test_price_discovery_metrics_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.get("/v1/admin/price-discovery/metrics")
+    assert resp.status_code == 401
+
+
+def test_price_discovery_approve_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/price-discovery/jobs/1/approve")
+    assert resp.status_code == 401
+
+
+def test_price_discovery_reject_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/price-discovery/jobs/1/reject")
+    assert resp.status_code == 401

@@ -147,6 +147,18 @@ class InvalidCsvError(SaveMapError):
     message = "올바른 CSV 파일이 아닙니다"
 
 
+class PriceDiscoveryJobNotFoundError(SaveMapError):
+    code = "SM4047"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "가격 발견 작업을 찾을 수 없습니다"
+
+
+class PriceDiscoveryJobNotReviewableError(SaveMapError):
+    code = "SM4228"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "검토 대기 상태(manual_review)인 작업만 승인/거절할 수 있습니다"
+
+
 class AiSavingPlanDisabledError(SaveMapError):
     """settings.ai_saving_plan_enabled=False일 때 /route/suggest가 던진다. 500이나
     404가 아니라 "이 기능은 지금 꺼져 있다"는 걸 명확히 구분하는 응답이 필요해서
