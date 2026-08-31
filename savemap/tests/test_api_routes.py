@@ -372,3 +372,35 @@ def test_menu_report_analyze_does_not_require_merchant_verification(client, monk
     assert resp.status_code != 403
     assert resp.status_code == 200
     assert resp.json() == {"image_url": "https://example.com/x.jpg", "items": []}
+
+
+# --- 보안 점검(vNext, 2026-08-31) — verify/report 엔드포인트가 UserDep(비로그인
+# 통과, user_id="anonymous")에서 RequireUserDep(비로그인 401)으로 바뀐 것을
+# 확인한다. 이 저장소의 다른 모든 쓰기 엔드포인트와 같은 순서 원칙: 401은 DB에
+# 닿기 전에 나와야 한다(NullSession인 이 fixture로도 통과한다는 것 자체가 증거). ---
+
+
+def test_create_verification_requires_login(client):
+    resp = client.post("/v1/verifications", json={"report_id": 1, "verdict": "available"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_create_offer_verification_requires_login(client):
+    resp = client.post("/v1/offers/1/verify", json={"verdict": "available"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_analyze_report_photo_requires_login(client):
+    resp = client.post(
+        "/v1/reports/analyze", files={"image": ("photo.jpg", b"fake-bytes", "image/jpeg")}
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
+def test_submit_report_requires_login(client):
+    resp = client.post("/v1/reports", json={"image_url": "https://example.com/x.jpg"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"

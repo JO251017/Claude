@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import SessionDep, UserDep
+from app.api.deps import RequireUserDep, SessionDep
 from app.api.schemas.report import (
     RecentReportItem,
     ReportAnalyzeResponse,
@@ -27,8 +27,15 @@ async def analyze_report_photo(
     image: UploadFile = File(...),
     lat: float | None = Form(default=None),
     lng: float | None = Form(default=None),
+    user_id: str = RequireUserDep,
 ) -> ReportAnalyzeResponse:
-    """사진을 업로드하고 AI가 정보를 추출한다. DB에는 저장하지 않는다(사용자 확인 전 단계)."""
+    """사진을 업로드하고 AI가 정보를 추출한다. DB에는 저장하지 않는다(사용자 확인 전 단계).
+
+    user_id는 결과에 쓰이지 않고 로그인 게이트로만 쓴다(app/api/v1/merchant.py의
+    analyze_menu_photo, app/api/v1/places.py의 analyze_menu_report_photo와 동일한
+    패턴) — 보안 점검(2026-08-31)에서 발견: 이 엔드포인트만 로그인 없이도 호출
+    가능해서, 비용이 드는 Gemini Vision/Supabase Storage 업로드를 익명으로
+    무제한 호출할 수 있었다."""
     content_type = image.content_type or ""
     if not content_type.startswith("image/"):
         raise InvalidImageError(f"이미지 파일이 아닙니다 (받은 형식: {content_type or '알 수 없음'})")
@@ -72,9 +79,12 @@ async def recent_reports(session: AsyncSession = SessionDep) -> list[RecentRepor
 @router.post("/reports", response_model=ReportResponse, status_code=201)
 async def submit_report(
     payload: ReportCreate,
-    user_id: str = UserDep,
+    user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> ReportResponse:
+    # 보안 점검(2026-08-31)에서 발견: 예전엔 UserDep(비로그인이면 "anonymous"로
+    # 통과)이라 로그인 없이도 공개 지도에 Place/Offer가 새로 만들어질 수 있었다 —
+    # 이 저장소의 다른 모든 쓰기 엔드포인트와 같은 수준(RequireUserDep)으로 맞춘다.
     report = await ReportPipeline().ingest(
         session,
         user_id,

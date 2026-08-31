@@ -2651,7 +2651,15 @@ async function certifyWithReceipt(r, fileInput) {
   const form = new FormData();
   form.append('image', file);
   try {
-    const analyzeResp = await fetch(`${API_BASE}/reports/analyze`, { method: 'POST', body: form });
+    // 보안 점검(2026-08-31)에서 백엔드가 이 엔드포인트에 로그인을 요구하도록
+    // 바뀌었다(app/api/v1/reports.py) — 이 함수는 위에서 이미 토큰을 확인해놓고
+    // 실제 fetch엔 Authorization 헤더를 안 실었던 기존 버그가 있었다(예전엔
+    // 백엔드가 로그인 여부를 안 따져서 드러나지 않았을 뿐). 이제 헤더를 붙인다.
+    const analyzeResp = await fetch(`${API_BASE}/reports/analyze`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
     const analyzed = await analyzeResp.json().catch(() => null);
     if (!analyzeResp.ok) {
       throw new Error(analyzed?.detail?.message || analyzed?.detail || `분석 실패 (${analyzeResp.status})`);
