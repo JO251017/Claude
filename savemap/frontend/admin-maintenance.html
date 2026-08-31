@@ -2,10 +2,11 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<title>쓸모 관리자 - 오퍼 일괄 재동기화</title>
+<title>쓸모 관리자 - 오퍼 유지보수</title>
 <style>
   body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
   h1 { font-size: 1.2rem; }
+  h2 { font-size: 1rem; margin-top: 36px; border-top: 1px solid #e2e8f0; padding-top: 24px; }
   label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
   input[type=password], input[type=text], input[type=number] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
   button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
@@ -49,6 +50,27 @@
     <button id="stop-btn" class="secondary" disabled>중단</button>
   </div>
   <progress id="progress" value="0" max="1" hidden></progress>
+
+  <h2>매장 카드 AI 한 줄 소개 생성 (안건 D)</h2>
+  <p class="warn">절약을 주장하는(할인액이 있는) 오퍼 중 아직 한 줄 소개가 없는 것에
+  대해 AI가 실제 사실(업종/비교 기준/비교 매장 수)만 근거로 자연스러운 문장을 만들어
+  캐시합니다. 새 숫자를 지어내면 그 결과는 저장하지 않고 건너뜁니다(다음 실행 때
+  재시도). 건당 실제 AI 호출이 있어 재동기화보다 느립니다 — 한 번에 너무 크게 잡지
+  마세요.</p>
+
+  <label for="blurb-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="blurb-limit" value="50" min="10" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="blurb-dry-run" />
+    <label for="blurb-dry-run">미리보기만 (dry_run — 생성만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="blurb-run-btn">끝날 때까지 한 줄 소개 생성</button>
+    <button id="blurb-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="blurb-progress" value="0" max="1" hidden></progress>
 
   <div id="log"></div>
 
@@ -161,6 +183,73 @@ async function runLoop() {
 
 document.getElementById('run-btn').addEventListener('click', runLoop);
 document.getElementById('stop-btn').addEventListener('click', () => { stopRequested = true; });
+
+// --- 안건 D: 매장 카드 AI 한 줄 소개 생성 --- 위 재동기화 루프와 완전히 같은
+// 패턴(next_offset이 done:true 나올 때까지 이어서 호출)이라 별도 상태
+// 변수(blurbStopRequested)만 두고 로직은 그대로 재사용한다.
+let blurbStopRequested = false;
+
+async function callBlurbBackfill(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/backfill-offer-blurbs?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runBlurbLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('blurb-limit').value, 10) || 50;
+  const dryRun = document.getElementById('blurb-dry-run').checked;
+
+  const runBtn = document.getElementById('blurb-run-btn');
+  const stopBtn = document.getElementById('blurb-stop-btn');
+  const progressEl = document.getElementById('blurb-progress');
+  blurbStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalGenerated = 0, totalRejected = 0, totalFailed = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (blurbStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callBlurbBackfill(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalGenerated += result.generated;
+    totalRejected += result.rejected_hallucination;
+    totalFailed += result.failed;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} generated=${result.generated} rejected_hallucination=${result.rejected_hallucination} failed=${result.failed}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} generated=${totalGenerated} rejected_hallucination=${totalRejected}(숫자를 지어내서 버림) failed=${totalFailed}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('blurb-run-btn').addEventListener('click', runBlurbLoop);
+document.getElementById('blurb-stop-btn').addEventListener('click', () => { blurbStopRequested = true; });
 </script>
 </body>
 </html>

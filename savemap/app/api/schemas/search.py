@@ -25,6 +25,10 @@ class SavingsReportItem(BaseModel):
     days_since_verified: int | None = None
     reasons: list[str] = []
     one_line: str = ""
+    # AI 활용 확대 안건 D(2026-08-31) — one_line이 관리자 배치가 캐시해둔 AI
+    # 문장("ai")인지 savings_report.py의 결정론적 템플릿("template")인지. 값 자체를
+    # 감추지 않는 게 이 코드베이스의 일관된 원칙(benchmark_source 등과 동일).
+    one_line_source: str = "template"
 
 
 class SignatureMenuItem(BaseModel):

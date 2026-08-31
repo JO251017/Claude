@@ -6,7 +6,7 @@ from app.engine.result_assembly import build_search_result_item
 from app.engine.savings_calculator import calculate_savings
 
 
-def _ranked(layer: Layer, menu_item_id: int | None = None) -> RankedOffer:
+def _ranked(layer: Layer, menu_item_id: int | None = None, ai_one_line: str | None = None) -> RankedOffer:
     candidate = OfferCandidate(
         offer_id=1,
         place_id=1,
@@ -19,6 +19,7 @@ def _ranked(layer: Layer, menu_item_id: int | None = None) -> RankedOffer:
         lng=127.11,
         store_discount=5000,
         menu_item_id=menu_item_id,
+        ai_one_line=ai_one_line,
     )
     return RankedOffer(candidate=candidate, breakdown=calculate_savings(candidate), score=0.8)
 
@@ -64,6 +65,24 @@ def test_signature_menu_is_none_when_the_linked_menu_item_is_gone():
         _ranked(Layer.REGULAR, menu_item_id=999), menu_items_by_place={1: place_items}
     )
     assert item.signature_menu is None
+
+
+# --- AI 활용 확대 안건 D(2026-08-31) — 관리자 배치가 캐시해둔 ai_one_line이
+# 있으면 그걸 쓰고, 출처(one_line_source)를 감추지 않는다. ---
+
+
+def test_ai_one_line_overrides_template_and_marks_source_ai():
+    item = build_search_result_item(
+        _ranked(Layer.REGULAR, ai_one_line="주변보다 저렴한 곳이에요."), menu_items_by_place={}
+    )
+    assert item.report.one_line == "주변보다 저렴한 곳이에요."
+    assert item.report.one_line_source == "ai"
+
+
+def test_no_ai_one_line_falls_back_to_template_source():
+    item = build_search_result_item(_ranked(Layer.REGULAR, ai_one_line=None), menu_items_by_place={})
+    assert item.report.one_line_source == "template"
+    assert item.report.one_line != ""  # savings_report.py의 결정론적 문구가 그대로 옴
 
 
 def test_signature_menu_falls_back_to_first_when_offer_has_no_menu_item():

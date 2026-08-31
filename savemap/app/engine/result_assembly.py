@@ -37,6 +37,14 @@ def build_search_result_item(
         benchmark_source=c.benchmark_source,
         benchmark_sample_count=c.benchmark_sample_count,
     )
+    # AI 활용 확대 안건 D(2026-08-31) — 관리자 배치가 미리 캐시해둔 한 줄 소개가
+    # 있으면 그걸 쓰고, 없으면 savings_report.py의 결정론적 템플릿 문구를 그대로
+    # 쓴다. 어느 쪽인지 감추지 않고 one_line_source로 그대로 노출한다(이
+    # 코드베이스의 기존 관례 — benchmark_source, route_planner.generate_summary의
+    # ("ai"/"template") 반환값과 같은 원칙: 실측처럼 보이게 하지 않기).
+    one_line = c.ai_one_line or report.one_line
+    one_line_source = "ai" if c.ai_one_line else "template"
+
     status = (status_by_place or {}).get(c.place_id)
     return SearchResultItem(
         offer_id=c.offer_id,
@@ -54,7 +62,8 @@ def build_search_result_item(
             freshness_label=report.freshness_label,
             days_since_verified=report.days_since_verified,
             reasons=report.reasons,
-            one_line=report.one_line,
+            one_line=one_line,
+            one_line_source=one_line_source,
         ),
         signature_menu=(
             SignatureMenuItem(name=signature.name, price=float(signature.price))

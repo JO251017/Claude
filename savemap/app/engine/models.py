@@ -47,3 +47,7 @@ class OfferCandidate:
     # 전국지역화폐가맹점표준데이터와 매칭돼 검증된 매장인지 — 가격/할인 계산과는
     # 무관하다(이 데이터엔 금액이 없다). 검색 결과에 정보성 배지로만 노출된다.
     accepts_local_currency: bool = False
+    # AI 활용 확대 안건 D(2026-08-31) — 관리자 배치가 미리 생성해 캐시해둔 매장
+    # 카드 한 줄 소개. Offer.ai_one_line을 그대로 옮긴다. None이면
+    # result_assembly.py가 savings_report.py의 결정론적 템플릿 문구로 폴백한다.
+    ai_one_line: str | None = None

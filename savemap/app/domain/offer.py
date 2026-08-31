@@ -41,6 +41,18 @@ class Offer(Base, TimestampMixin):
         ForeignKey("menu_item.id", ondelete="CASCADE"), nullable=True
     )
 
+    # AI 활용 확대 안건 D(2026-08-31, "매장 카드 AI 한 줄 소개") — 검색 응답의
+    # one_line은 지금까지 savings_report.py가 매 요청마다 결정론적 템플릿 문자열
+    # 몇 종류만 돌려썼다(그 설계 이유는 그대로 유효 — 매 요청마다 LLM을 부르면
+    # 느리고 비싸고 문구가 들쭉날쭉해진다). 그 원칙은 안 건드리고, 대신 이 값을
+    # 관리자 배치(app/engine/offer_blurb_backfill.py)가 미리 한 번만 생성해
+    # 캐시해둔다 — 검색 시점엔 이 컬럼이 있으면 그대로 쓰고, 없으면 기존 템플릿
+    # 문구로 폴백한다(app/engine/result_assembly.py). AI 출력은 반드시 실제 사실
+    # (카테고리/비교 기준/표본 수)만 근거로 하고 새 숫자를 만들면 그 결과를 통째로
+    # 버리는 검증(app/engine/ai_text_guard.py)을 통과한 것만 여기 저장된다.
+    ai_one_line: Mapped[str | None] = mapped_column(String(200))
+    ai_one_line_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ttl_sec: Mapped[int | None] = mapped_column(Integer)

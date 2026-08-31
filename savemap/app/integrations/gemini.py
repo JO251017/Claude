@@ -164,6 +164,23 @@ def _route_summary_prompt(
     )
 
 
+def _offer_blurb_prompt(facts: dict[str, str]) -> str:
+    """AI 활용 확대 안건 D(2026-08-31) — 매장 카드 한 줄 소개. _route_summary_prompt와
+    같은 원칙: 숫자/사실은 전부 호출부가 이미 결정해서 준 것만 쓰고, AI는 그걸 자연스러운
+    한 문장으로 표현(phrase)만 한다. facts에 없는 숫자를 쓰면 호출부의
+    app.engine.ai_text_guard가 그 결과를 통째로 버린다 — 그래도 프롬프트 단계에서부터
+    강하게 막아둔다."""
+    lines = "\n".join(f"- {k}: {v}" for k, v in facts.items())
+    return (
+        "아래는 어떤 매장의 절약 정보에 대해 이미 확인된 사실이야. 이 사실 목록에 있는 "
+        "것만 근거로, 왜 이 매장이 가볼 만한지 자연스러운 한국어 한 문장(40자 이내, "
+        "친근한 말투, 과장·이모지 없이)으로 소개해줘. 목록에 없는 숫자나 사실은 "
+        "절대로 새로 만들어 쓰지 마. 매장 이름이나 메뉴 이름은 몰라도 되니 언급하지 마. "
+        "JSON이 아니라 그냥 문장으로 답해.\n\n"
+        f"사실 목록:\n{lines}\n"
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     return match.group(0) if match else text
@@ -503,6 +520,19 @@ class GeminiVisionClient:
                     stops, budget, party_size, total_spend, total_savings, context_note
                 )
             )
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+        text = raw_text.strip()
+        return text or None
+
+    async def generate_offer_blurb(self, facts: dict[str, str]) -> str | None:
+        """AI 활용 확대 안건 D(2026-08-31) — 매장 카드 한 줄 소개를 실제 사실(facts)만
+        근거로 자연스럽게 phrase한다. summarize_route와 완전히 같은 원칙(AI는 문장
+        표현만, 숫자/사실은 호출부가 이미 결정한 것만 씀)과 같은 fail-soft 계약 —
+        실패하면 예외를 던지지 않고 None (호출부인 offer_blurb_backfill이 이번엔
+        건너뛰고 다음 배치 실행 때 다시 시도하거나, 계속 결정론적 템플릿을 쓰게 한다)."""
+        try:
+            raw_text = await self._ask_text(_offer_blurb_prompt(facts))
         except (OcrServiceError, ReportImageFetchError):
             return None
         text = raw_text.strip()

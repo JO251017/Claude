@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.core.errors import OcrServiceError, ReportImageFetchError
-from app.integrations.gemini import GeminiVisionClient, _route_summary_prompt
+from app.integrations.gemini import GeminiVisionClient, _offer_blurb_prompt, _route_summary_prompt
 
 
 def _client() -> GeminiVisionClient:
@@ -276,3 +276,49 @@ def test_extract_menu_items_returns_empty_list_on_malformed_response():
         items = asyncio.run(_client().extract_menu_items("https://example.com/menu.jpg"))
 
     assert items == []
+
+
+# --- generate_offer_blurb / _offer_blurb_prompt (AI 활용 확대 안건 D, 2026-08-31)
+# — summarize_route와 완전히 같은 fail-soft 계약(요청 실패 시 None, 성공 시
+# strip된 텍스트)이라 같은 테스트 패턴을 그대로 따른다. ---
+
+_OFFER_FACTS = {"업종": "한식", "가격 비교 기준": "주변 매장 실측가", "비교한 주변 매장 수": "8곳"}
+
+
+def test_generate_offer_blurb_returns_none_when_api_key_missing():
+    client = GeminiVisionClient(api_key="placeholder")
+    client._key = ""
+    result = asyncio.run(client.generate_offer_blurb(_OFFER_FACTS))
+    assert result is None
+
+
+def test_generate_offer_blurb_returns_none_on_http_failure():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(503, request=post_request)
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_offer_blurb(_OFFER_FACTS))
+    assert result is None
+
+
+def test_generate_offer_blurb_returns_stripped_text_on_success():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "  주변보다 저렴해요.  "}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_offer_blurb(_OFFER_FACTS))
+    assert result == "주변보다 저렴해요."
+
+
+def test_offer_blurb_prompt_includes_every_fact():
+    prompt = _offer_blurb_prompt(_OFFER_FACTS)
+    assert "한식" in prompt
+    assert "주변 매장 실측가" in prompt
+    assert "8곳" in prompt
+
+
+def test_offer_blurb_prompt_forbids_new_numbers():
+    prompt = _offer_blurb_prompt(_OFFER_FACTS)
+    assert "새로 만들어" in prompt

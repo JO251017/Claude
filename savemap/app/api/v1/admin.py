@@ -64,6 +64,7 @@ from app.sources.public_api.local_currency import (
 )
 from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
+from app.engine.offer_blurb_backfill import backfill_offer_blurbs
 from app.engine.offer_resync import resync_offers
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
@@ -361,6 +362,30 @@ async def resync_offers_endpoint(
     return await resync_offers(
         session, region=region, offset=offset, limit=limit, source=source, dry_run=dry_run
     )
+
+
+@router.post("/maintenance/backfill-offer-blurbs")
+async def backfill_offer_blurbs_endpoint(
+    offset: int = Query(default=0, ge=0, description="offer.id 기준 몇 번째부터 처리할지"),
+    limit: int = Query(default=50, ge=1, le=500, description="한 번에 처리할 건수"),
+    dry_run: bool = Query(default=False, description="true면 생성만 하고 저장하지 않음"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """AI 활용 확대 안건 D(2026-08-31) — 절약을 주장하는(store_discount>0) 오퍼 중
+    아직 ai_one_line이 없는 것에 대해 매장 카드 한 줄 소개를 AI로 생성해 캐시한다.
+    resync-offers와 같은 관례: Render 무료 플랜엔 크론이 없으므로 응답의
+    next_offset/done을 보고 외부에서 done:true까지 이어서 호출해야 한다. limit
+    기본값을 resync-offers(500)보다 작게(50) 잡은 이유는 이 배치가 건당 실제
+    Gemini API 호출(네트워크 왕복)을 하기 때문 — DB만 훑는 재동기화보다 한 건당
+    훨씬 오래 걸려서, 너무 크게 잡으면 Render 요청 타임아웃(502)에 걸릴 수 있다
+    (AI Price Discovery에서 이미 겪은 문제, price_discovery_max_jobs_per_run
+    참고).
+
+    생성된 문장에 사실 목록에 없는 숫자가 하나라도 있으면(app.engine.ai_text_guard)
+    저장하지 않고 건너뛴다 — 다음 실행 때 다시 시도된다(ai_one_line이 여전히
+    null이므로)."""
+    return await backfill_offer_blurbs(session, offset=offset, limit=limit, dry_run=dry_run)
 
 
 @router.get("/places/stats")
