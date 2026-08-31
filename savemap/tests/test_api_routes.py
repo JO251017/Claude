@@ -68,7 +68,12 @@ def test_search_accepts_every_valid_sort_value(client, monkeypatch):
         assert resp.json()["results"] == []
 
 
-def test_route_suggest_rejects_budget_out_of_range(client):
+def test_route_suggest_rejects_budget_out_of_range(client, monkeypatch):
+    from app.core.config import settings
+
+    # 이 테스트는 예산 검증 순서를 확인하는 거라 feature flag는 켜둔다 — 플래그
+    # 자체의 동작은 test_route_suggest_disabled_by_default가 따로 확인한다.
+    monkeypatch.setattr(settings, "ai_saving_plan_enabled", True)
     # 예산 검증도 DB 세션에 닿기 전에 일어나야 한다 (radius 검증과 같은 순서 원칙).
     resp = client.post(
         "/v1/route/suggest",
@@ -76,6 +81,26 @@ def test_route_suggest_rejects_budget_out_of_range(client):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "SM4003"
+
+
+def test_route_suggest_disabled_by_default(client):
+    # settings.ai_saving_plan_enabled 기본값은 False — SaveMap vNext 지시서(2026-08-31)
+    # "AI Saving Plan = OFF" 요구사항. 예산/반경 검증보다도 먼저 막혀야 한다(DB에
+    # 닿기 전, 유효하지 않은 요청이어도).
+    resp = client.post(
+        "/v1/route/suggest",
+        json={"lat": 36.99, "lng": 127.11, "constraints": {"budget": 100}},
+    )
+    assert resp.status_code == 403
+    body = resp.json()["detail"]
+    assert body["code"] == "SM4033"
+    assert body["enabled"] is False
+
+
+def test_config_js_reports_ai_saving_plan_flag(client):
+    resp = client.get("/config.js")
+    assert resp.status_code == 200
+    assert "aiSavingPlanEnabled" in resp.text
 
 
 def test_route_suggest_rejects_invalid_party_size(client):
@@ -113,7 +138,10 @@ def test_route_suggest_rejects_missing_constraints(client):
     assert resp.status_code == 422
 
 
-def test_route_suggest_accepts_new_request_shape_before_db(client):
+def test_route_suggest_accepts_new_request_shape_before_db(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_saving_plan_enabled", True)
     # activities/preference/constraints.free_parking_required가 스키마 레벨에서
     # 통과되는지만 확인한다 — 예산 검증(400) 이전에 422가 나지 않아야 새 필드들이
     # 유효하다는 뜻. context/constraints 그룹화(2026-08-13) 반영.

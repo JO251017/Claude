@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import SessionDep
 from app.api.schemas.route import RouteStopItem, RouteSuggestRequest, RouteSuggestResponse
 from app.core.config import settings
-from app.core.errors import BudgetOutOfRangeError, RadiusOutOfRangeError
+from app.core.errors import AiSavingPlanDisabledError, BudgetOutOfRangeError, RadiusOutOfRangeError
 from app.domain.enums import Category, RoutePreference
 from app.engine.activity_classifier import ACTIVITY_LABELS
 from app.engine.benefit_combiner import combine
@@ -55,6 +55,9 @@ async def suggest_route(
     payload: RouteSuggestRequest,
     session: AsyncSession = SessionDep,
 ) -> RouteSuggestResponse:
+    if not settings.ai_saving_plan_enabled:
+        raise AiSavingPlanDisabledError()
+
     constraints = payload.constraints
     if not (settings.route_min_budget <= constraints.budget <= settings.route_max_budget):
         raise BudgetOutOfRangeError()

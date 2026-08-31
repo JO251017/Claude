@@ -70,6 +70,10 @@ def create_app() -> FastAPI:
         config = {
             "supabaseUrl": settings.supabase_url,
             "supabaseAnonKey": settings.supabase_anon_key,
+            # AI 절약 플랜 노출 여부 — 백엔드 settings.ai_saving_plan_enabled가 유일한
+            # 진실 소스다. 프론트가 별도로 하드코딩한 값을 갖지 않고 이걸 그대로
+            # 읽는다(app.js가 이미 부팅 전에 이 스크립트를 로드하므로 별도 fetch 불필요).
+            "aiSavingPlanEnabled": settings.ai_saving_plan_enabled,
         }
         body = f"window.SAVEMAP_CONFIG = {json.dumps(config)};"
         return Response(content=body, media_type="application/javascript")

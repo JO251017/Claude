@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     route_max_budget: float = 500_000.0
     route_max_stops: int = 4
 
+    # AI 절약 플랜 기능 플래그(2026-08-31, "SaveMap vNext" 지시서 27번 — 가격 데이터가
+    # 충분히 쌓이기 전엔 동선 추천을 사용자에게 보여주지 않는다). 이 저장소엔 이런
+    # on/off 플래그가 하나도 없었다 — route_planner.py/route.py 로직 자체는 그대로
+    # 두고, 이 값 하나로만 노출 여부를 가른다. 재활성화는 이 값을 True로 바꾸기만
+    # 하면 된다(코드 삭제/복구 없음). 기본값은 False — 자동으로 True가 되는 코드
+    # 경로는 만들지 않는다(가격 커버리지가 올라갔다고 자동 켜지지 않는다).
+    ai_saving_plan_enabled: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

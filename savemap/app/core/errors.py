@@ -143,6 +143,22 @@ class InvalidCsvError(SaveMapError):
     message = "올바른 CSV 파일이 아닙니다"
 
 
+class AiSavingPlanDisabledError(SaveMapError):
+    """settings.ai_saving_plan_enabled=False일 때 /route/suggest가 던진다. 500이나
+    404가 아니라 "이 기능은 지금 꺼져 있다"는 걸 명확히 구분하는 응답이 필요해서
+    403을 쓴다(권한이 없는 게 아니라 기능 자체가 비활성 상태라는 의미). detail에
+    enabled:false를 같이 실어서, 프론트가 백엔드를 직접 두드려도 코드 필드만 보고
+    "복구 가능한 상태"임을 구분할 수 있게 한다."""
+
+    code = "SM4033"
+    http_status = status.HTTP_403_FORBIDDEN
+    message = "AI 절약 플랜은 현재 준비 중입니다. 실제 가격 데이터가 충분히 축적되면 다시 제공할 예정입니다."
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(detail)
+        self.detail["enabled"] = False
+
+
 # PlaceMenuAlreadyRegisteredError(SM4227)는 2026-08-18(사용자 지시: "사장님
 # 등록은 비활성화하고 사용자가 메뉴 등록하는 구조로 바꿔")로 제거됨 — 매장당
 # 최초 1건 제한 대신 항목 단위 갱신(같은 가격=무시, 다른 가격=AI 검토)으로

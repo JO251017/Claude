@@ -890,6 +890,12 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
+// AI 절약 플랜 노출 여부 — 백엔드 /config.js(app/main.py)가 유일한 진실 소스다.
+// 프론트가 따로 하드코딩한 값을 갖지 않는다: 값이 없거나 false면 꺼진 것으로
+// 취급(백엔드 기본값과 동일). 재활성화는 서버 설정(ai_saving_plan_enabled)만
+// 바꾸면 되고, 이 파일은 안 건드려도 된다.
+const AI_SAVING_PLAN_ENABLED = window.SAVEMAP_CONFIG?.aiSavingPlanEnabled === true;
+
 // --- Supabase Auth (SaveMap 전체에서 공용으로 사용하는 로그인 상태) ---
 const supabaseClient =
   window.supabase && window.SAVEMAP_CONFIG?.supabaseUrl && window.SAVEMAP_CONFIG?.supabaseAnonKey
@@ -2047,7 +2053,15 @@ const routePlanOverlay = document.getElementById('route-plan-overlay');
 const routePlanContent = document.getElementById('route-plan-content');
 let lastRouteStops = [];
 
-document.getElementById('ai-route-cta').addEventListener('click', openRoutePlanSheet);
+// 준비 중(feature flag OFF)이면 CTA 버튼 자체를 숨긴다 — 백엔드도 /route/suggest를
+// 403(SM4033)으로 막아두지만(app/api/v1/route.py), 눌러서 에러를 보게 하지 않고
+// 애초에 안 보이게 하는 쪽이 "준비 중" 상태를 더 명확하게 전달한다.
+const aiRouteCtaBtn = document.getElementById('ai-route-cta');
+if (AI_SAVING_PLAN_ENABLED) {
+  aiRouteCtaBtn.addEventListener('click', openRoutePlanSheet);
+} else {
+  aiRouteCtaBtn.classList.add('hidden');
+}
 document.getElementById('route-plan-close-btn').addEventListener('click', () => {
   routePlanOverlay.classList.add('hidden');
 });
@@ -2841,7 +2855,7 @@ async function initialLoad() {
   // 다시 물어볼 이유가 있는 질문이라 재방문을 만드는 힘이 있다. localStorage
   // 아니라 sessionStorage — 브라우저 세션(탭)마다 다시 물어봐야 "매번" 훅으로
   // 작동한다(한 번 봤다고 평생 다시 안 보여주면 딱 온보딩용 안내랑 다를 게 없다).
-  if (!sessionStorage.getItem('savemap_route_plan_shown')) {
+  if (AI_SAVING_PLAN_ENABLED && !sessionStorage.getItem('savemap_route_plan_shown')) {
     sessionStorage.setItem('savemap_route_plan_shown', '1');
     openRoutePlanSheet();
   }
