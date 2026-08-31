@@ -218,6 +218,40 @@ function renderAvatarSwatches(part) {
 let lastGrowthInfo = null;
 let lastSavingsSummaryData = null;
 
+// --- 연속 방문 스트릭(2026-08-30, "재미 개선 — 연속 방문 스트릭",
+// "절약활동을 통해 펫을 키우는 재미를 연결시켜") --- null이면 "이번 세션에서
+// 아직 한 번도 안 불러왔다"는 뜻 — 첫 로드 때는 스트릭이 이미 쌓여 있어도
+// 축하 토스트를 안 띄운다(막 켰을 뿐인데 축하가 뜨면 이상하다). 그 다음부터
+// 값이 실제로 늘어난 순간에만 축하한다.
+let lastKnownStreakDays = null;
+const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100];
+
+function renderStreakBadge(s) {
+  const el = document.getElementById('avatar-streak-badge');
+  if (!el) return;
+  if (!s.streak_days || s.streak_days <= 0) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.classList.toggle('avatar-streak-badge--at-risk', !!s.streak_at_risk);
+  el.textContent = s.streak_at_risk
+    ? `🔥 ${s.streak_days}일 · 오늘도 하면 계속!`
+    : `🔥 ${s.streak_days}일 연속`;
+}
+
+// 발견/방문/추천 중 뭘로 늘었든 여기 한 곳에서만 축하한다 — 액션 세 곳
+// (submitStatusUpdate/certifyOffer/recommendPlace) 각각에 스트릭 로직을
+// 중복으로 넣지 않기 위해 loadMyProfile()의 스트릭 값 변화 감지에서만 부른다.
+function celebrateStreak(days) {
+  triggerAvatarGrowthFeedback('streak');
+  showSavingsToast(
+    STREAK_MILESTONES.includes(days)
+      ? `🎉 ${days}일 연속 달성! 우리 아이가 무럭무럭 자라요`
+      : `🔥 오늘도 절약! ${days}일 연속`
+  );
+}
+
 function renderClosetPreview() {
   const el = document.getElementById('closet-avatar-preview');
   if (!el || !lastGrowthInfo) return;
@@ -769,7 +803,25 @@ function formatWon(amount) {
 // 발견/추천/인증 성공 직후 "지금 절약하고 있다"는 걸 짧게 체감시킨다. 문구에는
 // 항상 실제 응답값만 쓴다(지어낸 숫자 없음) — 인증 성공 시 amount는 서버가 계산한
 // 실제 절약액이고, 발견/추천은 금액이 없는 행동이라 금액 없이 완료만 알린다.
+// 토스트가 한 자리(고정 위치)만 쓰다 보니, 액션 토스트("🧭 발견 완료!")와
+// 스트릭 토스트("🔥 3일 연속!")처럼 짧은 시간 안에 두 번 부르면 서로 겹쳐
+// 보였다(2026-08-30, 스트릭 기능 추가하며 발견) — 큐로 바꿔서 순서대로
+// 하나씩만 보이게 한다. 호출부(기존 showSavingsToast(text) 형태)는 안 바뀐다.
+let toastQueue = [];
+let toastShowing = false;
+
 function showSavingsToast(text) {
+  toastQueue.push(text);
+  if (!toastShowing) processToastQueue();
+}
+
+function processToastQueue() {
+  const text = toastQueue.shift();
+  if (text === undefined) {
+    toastShowing = false;
+    return;
+  }
+  toastShowing = true;
   const toast = document.createElement('div');
   toast.className = 'savings-toast';
   toast.textContent = text;
@@ -777,7 +829,10 @@ function showSavingsToast(text) {
   requestAnimationFrame(() => toast.classList.add('savings-toast--show'));
   setTimeout(() => {
     toast.classList.remove('savings-toast--show');
-    setTimeout(() => toast.remove(), 300);
+    setTimeout(() => {
+      toast.remove();
+      processToastQueue();
+    }, 300);
   }, 1800);
 }
 
@@ -980,6 +1035,17 @@ async function loadMyProfile() {
     // 열 때(openAvatarCloset/renderTitlePicker)는 API를 다시 안 부른다.
     lastGrowthInfo = growth;
     lastSavingsSummaryData = s;
+
+    // 연속 방문 스트릭 — 펫 무드(끊기기 직전이면 살짝 처져 보이게)와 배지를
+    // 갱신하고, 지난번 조회 이후 실제로 늘었으면(오늘 첫 활동으로 이어졌거나
+    // 새 스트릭이 막 시작됐으면) 축하한다.
+    avatarEl.classList.toggle('character-avatar--waiting', !!s.streak_at_risk);
+    renderStreakBadge(s);
+    if (lastKnownStreakDays !== null && s.streak_days > lastKnownStreakDays) {
+      celebrateStreak(s.streak_days);
+    }
+    lastKnownStreakDays = s.streak_days;
+
     document.getElementById('my-title').textContent = resolveEquippedTitleText();
     document.getElementById('my-level-badge').textContent = `성장 ${growth.stageNumber}/${growth.totalStages}단계`;
     document.getElementById('my-saving-bar').style.width = `${growth.progressPct}%`;

@@ -40,3 +40,10 @@ class SavingsSummaryResponse(BaseModel):
     recommend_title: str
     recommend_next_threshold: int | None
     recommend_remaining_to_next: int | None
+    # 연속 방문 스트릭(2026-08-30, "재미 개선 — 연속 방문 스트릭") — 발견/영수증
+    # 인증/추천 중 하나라도 한 날을 "활동한 날"로 센다. streak_at_risk가 true면
+    # 스트릭이 있는데 오늘 아직 활동을 안 한 상태 — 오늘 안에 하나라도 하면 이어지고,
+    # 자정을 넘기면 0으로 끊긴다.
+    streak_days: int = 0
+    streak_active_today: bool = False
+    streak_at_risk: bool = False

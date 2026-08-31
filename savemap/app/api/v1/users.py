@@ -9,6 +9,7 @@ from app.gamification.service import (
     get_recommend_summary,
     get_savings_summary,
 )
+from app.gamification.streak import get_streak_summary
 from app.sources.merchant_console.service import is_merchant_verified
 
 router = APIRouter(tags=["users"], prefix="/users")
@@ -37,6 +38,7 @@ async def my_savings_summary(
     # 쓴다(사용자 확정: "영수증 인증을 방문횟수로 해").
     visit = compute_visit_title(summary.certification_count)
     recommend = await get_recommend_summary(session, user_id)
+    streak = await get_streak_summary(session, user_id)
     return SavingsSummaryResponse(
         total_saved=summary.total_saved,
         level=summary.level,
@@ -61,4 +63,7 @@ async def my_savings_summary(
         recommend_title=recommend.title,
         recommend_next_threshold=recommend.next_threshold,
         recommend_remaining_to_next=recommend.remaining_to_next,
+        streak_days=streak.current_streak,
+        streak_active_today=streak.did_activity_today,
+        streak_at_risk=streak.at_risk,
     )

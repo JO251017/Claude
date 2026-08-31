@@ -2102,6 +2102,7 @@ select:focus {
   .character-avatar.avatar-bounce--recommend { animation: none; }
   .character-avatar:active { transform: none !important; }
   .avatar-particle { animation: none; opacity: 0; }
+  .avatar-streak-badge--at-risk { animation: none; }
 }
 
 /* 성장 단계가 오를수록 늘어나는 장식(반짝임) — 다마고치처럼 "장식이 늘어나는"
@@ -2302,6 +2303,46 @@ select:focus {
   transform: translateY(-50%);
   opacity: 0.6;
   font-size: 0.6rem;
+}
+
+/* --- 연속 방문 스트릭 배지(2026-08-30) --- */
+/* avatar-title-badge와 같은 톤이되, 무대 좌상단 구석에 둬서 두 배지가 겹치지
+   않는다(오른쪽엔 stage-prop--ball이 이미 있음). */
+.avatar-streak-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  background: var(--glass-bg-strong);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--ink);
+  box-shadow: var(--glass-shadow-sm);
+  white-space: nowrap;
+}
+
+/* 스트릭이 있는데 오늘 아직 활동을 안 해서 곧 끊길 위기 — 색을 앰버로 바꾸고
+   살짝 두근거리게 해서 "오늘 안에 해야 한다"는 긴급함을 준다. */
+.avatar-streak-badge--at-risk {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(217, 119, 6, 0.55);
+  color: #92400e;
+  animation: streak-at-risk-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes streak-at-risk-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* 펫 무드(2026-08-30, "절약활동을 통해 펫을 키우는 재미를 연결시켜") — 스트릭이
+   끊기기 직전이면 펫도 살짝 처져 보이게 한다. transform/animation은 안 건드리고
+   filter만 얹어서 홉 물리·숨쉬기 애니메이션과 절대 충돌하지 않는다. */
+.character-avatar--waiting {
+  filter: saturate(0.7) brightness(0.94);
 }
 
 .saving-amount {

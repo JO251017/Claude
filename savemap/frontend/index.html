@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260830a" />
+  <link rel="stylesheet" href="style.css?v=20260830b" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -297,6 +297,12 @@
                    아니라 아래 saving-bar 하나로만 보여준다. -->
               <div class="character-stage" id="character-stage">
                 <div class="avatar-title-badge" id="my-title">씨앗</div>
+                <!-- 연속 방문 스트릭(2026-08-30, "재미 개선 — 연속 방문 스트릭",
+                     "절약활동을 통해 펫을 키우는 재미를 연결시켜") — 발견/인증/
+                     추천 중 하나라도 한 날을 "활동한 날"로 센다. streak_days가
+                     0이면(아직 한 번도 스트릭이 없음) 숨긴다 — 없는 걸 0일로
+                     보여주면 오히려 초라해 보인다. -->
+                <div class="avatar-streak-badge hidden" id="avatar-streak-badge"></div>
                 <!-- 무대 꾸미기(2026-08-27: "아바타 있는 공간을 강아지 용품들로
                      채워") — 실제 동선(roamAvatarToRandomSpot)이나 클릭을
                      방해하면 안 되므로 전부 pointer-events:none, 구석에 고정
@@ -682,6 +688,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260830a"></script>
+  <script src="app.js?v=20260830b"></script>
 </body>
 </html>
