@@ -24,6 +24,64 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _RETRYABLE_STATUS = {429, 503}
 _MAX_ATTEMPTS = 2
 _RETRY_DELAY_SEC = 1.5
+# 429는 구글이 Retry-After 헤더로 "몇 초 뒤에 다시 해라"를 직접 알려주기도 한다 —
+# 그 값이 있으면 고정 1.5초 대신 그 값을 따른다(2026-08-31, 그라운딩 429 연속
+# 실패 진단 중 추가). Render 무료 플랜 요청 타임아웃을 넘기지 않도록 상한을 둔다
+# — 헤더가 너무 크면(예: 분당 한도라 60초+) 어차피 이번 요청 안에서 기다려봐야
+# 소용없으니 상한까지만 쉬고 다음 재시도(그래도 실패하면 그대로 실패 처리)로 넘어간다.
+_MAX_RETRY_AFTER_SEC = 8.0
+
+
+def _retry_delay_seconds(resp: httpx.Response) -> float:
+    """Retry-After 헤더가 있고 유효한 정수 초면 그 값(상한 적용)을, 없거나
+    파싱이 안 되면 기존 고정 지연을 그대로 쓴다 — 구글이 Retry-After를 안 주는
+    경우(대부분의 503, 일부 429)도 있으므로 fallback은 항상 유지한다."""
+    raw = resp.headers.get("retry-after")
+    if raw is None:
+        return _RETRY_DELAY_SEC
+    try:
+        seconds = float(raw)
+    except ValueError:
+        return _RETRY_DELAY_SEC
+    if seconds <= 0:
+        return _RETRY_DELAY_SEC
+    return min(seconds, _MAX_RETRY_AFTER_SEC)
+
+
+def _extract_error_detail(resp: httpx.Response) -> str | None:
+    """구글 에러 응답 본문에서 사람이 읽을 요약을 뽑는다 — 특히 429는
+    {"error": {"status": "RESOURCE_EXHAUSTED", "message": "...", "details": [...]}}
+    형태로 어떤 quota가 초과됐는지까지 실어 보내는 경우가 많다(2026-08-31,
+    그라운딩 429 원인 규명용으로 추가). 본문이 JSON이 아니거나 예상과 다른
+    구조여도 예외를 던지지 않고 최대한 남은 텍스트라도 잘라 돌려준다 — 이
+    함수 자체의 실패가 원래 에러 처리를 가리면 안 된다."""
+    try:
+        body = resp.json()
+    except (json.JSONDecodeError, ValueError):
+        text = (resp.text or "").strip()
+        return text[:300] if text else None
+
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return str(body)[:300]
+
+    parts = []
+    if error.get("status"):
+        parts.append(str(error["status"]))
+    if error.get("message"):
+        parts.append(str(error["message"]))
+    # QuotaFailure details는 어떤 quota가 초과됐는지(quotaId/quotaMetric)를
+    # 담고 있어서, "429가 났다"보다 "정확히 뭐가 초과됐다"를 알려준다.
+    for d in error.get("details") or []:
+        if isinstance(d, dict) and d.get("@type", "").endswith("QuotaFailure"):
+            for violation in d.get("violations") or []:
+                metric = violation.get("quotaMetric") or violation.get("quotaId")
+                if metric:
+                    parts.append(f"quota={metric}")
+            break
+
+    summary = " · ".join(parts) if parts else str(error)
+    return summary[:300] if summary else None
 
 _VALID_CATEGORIES = {c.value for c in Category}
 
@@ -137,10 +195,19 @@ class GroundingUnavailableError(Exception):
     하나로 뭉개져서, 관리자 페이지의 NO_SOURCE_FOUND만 봐서는 "정말 자료가 없는
     매장인지" "요청 자체가 매번 실패하는 설정/네트워크 문제인지" 구분이 안 됐다
     (실사용 중 발견, 2026-08-31 — 실제 매장 3곳이 연속으로 전부 NO_SOURCE_FOUND).
-    reason은 32자 error_code 컬럼에 그대로 들어갈 수 있게 짧게 유지한다."""
+    reason은 32자 error_code 컬럼에 그대로 들어갈 수 있게 짧게 유지한다.
 
-    def __init__(self, reason: str):
+    detail(선택)은 구글이 에러 응답 본문에 실어 보내는 실제 메시지 — 특히 429는
+    "RESOURCE_EXHAUSTED"와 함께 어떤 quota가 얼마나 초과됐는지(QuotaFailure)를
+    본문에 담아 보내는데, reason(HTTP_429)만으로는 "요청이 잠깐 몰려서인지,
+    이 프로젝트에 그라운딩 quota 자체가 없는(예: 결제 미설정) 것인지" 구분이
+    안 된다 — 이건 코드로 재현/확인할 수 없고 실제 응답을 봐야만 안다(2026-08-31,
+    3개 매장이 매 시도 100% 429로 실패해 원인 규명이 필요해짐). error_code(32자)엔
+    안 들어가고 job.result_summary(500자)에 실어서 관리자 페이지에서 바로 읽게 한다."""
+
+    def __init__(self, reason: str, detail: str | None = None):
         self.reason = reason
+        self.detail = detail
         super().__init__(reason)
 
 
@@ -247,7 +314,7 @@ class GeminiVisionClient:
                 await asyncio.sleep(_RETRY_DELAY_SEC)
                 continue
             if resp.status_code in _RETRYABLE_STATUS and not is_last:
-                await asyncio.sleep(_RETRY_DELAY_SEC)
+                await asyncio.sleep(_retry_delay_seconds(resp))
                 continue
             resp.raise_for_status()
             return resp.json()
@@ -344,8 +411,11 @@ class GeminiVisionClient:
                 data = await self._post_generate_content(client, payload)
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
-                logger.warning("ground_search HTTP 실패: status=%s query=%r", status, query)
-                raise GroundingUnavailableError(f"HTTP_{status}") from exc
+                detail = _extract_error_detail(exc.response)
+                logger.warning(
+                    "ground_search HTTP 실패: status=%s detail=%s query=%r", status, detail, query
+                )
+                raise GroundingUnavailableError(f"HTTP_{status}", detail=detail) from exc
             except httpx.HTTPError as exc:
                 logger.warning(
                     "ground_search 요청 실패: %s query=%r", exc.__class__.__name__, query

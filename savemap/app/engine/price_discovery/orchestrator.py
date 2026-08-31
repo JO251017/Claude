@@ -82,8 +82,14 @@ async def _process_job(
     except GroundingUnavailableError as exc:
         # 검색 요청 자체가 실패한 경우 — "정말 자료가 없다"(NO_SOURCE_FOUND)와
         # 구분해서 사유를 error_code에 남긴다(예: SEARCH_ERR:HTTP_429,
-        # SEARCH_ERR:NO_API_KEY). 32자 컬럼 한도를 넘지 않게 자른다.
-        await _retry_or_give_up(session, job, f"SEARCH_ERR:{exc.reason}"[:32])
+        # SEARCH_ERR:NO_API_KEY). 32자 컬럼 한도를 넘지 않게 자른다. exc.detail
+        # (구글이 준 실제 에러 메시지 — 429면 어떤 quota가 초과됐는지까지)은
+        # error_code보다 훨씬 길 수 있어서 result_summary(500자)에 남긴다 —
+        # 관리자가 이 job을 조회했을 때 "HTTP_429"라는 코드만 보고 끝나지 않고
+        # 진짜 원인(속도 제한 vs quota 자체 없음 등)을 바로 읽을 수 있게 한다.
+        await _retry_or_give_up(
+            session, job, f"SEARCH_ERR:{exc.reason}"[:32], summary=exc.detail
+        )
         return 0
     if grounding is None:
         await _retry_or_give_up(session, job, "NO_SOURCE_FOUND")
@@ -138,21 +144,33 @@ async def _process_job(
     return len(published)
 
 
-async def _retry_or_give_up(session: AsyncSession, job: PriceDiscoveryJob, error_code: str) -> None:
+async def _retry_or_give_up(
+    session: AsyncSession, job: PriceDiscoveryJob, error_code: str, *, summary: str | None = None
+) -> None:
     """PRICE_DISCOVERY_MAX_RETRY(기본 1)만큼 다음 배치 실행에서 다시 시도할 기회를
-    준다 — 무한 재시도는 금지(28-16)."""
+    준다 — 무한 재시도는 금지(28-16). summary(선택)는 실패 원인의 실제 상세를
+    result_summary에 남긴다 — 재시도 중이라도 관리자가 지금 왜 막혀있는지 바로
+    볼 수 있게(포기할 때까지 기다릴 필요 없이)."""
     if job.attempt_count > settings.price_discovery_max_retry:
-        await _give_up(session, job, error_code)
+        await _give_up(session, job, error_code, summary=summary)
         return
     job.status = DiscoveryJobStatus.PENDING
     job.error_code = error_code
+    if summary:
+        job.result_summary = summary[:500]
     await session.commit()
 
 
-async def _give_up(session: AsyncSession, job: PriceDiscoveryJob, error_code: str) -> None:
+async def _give_up(
+    session: AsyncSession, job: PriceDiscoveryJob, error_code: str, *, summary: str | None = None
+) -> None:
     job.status = DiscoveryJobStatus.MANUAL_REVIEW
     job.error_code = error_code
-    job.result_summary = "자동 조사가 반복 실패해 수동 확인이 필요해요"
+    job.result_summary = (
+        f"자동 조사가 반복 실패해 수동 확인이 필요해요 — {summary[:450]}"
+        if summary
+        else "자동 조사가 반복 실패해 수동 확인이 필요해요"
+    )
     job.completed_at = datetime.now(UTC)
     await session.commit()
 

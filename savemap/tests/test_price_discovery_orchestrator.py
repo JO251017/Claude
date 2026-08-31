@@ -105,6 +105,24 @@ def test_search_request_failure_gets_distinct_error_code_from_no_source_found():
     assert job.error_code != "NO_SOURCE_FOUND"
 
 
+def test_search_request_failure_detail_lands_in_result_summary():
+    # exc.detail(구글 응답 본문에서 뽑은 실제 사유, 예: quota 이름)이 있으면
+    # 관리자가 재시도 중에도 바로 읽을 수 있게 result_summary에 남아야 한다 —
+    # error_code(SEARCH_ERR:HTTP_429)만으론 "왜"까지는 안 보이기 때문.
+    job = _job(attempt_count=0)
+    session = _FakeSession(place=_place())
+    with patch(
+        "app.engine.price_discovery.orchestrator.discover_sources",
+        new=AsyncMock(
+            side_effect=GroundingUnavailableError(
+                "HTTP_429", detail="RESOURCE_EXHAUSTED · quota=generate_requests"
+            )
+        ),
+    ):
+        asyncio.run(orchestrator._process_job(session, job, client=None))
+    assert job.result_summary == "RESOURCE_EXHAUSTED · quota=generate_requests"
+
+
 def test_place_not_found_gives_up_immediately():
     job = _job()
     session = _FakeSession(place=None)

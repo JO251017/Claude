@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from app.integrations.gemini import GeminiVisionClient, GroundingCitation, GroundingUnavailableError
+from app.integrations.gemini import (
+    GeminiVisionClient,
+    GroundingCitation,
+    GroundingUnavailableError,
+    _extract_error_detail,
+    _retry_delay_seconds,
+)
 
 
 def _client() -> GeminiVisionClient:
@@ -69,6 +75,35 @@ def test_ground_search_raises_with_status_code_on_http_error():
         with pytest.raises(GroundingUnavailableError) as exc_info:
             asyncio.run(_client().ground_search("냉삼 메뉴 가격"))
     assert exc_info.value.reason == "HTTP_500"
+
+
+def test_ground_search_429_captures_quota_detail_from_error_body():
+    # 실사용 중 발견(2026-08-31): 3개 매장이 매 시도 100% 429로 실패했는데
+    # error_code(HTTP_429)만으론 "요청이 잠깐 몰려서인지 quota 자체가 없는지"
+    # 구분이 안 됐다 — 구글이 준 실제 이유(QuotaFailure의 quotaMetric)를
+    # detail로 뽑아 관리자가 볼 수 있게 한다.
+    error_body = {
+        "error": {
+            "code": 429,
+            "message": "Resource has been exhausted (e.g. check quota).",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaMetric": "generativelanguage.googleapis.com/generate_requests"}],
+                }
+            ],
+        }
+    }
+    with patch(
+        "httpx.AsyncClient.post",
+        new=AsyncMock(return_value=_post_response(error_body, status=429)),
+    ):
+        with pytest.raises(GroundingUnavailableError) as exc_info:
+            asyncio.run(_client().ground_search("냉삼 메뉴 가격"))
+    assert exc_info.value.reason == "HTTP_429"
+    assert "RESOURCE_EXHAUSTED" in exc_info.value.detail
+    assert "generate_requests" in exc_info.value.detail
 
 
 def test_ground_search_raises_on_unexpected_response_shape():
@@ -217,3 +252,63 @@ def test_extract_price_discovery_confidence_is_clamped_to_0_1():
         )
     assert result is not None
     assert result.store_match.confidence == 1.0
+
+
+# --- _retry_delay_seconds / _extract_error_detail (2026-08-31, 429 진단 강화) ---
+
+
+def test_retry_delay_uses_retry_after_header_when_present():
+    resp = _post_response({}, status=429)
+    resp.headers["retry-after"] = "3"
+    assert _retry_delay_seconds(resp) == 3.0
+
+
+def test_retry_delay_caps_large_retry_after():
+    resp = _post_response({}, status=429)
+    resp.headers["retry-after"] = "120"
+    assert _retry_delay_seconds(resp) == 8.0  # _MAX_RETRY_AFTER_SEC
+
+
+def test_retry_delay_falls_back_when_header_missing():
+    resp = _post_response({}, status=429)
+    assert _retry_delay_seconds(resp) == 1.5  # _RETRY_DELAY_SEC
+
+
+def test_retry_delay_falls_back_when_header_unparseable():
+    resp = _post_response({}, status=429)
+    resp.headers["retry-after"] = "Wed, 21 Oct 2026 07:28:00 GMT"  # HTTP-date 형식(초 단위 아님)
+    assert _retry_delay_seconds(resp) == 1.5
+
+
+def test_extract_error_detail_pulls_status_message_and_quota():
+    resp = _post_response(
+        {
+            "error": {
+                "status": "RESOURCE_EXHAUSTED",
+                "message": "quota exceeded",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                        "violations": [{"quotaMetric": "some.quota/name"}],
+                    }
+                ],
+            }
+        },
+        status=429,
+    )
+    detail = _extract_error_detail(resp)
+    assert "RESOURCE_EXHAUSTED" in detail
+    assert "quota exceeded" in detail
+    assert "some.quota/name" in detail
+
+
+def test_extract_error_detail_handles_non_json_body():
+    request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    resp = httpx.Response(500, request=request, text="internal server error")
+    assert _extract_error_detail(resp) == "internal server error"
+
+
+def test_extract_error_detail_handles_empty_body():
+    request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    resp = httpx.Response(500, request=request, text="")
+    assert _extract_error_detail(resp) is None
