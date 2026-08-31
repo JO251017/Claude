@@ -1668,6 +1668,20 @@ select:focus {
   margin: 2px 0;
 }
 
+/* 다단계 최신성(vNext, 2026-08-31) — report.freshness_tier가 "expired"(90일
+   초과)일 때만 경고 톤으로 바꾼다. 나머지 등급(fresh/normal/stale)은 위
+   .last-verified-line 기본 스타일 그대로(굳이 매번 강조하지 않는다). */
+.last-verified-line--expired {
+  color: #b45309;
+}
+
+/* 검색 결과 카드의 "정보 오래됨" 배지 — .badge--local-currency와 같은 톤 체계지만
+   경고 의미라 더 진한 앰버로 구분한다. */
+.badge--stale {
+  background: rgba(217, 119, 6, 0.16);
+  color: #b45309;
+}
+
 /* 무료주차 배지(10번 항목) — .badge와 톤을 맞추되 파란 계열로 구분. */
 .badge--parking {
   background: rgba(37, 99, 235, 0.12);

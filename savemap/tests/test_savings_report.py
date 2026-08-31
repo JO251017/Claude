@@ -3,6 +3,10 @@ from datetime import datetime, timedelta, timezone
 from app.engine.savings_report import build_savings_report
 
 
+def _days_ago(n):
+    return datetime.now(timezone.utc) - timedelta(days=n)
+
+
 def _report(**kw):
     base = dict(
         savings_rate=0.0,
@@ -41,13 +45,39 @@ def test_strong_real_signals_produce_high_confidence_and_grade():
     assert any("영수증 인증 3건" in reason for reason in r.reasons)
 
 
-def test_stale_verification_does_not_count_as_fresh():
-    r = _report(
-        savings_rate=10.0,
-        dining_count=2,
-        last_verified_at=datetime.now(timezone.utc) - timedelta(days=90),
-    )
-    assert not any("이내 데이터 반영" in reason for reason in r.reasons)
+def test_freshness_tier_boundaries():
+    # 7일/30일/90일 경계값 — vNext 지시서(2026-08-31) "가격 최신성 시스템"의
+    # 다단계 분류가 정확히 그 기준으로 나뉘는지 확인한다.
+    fresh = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(7))
+    normal = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(30))
+    stale = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(90))
+    expired = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(91))
+    unknown = _report(savings_rate=10.0, dining_count=2, last_verified_at=None)
+
+    assert fresh.freshness_tier == "fresh"
+    assert normal.freshness_tier == "normal"
+    assert stale.freshness_tier == "stale"
+    assert expired.freshness_tier == "expired"
+    assert unknown.freshness_tier == "unknown"
+    assert unknown.days_since_verified is None
+
+
+def test_expired_price_is_flagged_and_penalized_in_score():
+    # 90일을 넘긴 데이터는 "정보가 오래됐다"고 경고 문구가 붙고, 점수도 깎인다 —
+    # 오래된 정보가 신뢰도 점수에서 신선한 정보와 똑같이 취급되면 안 된다.
+    fresh = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(1))
+    expired = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(120))
+    assert any("오래됐어요" in reason for reason in expired.reasons)
+    assert expired.score < fresh.score
+
+
+def test_unknown_freshness_is_not_penalized():
+    # 확인 시각 정보가 아예 없는 것과 "오래전에 확인했다"는 다른 사실이다 — 모른다고
+    # 벌점을 주면 없는 사실을 있는 것처럼 취급하는 셈이다.
+    with_data = _report(savings_rate=10.0, dining_count=2, last_verified_at=_days_ago(120))
+    unknown = _report(savings_rate=10.0, dining_count=2, last_verified_at=None)
+    assert unknown.score > with_data.score
+    assert not any("오래됐어요" in reason for reason in unknown.reasons)
 
 
 def test_score_never_exceeds_100():

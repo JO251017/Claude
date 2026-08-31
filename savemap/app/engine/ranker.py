@@ -1,11 +1,21 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.core.config import settings
 from app.domain.enums import RouteActivity
 from app.engine.activity_classifier import classify_activity
+from app.engine.freshness import freshness_tier
 from app.engine.models import OfferCandidate
 from app.engine.savings_calculator import SavingsBreakdown, calculate_savings
 from app.integrations.weather import WeatherSnapshot
+
+# 90일 넘게 확인 안 된(freshness_tier == "expired") 후보는 신뢰도 점수를 이만큼
+# 깎는다 — vNext 지시서 "90일 이상 된 데이터는... 가능하면 검색 ranking 감점".
+# 새 가중치 항목을 추가하지 않고 trust_norm에 곱하는 이유: rank_*_weight 4개의
+# 합이 1.0이어야 한다는 불변식(score가 API 응답에 그대로 노출됨, 위 rank_weather_weight
+# 주석 참고)을 다시 흔들고 싶지 않아서다. last_verified_at이 아예 없으면("unknown")
+# 깎지 않는다 — 확인한 적이 없다는 것과 오래전에 확인했다는 것은 다른 사실이다.
+_EXPIRED_FRESHNESS_PENALTY = 0.7
 
 # 날씨가 실제로 그 업종과 맞아떨어질 때만 중립(0.5)에서 이만큼 올려준다 — 지어낸
 # 취향이 아니라 "비 오면 카페 간다"류의 상식적인 상관관계만 반영(아래 _weather_norm
@@ -50,15 +60,21 @@ def _weather_norm(place_category_name: str | None, weather: WeatherSnapshot | No
     return 0.5
 
 
+def _freshness_multiplier(last_verified_at: datetime | None) -> float:
+    tier, _ = freshness_tier(last_verified_at)
+    return _EXPIRED_FRESHNESS_PENALTY if tier == "expired" else 1.0
+
+
 def _score(
     breakdown: SavingsBreakdown,
     trust: float,
     distance_m: float,
     place_category_name: str | None,
     weather: WeatherSnapshot | None,
+    last_verified_at: datetime | None = None,
 ) -> float:
     savings_norm = min(breakdown.savings_rate / 100.0, 1.0)
-    trust_norm = min(max(trust, 0.0), 1.0)
+    trust_norm = min(max(trust, 0.0), 1.0) * _freshness_multiplier(last_verified_at)
     distance_norm = _distance_norm(distance_m)
     weather_norm = _weather_norm(place_category_name, weather)
     return (
@@ -76,7 +92,12 @@ def rank_candidates(
     for candidate in candidates:
         breakdown = calculate_savings(candidate)
         score = _score(
-            breakdown, candidate.trust_score, candidate.distance_m, candidate.place_category_name, weather
+            breakdown,
+            candidate.trust_score,
+            candidate.distance_m,
+            candidate.place_category_name,
+            weather,
+            candidate.last_verified_at,
         )
         ranked.append(RankedOffer(candidate, breakdown, score))
     # 동점은 흔하다(콜드스타트에서 특히) — 예전엔 안정정렬이라 입력 순서(대개 거리순)가

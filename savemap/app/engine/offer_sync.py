@@ -8,12 +8,64 @@ from app.domain.enums import Category, Layer
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
+from app.domain.price_history import PriceHistory
 from app.engine.price_comparison import MenuPriceComparison, compare_menu_item
 
 # select(Offer)에서 온 게 아니라 "아직 안 찾아봤다"는 뜻 — None(찾아봤는데 없음)과
 # 구분해야 배치 재동기화(app/engine/offer_resync.py)가 미리 IN절로 조회해 넘긴 결과를
 # 그대로 신뢰하고 건당 SELECT를 또 안 날릴 수 있다.
 _UNSET = object()
+
+# 반올림 오차로 "가격이 바뀌었다"고 오판하지 않도록 하는 허용 오차 — 원 단위
+# 미만 차이는 동일 가격으로 취급한다.
+_PRICE_UNCHANGED_TOLERANCE = 0.01
+
+
+async def _record_price_history_if_changed(
+    session: AsyncSession,
+    place: Place,
+    item: MenuItem,
+    *,
+    now: datetime,
+    current: PriceHistory | None = _UNSET,  # type: ignore[assignment]
+) -> None:
+    """MenuItem.price가 이전과 실제로 다를 때만 이력 한 줄을 남긴다(vNext 지시서,
+    "가격이 변경될 때 기존 가격을 삭제하지 않는다"). Offer.base_price/store_discount가
+    아니라 item.price(메뉴 자체의 실제 등록가)를 추적한다 — base_price/store_discount는
+    "무엇과 비교했는지"에 따라 재동기화 때마다 달라질 수 있는 파생값이라, 이걸 그대로
+    이력화하면 실제 가격이 안 바뀐 재동기화에서도 "김치찌개 8,000→8,200→7,900..."처럼
+    허수 이력이 쌓인다. 매 sync_menu_offer 호출(신규 등록/가격 변경/단순 재동기화
+    전부)마다 불리지만, 값이 그대로면 새 행을 만들지 않는다.
+
+    current(existing_offer와 같은 계약): _UNSET이면 직접 SELECT하고, 배치가 IN절로
+    미리 조회해 넘기면 그 값을 그대로 신뢰해 건당 SELECT를 안 던진다 — 안 그러면
+    재동기화 배치가 수천 건을 돌 때마다 이 함수 하나가 P1에서 없앤 건당 SELECT를
+    도로 만들어낸다."""
+    if current is _UNSET:
+        current = (
+            await session.execute(
+                select(PriceHistory).where(
+                    PriceHistory.menu_item_id == item.id, PriceHistory.is_current.is_(True)
+                )
+            )
+        ).scalar_one_or_none()
+    if current is not None and abs(float(current.price) - float(item.price)) < _PRICE_UNCHANGED_TOLERANCE:
+        return
+    if current is not None:
+        current.is_current = False
+        current.valid_to = now
+    session.add(
+        PriceHistory(
+            menu_item_id=item.id,
+            place_id=place.id,
+            price=item.price,
+            source_type=item.source,
+            source_url=item.source_url,
+            observed_at=item.verified_at or now,
+            valid_from=now,
+            is_current=True,
+        )
+    )
 
 
 async def sync_menu_offer(
@@ -23,6 +75,7 @@ async def sync_menu_offer(
     *,
     commit: bool = True,
     existing_offer: Offer | None = _UNSET,  # type: ignore[assignment]
+    current_price_history: PriceHistory | None = _UNSET,  # type: ignore[assignment]
 ) -> MenuPriceComparison:
     """메뉴 가격이 등록/제보되면(사장님 등록이든 사용자 제보든) 지도 검색에 뜨도록
     오퍼를 항상 생성/갱신한다 — 지도 검색(/v1/search)이 offer 테이블만 보는 구조라,
@@ -40,9 +93,10 @@ async def sync_menu_offer(
     "표본이 쌓이면 자동 승격"은 이 함수가 다시 불릴 때(직접 갱신 또는
     app/engine/offer_resync.py의 재동기화 배치)만 일어난다.
 
-    commit/existing_offer는 재동기화 배치 전용 — 개별 호출부(사용자 제보, 착한가격업소
-    임포트 등)는 기본값을 그대로 쓰면 예전과 동일하게 동작한다. 배치는 여러 건을 한
-    트랜잭션에 묶고(commit=False), 기존 오퍼를 IN절로 미리 조회해 넘겨서(existing_offer=)
+    commit/existing_offer/current_price_history는 재동기화 배치 전용 — 개별 호출부
+    (사용자 제보, 착한가격업소 임포트 등)는 기본값을 그대로 쓰면 예전과 동일하게
+    동작한다. 배치는 여러 건을 한 트랜잭션에 묶고(commit=False), 기존 오퍼와 현재
+    가격 이력을 IN절로 미리 조회해 넘겨서(existing_offer=, current_price_history=)
     건당 SELECT를 없앤다."""
     point = to_shape(place.geom)
     cmp = await compare_menu_item(session, item, point.y, point.x)
@@ -93,6 +147,10 @@ async def sync_menu_offer(
         existing_offer.benchmark_source = cmp.benchmark_source if cheaper else None
         existing_offer.benchmark_sample_count = cmp.sample_count
         existing_offer.benchmark_synced_at = now
+
+    await _record_price_history_if_changed(
+        session, place, item, now=now, current=current_price_history
+    )
 
     if commit:
         await session.commit()

@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     # 경로는 만들지 않는다(가격 커버리지가 올라갔다고 자동 켜지지 않는다).
     ai_saving_plan_enabled: bool = False
 
+    # 가격 최신성 다단계 판정 기준(일 단위) — vNext 지시서 "6. 가격 최신성 시스템".
+    # 예전엔 savings_report.py에 30일 이진 플래그(FRESHNESS_WINDOW_DAYS) 하나뿐이었다.
+    # 하드코딩 대신 설정값으로 둬서 운영 중에 조정할 수 있게 한다. 세 값 모두
+    # "last_verified_at부터 며칠까지"를 뜻하며 오름차순이어야 의미가 성립한다
+    # (fresh < normal < stale, app/engine/freshness.py가 순서대로 비교).
+    price_freshness_fresh_days: int = 7
+    price_freshness_normal_days: int = 30
+    price_freshness_stale_days: int = 90
+
 
 @lru_cache
 def get_settings() -> Settings:

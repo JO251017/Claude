@@ -1,8 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.domain.enums import Category, Layer
 from app.engine.models import OfferCandidate
-from app.engine.ranker import _distance_norm, _weather_norm, dedupe_by_place, rank_candidates
+from app.engine.ranker import (
+    _distance_norm,
+    _freshness_multiplier,
+    _weather_norm,
+    dedupe_by_place,
+    rank_candidates,
+)
 from app.integrations.weather import WeatherSnapshot
 
 
@@ -167,3 +173,38 @@ def test_rank_candidates_with_rain_favors_cafe_when_otherwise_tied():
     rain = WeatherSnapshot("rain", 20.0, datetime.now(timezone.utc))
     ranked = rank_candidates([dining, cafe], weather=rain)
     assert ranked[0].candidate.offer_id == 1  # 카페가 비 오는 날 위로 옴
+
+
+# --- 가격 최신성 랭킹 반영(vNext, 2026-08-31) — 90일 넘게 확인 안 된 후보는
+# 신뢰도 항목이 살짝 깎여야 하고, 확인 시각 정보가 아예 없는 경우(unknown)는
+# "오래됐다"고 단정하지 않으므로 깎이면 안 된다. ---
+
+
+def test_freshness_multiplier_penalizes_only_expired():
+    now = datetime.now(timezone.utc)
+    assert _freshness_multiplier(None) == 1.0  # 확인 시각 정보 없음(unknown) — 안 깎음
+    assert _freshness_multiplier(now - timedelta(days=1)) == 1.0  # fresh
+    assert _freshness_multiplier(now - timedelta(days=90)) == 1.0  # stale(경계 이내)
+    assert _freshness_multiplier(now - timedelta(days=91)) < 1.0  # expired
+
+
+def test_expired_freshness_lowers_rank_when_otherwise_tied():
+    fresh = _c(1, 10000, 2000, 0.8)
+    fresh.last_verified_at = datetime.now(timezone.utc) - timedelta(days=1)
+    expired = _c(2, 10000, 2000, 0.8)
+    expired.last_verified_at = datetime.now(timezone.utc) - timedelta(days=200)
+
+    ranked = rank_candidates([expired, fresh])
+    assert ranked[0].candidate.offer_id == 1  # 최신 정보 쪽이 위로 옴
+    assert ranked[0].score > ranked[1].score
+
+
+def test_unknown_freshness_is_not_penalized_in_ranking():
+    # last_verified_at이 아예 없는 후보는 penalty가 없어야 한다 — trust_score만
+    # 같으면 순위도 같아야(=동점) 한다.
+    unknown = _c(1, 10000, 2000, 0.8)
+    fresh = _c(2, 10000, 2000, 0.8)
+    fresh.last_verified_at = datetime.now(timezone.utc) - timedelta(days=1)
+
+    ranked = rank_candidates([unknown, fresh])
+    assert ranked[0].score == ranked[1].score

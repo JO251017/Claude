@@ -21,6 +21,7 @@ from app.domain.enums import SourceType
 from app.domain.menu_item import MenuItem
 from app.domain.offer import Offer
 from app.domain.place import Place
+from app.domain.price_history import PriceHistory
 from app.engine.offer_sync import sync_menu_offer
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,19 @@ async def resync_offers(
             await session.execute(select(Offer).where(Offer.menu_item_id.in_(menu_item_ids)))
         ).scalars().all()
     }
+    # sync_menu_offer가 이제 가격 이력(price_history)도 남기는데, 그 판단에 "이
+    # 메뉴의 현재 이력 행"이 필요하다 — existing_offers와 같은 이유로 IN절 한 번에
+    # 미리 조회해 넘긴다(안 그러면 이 배치가 없앤 건당 SELECT가 여기서 되살아난다).
+    current_price_history = {
+        row.menu_item_id: row
+        for row in (
+            await session.execute(
+                select(PriceHistory).where(
+                    PriceHistory.menu_item_id.in_(menu_item_ids), PriceHistory.is_current.is_(True)
+                )
+            )
+        ).scalars().all()
+    }
 
     resynced = 0
     skipped_no_geom = 0
@@ -91,7 +105,12 @@ async def resync_offers(
         before = existing.benchmark_source if existing else None
         try:
             cmp = await sync_menu_offer(
-                session, place, item, commit=False, existing_offer=existing
+                session,
+                place,
+                item,
+                commit=False,
+                existing_offer=existing,
+                current_price_history=current_price_history.get(item.id),
             )
         except Exception as exc:  # noqa: BLE001 - 행 하나 실패가 나머지 수천 건을 막으면 안 됨
             logger.warning("오퍼 재동기화 실패 (menu_item_id=%s): %s", item.id, exc)

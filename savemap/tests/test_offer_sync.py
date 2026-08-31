@@ -53,7 +53,10 @@ def test_ai_estimated_savings_are_tagged_with_ai_benchmark_source():
         benchmark_source="ai", benchmark_price=9000.0,
     )
     session = _run_sync(cmp)
-    assert len(session.added) == 1
+    # added[0]=Offer(신규), added[1]=PriceHistory(이 메뉴의 최초 가격 이력 행) —
+    # sync_menu_offer가 항상 둘 다 만든다(price_history 기록은 이 파일이 아니라
+    # tests/test_price_history.py에서 별도로 검증한다).
+    assert len(session.added) == 2
     offer = session.added[0]
     assert offer.benchmark_source == "ai"
     assert offer.store_discount == 1000.0
@@ -120,7 +123,7 @@ def test_commit_false_does_not_commit():
     ):
         asyncio.run(offer_sync.sync_menu_offer(session, place, item, commit=False))
     assert session.committed == 0
-    assert len(session.added) == 1
+    assert len(session.added) == 2  # Offer + 최초 PriceHistory 행
 
 
 def test_existing_offer_injected_skips_select():
@@ -149,6 +152,19 @@ def test_existing_offer_injected_skips_select():
         patch("app.engine.offer_sync.to_shape", return_value=SimpleNamespace(x=127.0, y=37.0)),
     ):
         asyncio.run(
-            offer_sync.sync_menu_offer(session, place, item, commit=False, existing_offer=existing)
+            offer_sync.sync_menu_offer(
+                session,
+                place,
+                item,
+                commit=False,
+                existing_offer=existing,
+                current_price_history=None,  # 이 테스트의 초점은 Offer 쪽 계약 —
+                # price_history 쪽도 _UNSET을 넘기면 이 세션이 execute를 또 던져서
+                # AssertionError가 난다. None을 명시적으로 넘겨 "이미 조회해봤는데
+                # 없더라"는 배치 계약을 그대로 흉내낸다.
+            )
         )
-    assert session.added == []  # 새로 add된 게 아니라 기존 객체(existing)를 갱신했어야 함
+    # Offer는 기존 객체(existing)를 갱신했으니 새로 add되지 않지만, PriceHistory는
+    # (이 메뉴의 최초 이력이라) 여전히 새로 add된다.
+    assert len(session.added) == 1
+    assert session.added[0].__class__.__name__ == "PriceHistory"

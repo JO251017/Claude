@@ -1888,6 +1888,10 @@ function openOfferDetail(r) {
         </div>`
       : '';
   const lastVerifiedText = relativeTimeFromNow(r.last_verified_at);
+  // report.freshness_tier(백엔드가 이미 판정해서 내려줌, app/engine/freshness.py와
+  // 동일 기준)가 "expired"(90일 초과)면 상대시간 문구를 경고 톤으로 바꾼다 —
+  // 프론트가 직접 "며칠이 지나면 오래된 건지"를 다시 판단하지 않는다.
+  const isExpiredInfo = r.report && r.report.freshness_tier === 'expired';
   const isFlash = r.layer === 'flash';
 
   detailContent.innerHTML = `
@@ -1901,7 +1905,7 @@ function openOfferDetail(r) {
     <h2 class="place-name">${escapeHtml(r.place_name)}</h2>
     <div class="meta-line">현재 위치에서 ${r.distance_m.toFixed(0)}m${r.address ? ' · ' + escapeHtml(r.address) : ''}</div>
     ${r.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a>` : ''}
-    ${lastVerifiedText ? `<div class="last-verified-line">🕐 ${lastVerifiedText}</div>` : ''}
+    ${lastVerifiedText ? `<div class="last-verified-line${isExpiredInfo ? ' last-verified-line--expired' : ''}">${isExpiredInfo ? '⚠️' : '🕐'} ${lastVerifiedText}${isExpiredInfo ? ' · 최신 정보인지 확인해보세요' : ''}</div>` : ''}
     ${priceCompareHtml}
 
     ${r.signature_menu ? `
@@ -2749,6 +2753,15 @@ async function runSearch() {
             <span class="badge">${escapeHtml(shortCategory || CATEGORY_LABELS[r.category] || r.category)}</span>
             ${statusLabel ? `<span class="status-tag">${statusLabel}</span>` : ''}
             ${r.accepts_local_currency ? '<span class="badge badge--local-currency">🪙 지역화폐</span>' : ''}
+            ${
+              // 다단계 최신성(vNext, 2026-08-31) — 카드는 좁아서 매 등급을 다 안 보여주고
+              // "정보가 오래됐다"는 실제로 조치가 필요한 경우(expired, 90일 초과)만 배지로
+              // 경고한다. fresh/normal/stale/unknown은 이 카드에서 조용히 넘어간다(굳이
+              // "최신이에요"를 매번 강조할 필요는 없다).
+              report && report.freshness_tier === 'expired'
+                ? '<span class="badge badge--stale">⚠️ 정보 오래됨</span>'
+                : ''
+            }
             ${isFlash ? `<span class="flash-badge" data-expires="${r.expires_at || ''}">⏰ ${flashCountdownLabel(r.expires_at)}</span>` : ''}
           </div>
           <span class="distance">${r.distance_m.toFixed(0)}m</span>

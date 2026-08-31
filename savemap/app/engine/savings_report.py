@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+
+from app.engine.freshness import FRESHNESS_LABELS, freshness_tier
 
 # SaveMap은 메뉴를 보여주는 서비스가 아니라 "이 매장이 실제로 얼마나 절약되고,
 # 그 정보를 얼마나 믿을 수 있는지"를 분석해 보여주는 서비스다. 이 모듈이 그 핵심
@@ -11,8 +13,6 @@ from datetime import datetime, timedelta, timezone
 # 문장이 아니라 실제 숫자에서 규칙적으로 도출되는 문장만 쓴다. 데이터가 부족하면
 # 점수/등급을 아예 내지 않고 "데이터 부족"으로만 표시한다 (지어내지 않기).
 
-FRESHNESS_WINDOW_DAYS = 30
-
 
 @dataclass
 class SavingsReport:
@@ -21,6 +21,11 @@ class SavingsReport:
     confidence_tier: str  # "high" | "medium" | "low"
     confidence_stars: int  # 0, 2, 3, 4, 5 중 하나 (0 = 데이터 부족, 별 미표시)
     confidence_label: str
+    # 다단계 최신성(vNext, 2026-08-31) — "unknown"(확인 시각 정보 없음)/"fresh"(7일
+    # 이내)/"normal"(30일 이내)/"stale"(90일 이내)/"expired"(90일 초과).
+    freshness_tier: str = "unknown"
+    freshness_label: str = FRESHNESS_LABELS["unknown"]
+    days_since_verified: int | None = None
     reasons: list[str] = field(default_factory=list)
     one_line: str = ""
 
@@ -62,6 +67,13 @@ THIN_REGION_WEIGHT = 0.85
 # AI 추정 절약률만으로는 tier가 "high"까지 못 간다 — 방문/인증이 아무리 많아도
 # 가격 근거 자체가 약하면 상한을 씌운다.
 BENCHMARK_TIER_CAP = {"ai": "medium"}
+
+# 다단계 최신성 점수 보정 — 예전엔 30일 이내면 무조건 +10, 아니면 0이었다.
+# expired(90일 초과)는 이제 감점한다: "오래된 정보인데도 신뢰도 점수는 그대로"가
+# 되지 않게 하려는 것(vNext 지시서, "90일 이상 된 데이터는... 검색 ranking 감점").
+# unknown(확인 시각 정보 자체가 없음)은 "모른다"일 뿐 "나쁘다"가 아니므로 0 —
+# 데이터가 아예 없다고 벌점을 주면 없는 사실을 있는 것처럼 취급하는 셈이 된다.
+_FRESHNESS_SCORE_BONUS = {"unknown": 0, "fresh": 10, "normal": 6, "stale": 0, "expired": -10}
 
 
 def _confidence_tier(
@@ -125,10 +137,8 @@ def build_savings_report(
     label = _TIER_LABEL[tier]
     capped_by_benchmark = tier != raw_tier
 
-    fresh = (
-        last_verified_at is not None
-        and (datetime.now(timezone.utc) - last_verified_at) <= timedelta(days=FRESHNESS_WINDOW_DAYS)
-    )
+    fresh_tier, days_since_verified = freshness_tier(last_verified_at, now=datetime.now(timezone.utc))
+    fresh_label = FRESHNESS_LABELS[fresh_tier]
 
     reasons: list[str] = []
     if dining_count > 0:
@@ -137,8 +147,10 @@ def build_savings_report(
         reasons.append(f"실제 방문(발견) {discover_count}명")
     if recommend_count > 0:
         reasons.append(f"사용자 추천 {recommend_count}건")
-    if fresh:
-        reasons.append(f"최근 {FRESHNESS_WINDOW_DAYS}일 이내 데이터 반영")
+    if fresh_tier in ("fresh", "normal"):
+        reasons.append(f"최근 확인된 정보예요 ({days_since_verified}일 전)")
+    elif fresh_tier == "expired":
+        reasons.append(f"정보가 오래됐어요 ({days_since_verified}일 전 확인) — 최신 정보인지 확인해보세요")
     if benchmark_source == "region":
         # 표본 2곳과 30곳을 같은 말("실측 데이터 반영")로 뭉개지 않는다 — 실제
         # 개수를 알면 그만큼 구체적으로, 모르면(재동기화 전 구 데이터) 기존 문구로.
@@ -174,6 +186,9 @@ def build_savings_report(
             confidence_tier=tier,
             confidence_stars=stars,
             confidence_label=label,
+            freshness_tier=fresh_tier,
+            freshness_label=fresh_label,
+            days_since_verified=days_since_verified,
             reasons=reasons,
             one_line=one_line,
         )
@@ -188,8 +203,8 @@ def build_savings_report(
     score += min(dining_count * 5, 25)  # 영수증 인증, 최대 25점
     score += min(discover_count * 1, 15)  # 실제 발견/방문, 최대 15점
     score += min(recommend_count * 2, 10)  # 추천, 최대 10점
-    score += 10 if fresh else 0  # 데이터 최신성, 최대 10점
-    score = min(round(score), 100)
+    score += _FRESHNESS_SCORE_BONUS[fresh_tier]  # 데이터 최신성, -10~+10점
+    score = max(0, min(round(score), 100))
     grade = _grade_for_score(score)
 
     if tier == "high" and score >= 60:
@@ -208,6 +223,9 @@ def build_savings_report(
         confidence_tier=tier,
         confidence_stars=stars,
         confidence_label=label,
+        freshness_tier=fresh_tier,
+        freshness_label=fresh_label,
+        days_since_verified=days_since_verified,
         reasons=reasons,
         one_line=one_line,
     )

@@ -15,6 +15,14 @@ class SavingsReportItem(BaseModel):
     confidence_tier: str
     confidence_stars: int  # 0, 2, 3, 4, 5 중 하나 (0 = 데이터 부족, 별을 그리지 않음)
     confidence_label: str
+    # 다단계 최신성(vNext, 2026-08-31) — "unknown"(확인 시각 정보 없음)/"fresh"(7일
+    # 이내)/"normal"(30일 이내)/"stale"(90일 이내)/"expired"(90일 초과). 예전엔
+    # last_verified_at 원시 타임스탬프(아래, SearchResultItem)만 있어서 프론트가
+    # 매번 직접 "며칠 전인지 오래된 건지"를 판단해야 했다 — 이제 백엔드가 판단해
+    # 그대로 내려준다.
+    freshness_tier: str = "unknown"
+    freshness_label: str = "확인 시각 정보 없음"
+    days_since_verified: int | None = None
     reasons: list[str] = []
     one_line: str = ""
 
