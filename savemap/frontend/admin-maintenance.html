@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>쓸모 관리자 - 오퍼 일괄 재동기화</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=text], input[type=number] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  button.secondary { background: #64748b; margin-left: 8px; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 480px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row label { margin: 0; font-weight: 500; }
+  progress { width: 100%; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1>오퍼 일괄 재동기화 (가격 이력·신선도 백필)</h1>
+  <p class="warn">기존에 적재된 오퍼(착한가격업소/지역화폐 등 공공데이터, 사장님 등록분 포함)는
+  price_history/신선도 기능이 배포되기 전부터 있던 데이터라 아직 이력이 한 번도 안 쌓였습니다.
+  이 페이지는 이미 있는 관리자 API(POST /admin/maintenance/resync-offers)를 끝까지 반복
+  호출해서, 전체 오퍼를 다시 계산하고 baseline 가격 이력을 남깁니다 — 멱등이라 여러 번 돌려도
+  안전하고, 먼저 "미리보기(dry_run)"로 영향 범위만 볼 수도 있습니다.</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label for="region">지역 필터 (비우면 전체, 예: 평택시)</label>
+  <input type="text" id="region" />
+
+  <label for="page-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="page-limit" value="500" min="50" max="2000" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="dry-run" />
+    <label for="dry-run">미리보기만 (dry_run — 실제로 저장하지 않고 영향 범위만 확인)</label>
+  </div>
+
+  <div>
+    <button id="run-btn">끝날 때까지 전체 재동기화 실행</button>
+    <button id="stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="progress" value="0" max="1" hidden></progress>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += (typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)) + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function getKey() {
+  const key = document.getElementById('key').value;
+  if (!key) alert('ADMIN_SYNC_KEY를 입력해주세요.');
+  return key;
+}
+
+async function callResync(key, { region, offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  if (region) params.region = region;
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/resync-offers?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+let stopRequested = false;
+
+async function runLoop() {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  const limit = parseInt(document.getElementById('page-limit').value, 10) || 500;
+  const dryRun = document.getElementById('dry-run').checked;
+
+  const runBtn = document.getElementById('run-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const progressEl = document.getElementById('progress');
+  stopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max'); // 전체 건수를 모르니 처음엔 진행 중(indeterminate) 표시
+  logEl.textContent = '';
+  log(`시작 (region=${region || '전체'}, limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalResynced = 0, totalChanged = 0, totalSkipped = 0;
+  const totalTransitions = {};
+  let round = 1;
+
+  // 안전장치: 최대 500라운드(=limit 500 기준 최대 25만 건)까지만 — 그 이상이면
+  // 뭔가 끝나지 않는 상태라는 뜻이라 무한루프를 막는다.
+  for (; round <= 500; round++) {
+    if (stopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callResync(key, { region, offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('네트워크/서버 오류일 수 있습니다 — 위 offset부터 다시 시작하려면 아무 필드나 건드리지 말고 그냥 다시 눌러주세요 (재시도해도 안전, 멱등).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalResynced += result.resynced;
+    totalChanged += result.changed;
+    totalSkipped += result.skipped_no_geom;
+    for (const [k, v] of Object.entries(result.benchmark_transitions || {})) {
+      totalTransitions[k] = (totalTransitions[k] || 0) + v;
+    }
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} resynced=${result.resynced} changed=${result.changed} skipped_no_geom=${result.skipped_no_geom}${(result.failed || []).length ? ` failed=${result.failed.length}` : ''}`);
+    if (result.failed && result.failed.length) {
+      log(`   실패 상세(최대 5건): ${JSON.stringify(result.failed.slice(0, 5))}`);
+    }
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} resynced=${totalResynced} changed=${totalChanged}(벤치마크 소스가 바뀐 건) skipped_no_geom=${totalSkipped}`);
+      log(`전이 요약: ${JSON.stringify(totalTransitions, null, 2)}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 아무것도 저장되지 않았습니다 — 결과가 괜찮으면 미리보기 체크를 끄고 다시 실행하세요.)');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('run-btn').addEventListener('click', runLoop);
+document.getElementById('stop-btn').addEventListener('click', () => { stopRequested = true; });
+</script>
+</body>
+</html>
