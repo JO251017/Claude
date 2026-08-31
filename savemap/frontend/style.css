@@ -1386,11 +1386,6 @@ select:focus {
   margin: 6px 0;
 }
 
-.ai-report--low .ai-report-calc--invite {
-  color: var(--gold, #d97706);
-  font-weight: 700;
-}
-
 /* 신뢰도 점수는 아직 없지만 가격 비교(실측/AI 추정)는 나온 상태 — 완전한 히어로
    블록(.ai-report-hero)보다 톤을 낮춰서, 아직 등급/점수까지는 아니라는 걸 구분한다. */
 .ai-report-hero--estimate {
@@ -1508,14 +1503,6 @@ select:focus {
 
 .card-score-line--calc {
   color: var(--ink-soft);
-}
-
-/* 발견/방문 인증이 0건인 완전 콜드스타트 매장 — "계산 중"(회색, 수동적)과 달리
-   방문을 요청하는 문구라 "보물찾기" 마커(treasure, 금색)와 톤을 맞춘다
-   (현장 활동 유도 기획안 §3-B, 2026-08-13). */
-.card-score-line--unverified {
-  color: var(--gold, #d97706);
-  font-weight: 700;
 }
 
 /* 신뢰도 점수는 없지만(실제 방문 신호 부족) AI/실측 가격 비교는 이미 끝난 경우 —

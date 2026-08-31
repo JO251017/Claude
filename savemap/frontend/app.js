@@ -1776,10 +1776,10 @@ function savingsReportHtml(r) {
     // 뭉개지 않고 실제로 나온 숫자를 출처와 함께 그대로 보여준다.
     const hasEstimate = r.total_savings > 0;
     const sourceLabel = savingsSourceLabel(r.savings_source);
-    // 발견/방문 인증이 하나도 없는 완전 콜드스타트 매장은 "계산 중"이라는 수동적
-    // 문구 대신 방문을 요청하는 문구로 바꾼다 — 실제 카운트 기반이라 지어낸 게
-    // 아니다(현장 활동 유도 기획안 §3-B, 2026-08-13).
-    const isUnverified = r.discover_count === 0 && r.dining_count === 0;
+    // 예전엔 발견/방문 인증이 하나도 없는 매장에 "아무도 확인 안 한 곳이에요·첫
+    // 인증자가 되세요"를 따로 보여줬는데, 이게 오히려 "이 앱엔 데이터가 없다"를
+    // 사용자에게 그대로 광고하는 꼴이라 없앴다(2026-08-31, 사용자 피드백) — 이제
+    // 추정치가 없으면 콜드스타트든 아니든 똑같이 "계산 중" 문구만 보여준다.
     return `
     <div class="ai-report ai-report--low">
       <div class="ai-report-title">💰 AI 절약 리포트</div>
@@ -1787,8 +1787,7 @@ function savingsReportHtml(r) {
       <div class="ai-report-hero ai-report-hero--estimate">
         <div class="ai-report-rate">🤖 ${sourceLabel} 대비 <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
         <div class="ai-report-amount">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong></div>
-      </div>` : isUnverified ? `
-      <div class="ai-report-calc ai-report-calc--invite">🙋 아직 아무도 확인 안 한 곳이에요 · 아래 "발견하기"를 누르면 첫 인증자가 돼요</div>` : `
+      </div>` : `
       <div class="ai-report-calc">절약 정보를 계산하는 중입니다.</div>`}
       <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)}</div>
       ${
@@ -2754,10 +2753,6 @@ async function runSearch() {
         // 경우가 흔하다 — 그걸 무조건 "계산 중"으로 뭉개지 않고, 있는 숫자는
         // 출처(AI 추정 vs 실측)를 밝히고 보여준다.
         const hasEstimate = !hasScore && r.total_savings > 0;
-        // 발견/방문 인증이 0건이면 완전 콜드스타트 매장 — "계산 중"이 아니라
-        // "가보면 첫 인증자가 된다"는 행동 요청으로 카드 문구를 바꾼다(현장 활동
-        // 유도 기획안 §3-B, 2026-08-13).
-        const isUnverified = !hasScore && !hasEstimate && r.discover_count === 0 && r.dining_count === 0;
         const isFlash = r.layer === 'flash';
         return `
       <div class="result-card${isFlash ? ' result-card--flash' : ''}" data-idx="${i}">
@@ -2793,9 +2788,7 @@ async function runSearch() {
           : hasEstimate
             ? `<div class="card-score-line card-score-line--ai">🤖 ${savingsSourceLabel(r.savings_source, 'short')} <strong>${Math.round(r.savings_rate)}% 저렴</strong></div>
               <div class="card-savings-line">예상 절약 <strong>약 ${Math.round(r.total_savings).toLocaleString()}원</strong> · 방문 데이터가 쌓이면 신뢰도가 표시돼요</div>`
-            : isUnverified
-              ? `<div class="card-score-line card-score-line--unverified">🙋 아직 아무도 확인 안 한 곳 · 가보시면 첫 인증자가 돼요</div>`
-              : `<div class="card-score-line card-score-line--calc">⚪ 절약 정보를 계산하는 중입니다</div>`}
+            : `<div class="card-score-line card-score-line--calc">⚪ 절약 정보를 계산하는 중입니다</div>`}
         <div class="card-proof-line">👀 관심 ${r.discover_count} · 🔥 방문 인증 ${r.dining_count}${r.recommend_count ? ` · 👍 추천 ${r.recommend_count}` : ''}</div>
       </div>`;
       })
