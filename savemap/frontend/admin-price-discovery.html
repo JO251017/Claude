@@ -17,6 +17,10 @@
   .warn { color: #b45309; font-size: 0.8rem; }
   .row { display: flex; gap: 8px; align-items: end; }
   .row > div { flex: 1; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.82rem; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  td button { margin-top: 0; padding: 4px 10px; font-size: 0.78rem; }
+  .muted { color: #64748b; }
 </style>
 </head>
 <body>
@@ -38,9 +42,16 @@
   </div>
 
   <h2>검토 대기(manual_review) 작업 승인/거절</h2>
-  <div class="row">
+  <p class="muted">Job ID는 여기서 직접 확인하는 것이 정상 경로입니다 — 아래 "목록 불러오기"로 확인하세요.</p>
+  <button id="list-review-btn" class="secondary">검토 대기 목록 불러오기</button>
+  <table id="review-table" style="display:none;">
+    <thead><tr><th>Job ID</th><th>매장</th><th>요약</th><th></th></tr></thead>
+    <tbody id="review-tbody"></tbody>
+  </table>
+
+  <div class="row" style="margin-top: 20px;">
     <div>
-      <label for="job-id">Job ID</label>
+      <label for="job-id">Job ID (직접 입력하고 싶을 때만)</label>
       <input type="number" id="job-id" />
     </div>
     <button id="approve-btn">승인(강제 재조사 후 게시)</button>
@@ -84,6 +95,12 @@ async function runOnce() {
   const key = getKey();
   if (!key) return;
   const region = document.getElementById('region').value.trim();
+  // Gemini 검색 그라운딩이 매장마다 몇 초씩 걸려서 응답이 늦게 온다 — 그 사이
+  // 버튼을 또 누르면 같은 매장을 두 요청이 동시에 큐에 넣으려다 부딪힐 수
+  // 있다(백엔드가 이제 그 경우를 조용히 건너뛰도록 고쳤지만,애초에 중복
+  // 요청을 안 보내는 게 낫다). 요청이 끝날 때까지 두 버튼 다 비활성화한다.
+  const onceBtn = document.getElementById('run-once-btn');
+  onceBtn.disabled = true;
   try {
     const result = await callAdmin('/price-discovery/run', key, { region });
     log(result);
@@ -91,6 +108,8 @@ async function runOnce() {
   } catch (err) {
     log(`오류: ${err.message}`);
     return null;
+  } finally {
+    onceBtn.disabled = false;
   }
 }
 
@@ -128,30 +147,68 @@ document.getElementById('metrics-btn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('approve-btn').addEventListener('click', async () => {
+async function approveJob(jobId) {
   const key = getKey();
   if (!key) return;
-  const jobId = document.getElementById('job-id').value;
-  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
   try {
     log(await callAdmin(`/price-discovery/jobs/${jobId}/approve`, key));
+    await loadReviewList();
   } catch (err) {
     log(`오류: ${err.message}`);
   }
-});
+}
 
-document.getElementById('reject-btn').addEventListener('click', async () => {
+async function rejectJob(jobId) {
   const key = getKey();
   if (!key) return;
-  const jobId = document.getElementById('job-id').value;
-  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
   if (!confirm(`Job ${jobId}를 거절합니다. 계속할까요?`)) return;
   try {
     log(await callAdmin(`/price-discovery/jobs/${jobId}/reject`, key));
+    await loadReviewList();
   } catch (err) {
     log(`오류: ${err.message}`);
   }
+}
+
+document.getElementById('approve-btn').addEventListener('click', () => {
+  const jobId = document.getElementById('job-id').value;
+  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
+  approveJob(jobId);
 });
+
+document.getElementById('reject-btn').addEventListener('click', () => {
+  const jobId = document.getElementById('job-id').value;
+  if (!jobId) { alert('Job ID를 입력해주세요.'); return; }
+  rejectJob(jobId);
+});
+
+async function loadReviewList() {
+  const key = getKey();
+  if (!key) return;
+  const tbody = document.getElementById('review-tbody');
+  const table = document.getElementById('review-table');
+  try {
+    const jobs = await getAdmin('/price-discovery/jobs', key, { status: 'manual_review', limit: 50 });
+    table.style.display = jobs.length ? 'table' : 'none';
+    tbody.innerHTML = jobs.length
+      ? jobs.map((j) => `
+        <tr>
+          <td>${j.job_id}</td>
+          <td>${j.place_name || ''}<br><span class="muted">${j.place_address || ''}</span></td>
+          <td>${j.result_summary || ''}${j.error_code ? `<br><span class="muted">${j.error_code}</span>` : ''}</td>
+          <td>
+            <button onclick="approveJob(${j.job_id})">승인</button>
+            <button class="danger" onclick="rejectJob(${j.job_id})">거절</button>
+          </td>
+        </tr>`).join('')
+      : '';
+    log(jobs.length ? `검토 대기 ${jobs.length}건` : '검토 대기 중인 작업이 없습니다.');
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+}
+
+document.getElementById('list-review-btn').addEventListener('click', loadReviewList);
 </script>
 </body>
 </html>

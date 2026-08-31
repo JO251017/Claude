@@ -427,6 +427,14 @@ def test_price_discovery_status_rejects_without_key(client, monkeypatch):
     assert resp.status_code == 401
 
 
+def test_price_discovery_jobs_list_rejects_without_key(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.get("/v1/admin/price-discovery/jobs")
+    assert resp.status_code == 401
+
+
 def test_price_discovery_metrics_rejects_without_key(client, monkeypatch):
     from app.core.config import settings
 

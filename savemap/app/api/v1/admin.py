@@ -478,6 +478,45 @@ async def price_discovery_status_endpoint(
     return counts
 
 
+@router.get("/price-discovery/jobs")
+async def list_price_discovery_jobs_endpoint(
+    status: DiscoveryJobStatus = Query(
+        default=DiscoveryJobStatus.MANUAL_REVIEW,
+        description="이 상태의 작업만 (기본 manual_review — 승인/거절이 필요한 것부터).",
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> list[dict]:
+    """개별 작업의 id/매장 정보/결과 요약을 실제로 확인할 수 있는 목록 —
+    /status(건수만)와 /jobs/{id}/approve·reject(id를 미리 알아야 함) 사이의
+    빠진 연결고리였다. approve/reject에 넣을 job_id를 여기서 확인한다."""
+    stmt = (
+        select(PriceDiscoveryJob, Place.name, Place.address)
+        .join(Place, PriceDiscoveryJob.place_id == Place.id)
+        .where(PriceDiscoveryJob.status == status)
+        .order_by(PriceDiscoveryJob.completed_at.desc().nullslast(), PriceDiscoveryJob.id.desc())
+        .limit(limit)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        {
+            "job_id": job.id,
+            "place_id": job.place_id,
+            "place_name": place_name,
+            "place_address": place_address,
+            "status": job.status.value,
+            "priority": job.priority,
+            "attempt_count": job.attempt_count,
+            "error_code": job.error_code,
+            "result_summary": job.result_summary,
+            "last_attempted_at": job.last_attempted_at.isoformat() if job.last_attempted_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        }
+        for job, place_name, place_address in rows
+    ]
+
+
 @router.get("/price-discovery/metrics")
 async def price_discovery_metrics_endpoint(
     region: str | None = Query(default=None, description="주소에 포함될 지역명 (예: 평택). 비우면 전체"),

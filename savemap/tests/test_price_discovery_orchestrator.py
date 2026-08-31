@@ -1,9 +1,12 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy.exc import IntegrityError
+
 from app.domain.place import Place
 from app.domain.price_discovery import DiscoveryJobStatus, PriceDiscoveryJob
 from app.engine.price_discovery import orchestrator
+from app.engine.price_discovery.candidate_selector import DiscoveryCandidate
 from app.engine.price_discovery.price_validator import PriceVerdict
 from app.integrations.gemini import (
     GroundingResult,
@@ -270,3 +273,73 @@ def test_run_discovery_batch_aggregates_and_survives_one_failure():
     assert result["prices_found"] == 3
     assert boom_job.status == DiscoveryJobStatus.FAILED
     assert boom_job.error_code == "UNEXPECTED_ERROR"
+
+
+# --- enqueue_candidates: 동시 요청 경쟁으로 같은 매장이 두 번 큐에 들어가려 하면
+# (프로덕션에서 실제로 겪은 문제 — "한 번 실행"을 응답 오기 전에 여러 번 누름)
+# ux_price_discovery_job_active_place 유니크 인덱스에 걸려 IntegrityError가 나는데,
+# 이걸 500으로 전체 요청을 죽이지 않고 그 매장만 건너뛰어야 한다. ---
+
+
+class _CommitRacingSession:
+    """add()로 쌓인 걸 commit()할 때, 미리 지정한 인덱스(0-based, 몇 번째
+    commit()인지)에서만 IntegrityError를 던진다 — 실제 유니크 인덱스 충돌을
+    흉내낸다."""
+
+    def __init__(self, fail_at_commit_index: set[int]):
+        self._fail_at = fail_at_commit_index
+        self._commit_call_count = 0
+        self.added = []
+        self.rollbacks = 0
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def commit(self):
+        idx = self._commit_call_count
+        self._commit_call_count += 1
+        if idx in self._fail_at:
+            raise IntegrityError(
+                "INSERT ...", {}, Exception("duplicate key value violates unique constraint")
+            )
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+
+def _candidate(place_id: int, score: int = 10):
+    return DiscoveryCandidate(place=Place(id=place_id, name=f"p{place_id}"), score=score, is_franchise=False)
+
+
+def test_enqueue_candidates_skips_place_that_lost_the_race():
+    candidates = [_candidate(1), _candidate(2), _candidate(3)]
+    session = _CommitRacingSession(fail_at_commit_index={1})  # 두 번째(place_id=2)만 실패
+    with patch(
+        "app.engine.price_discovery.orchestrator.get_discovery_candidates",
+        new=AsyncMock(return_value=candidates),
+    ):
+        created = asyncio.run(orchestrator.enqueue_candidates(session, limit=10))
+    assert created == 2  # place 1, 3은 성공, place 2만 건너뜀
+    assert session.rollbacks == 1
+
+
+def test_enqueue_candidates_all_succeed_when_no_conflict():
+    candidates = [_candidate(1), _candidate(2)]
+    session = _CommitRacingSession(fail_at_commit_index=set())
+    with patch(
+        "app.engine.price_discovery.orchestrator.get_discovery_candidates",
+        new=AsyncMock(return_value=candidates),
+    ):
+        created = asyncio.run(orchestrator.enqueue_candidates(session, limit=10))
+    assert created == 2
+    assert session.rollbacks == 0
+
+
+def test_enqueue_candidates_returns_zero_for_empty_candidates():
+    session = _CommitRacingSession(fail_at_commit_index=set())
+    with patch(
+        "app.engine.price_discovery.orchestrator.get_discovery_candidates",
+        new=AsyncMock(return_value=[]),
+    ):
+        created = asyncio.run(orchestrator.enqueue_candidates(session, limit=10))
+    assert created == 0

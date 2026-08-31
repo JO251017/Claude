@@ -19,6 +19,7 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -39,14 +40,26 @@ async def enqueue_candidates(
     session: AsyncSession, *, region: str | None = None, limit: int | None = None
 ) -> int:
     """가격 없는 매장 중 아직 큐에 없는 곳을 candidate_score 순으로 새 job으로
-    등록한다. 반환값: 새로 만든 job 수."""
+    등록한다. 반환값: 새로 만든 job 수.
+
+    건당 커밋 + IntegrityError 무시 — "한 번 실행"을 응답 오기 전에 여러 번
+    누르는 것처럼 동시에 두 요청이 겹치면, 두 요청 다 같은 매장을 후보로
+    조회한 뒤(아직 서로의 INSERT를 못 본 상태) 하나만 커밋에 성공하고 나머지는
+    ux_price_discovery_job_active_place 유니크 인덱스에 걸린다 — 이건 버그가
+    아니라 큐가 제대로 막고 있다는 신호이므로, 그 매장만 건너뛰고 나머지는
+    계속 진행한다(500으로 전체 요청을 죽이지 않는다)."""
     limit = limit or settings.price_discovery_max_jobs_per_run
     candidates = await get_discovery_candidates(session, region=region, limit=limit)
+    created = 0
     for c in candidates:
         session.add(PriceDiscoveryJob(place_id=c.place.id, priority=c.score))
-    if candidates:
-        await session.commit()
-    return len(candidates)
+        try:
+            await session.commit()
+            created += 1
+        except IntegrityError:
+            logger.info("동시 요청으로 이미 큐에 들어간 매장 — 건너뜀 (place_id=%s)", c.place.id)
+            await session.rollback()
+    return created
 
 
 async def _process_job(
