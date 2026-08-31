@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import re
 from dataclasses import dataclass
 
@@ -9,6 +10,8 @@ import httpx
 from app.core.config import settings
 from app.core.errors import OcrServiceError, ReportImageFetchError
 from app.domain.enums import Category
+
+logger = logging.getLogger(__name__)
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com"
 GEMINI_MODEL = "gemini-flash-latest"
@@ -126,6 +129,19 @@ class OcrResult:
 class MenuItemGuess:
     name: str
     price: float
+
+
+class GroundingUnavailableError(Exception):
+    """ground_search의 요청 자체가 실패했을 때만 발생시킨다 — "정상 응답인데 결과가
+    없었다"(citations가 빈 리스트)와 구분하기 위함. 예전엔 이 둘이 전부 None
+    하나로 뭉개져서, 관리자 페이지의 NO_SOURCE_FOUND만 봐서는 "정말 자료가 없는
+    매장인지" "요청 자체가 매번 실패하는 설정/네트워크 문제인지" 구분이 안 됐다
+    (실사용 중 발견, 2026-08-31 — 실제 매장 3곳이 연속으로 전부 NO_SOURCE_FOUND).
+    reason은 32자 error_code 컬럼에 그대로 들어갈 수 있게 짧게 유지한다."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
 
 
 @dataclass
@@ -301,17 +317,23 @@ class GeminiVisionClient:
         except (KeyError, IndexError, TypeError) as exc:
             raise OcrServiceError("AI 응답을 이해할 수 없습니다") from exc
 
-    async def ground_search(self, query: str) -> GroundingResult | None:
+    async def ground_search(self, query: str) -> GroundingResult:
         """AI Price Discovery Engine의 source_discovery 단계(지시서 28-4/28-5) —
         구글 검색 그라운딩으로 공개 웹에서 실제 자료를 찾는다. 일반 generateContent와
         같은 엔드포인트를 쓰되 tools=[{"google_search": {}}]를 실어서, 모델이
         직접 검색을 수행하고 응답에 인용(citation) 목록을 함께 돌려주게 한다 —
         _ask_text와 달리 모델의 사전지식만으로 답하지 않는다.
-        키 미설정/요청 실패/응답 구조가 예상과 다르면 None — 다음 단계(추출)로
-        넘기지 않는다. "자료를 못 찾았다"를 "AI가 알아서 추정"으로 이어붙이지
-        않기 위함(핵심 원칙: AI가 가격을 만들어내지 않는다)."""
+
+        요청 자체가 실패하면(키 미설정/HTTP 실패/응답 구조가 예상과 다름)
+        GroundingUnavailableError를 발생시켜 호출부가 그 사유를 알 수 있게 한다.
+        요청이 정상 응답했지만 인용이 하나도 없는 경우는 예외가 아니라
+        citations=[]인 정상 GroundingResult로 돌려준다 — "요청이 실패했다"와
+        "실제로 자료가 없었다"는 서로 다른 사실이라 섞지 않는다(호출부인
+        source_discovery.discover_sources가 citations 빈 값을 "자료 없음"으로
+        해석)."""
         if not self._key:
-            return None
+            logger.warning("ground_search: GEMINI_API_KEY 미설정")
+            raise GroundingUnavailableError("NO_API_KEY")
 
         payload = {
             "contents": [{"parts": [{"text": query}]}],
@@ -320,14 +342,22 @@ class GeminiVisionClient:
         async with httpx.AsyncClient(timeout=30) as client:
             try:
                 data = await self._post_generate_content(client, payload)
-            except httpx.HTTPError:
-                return None
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                logger.warning("ground_search HTTP 실패: status=%s query=%r", status, query)
+                raise GroundingUnavailableError(f"HTTP_{status}") from exc
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "ground_search 요청 실패: %s query=%r", exc.__class__.__name__, query
+                )
+                raise GroundingUnavailableError(exc.__class__.__name__[:20]) from exc
 
         try:
             candidate = data["candidates"][0]
             text = candidate["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError):
-            return None
+            logger.warning("ground_search 응답 구조 이상: keys=%s", list(data.keys()))
+            raise GroundingUnavailableError("BAD_RESPONSE_SHAPE")
 
         citations: list[GroundingCitation] = []
         grounding_chunks = (candidate.get("groundingMetadata") or {}).get("groundingChunks") or []
@@ -337,6 +367,9 @@ class GeminiVisionClient:
             if not url:
                 continue
             citations.append(GroundingCitation(url=url, title=web.get("title") or url))
+
+        if not citations:
+            logger.info("ground_search: 응답은 정상이나 인용 없음 query=%r", query)
 
         return GroundingResult(text=text, citations=citations)
 

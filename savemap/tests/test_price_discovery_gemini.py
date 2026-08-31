@@ -3,8 +3,9 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 
-from app.integrations.gemini import GeminiVisionClient, GroundingCitation
+from app.integrations.gemini import GeminiVisionClient, GroundingCitation, GroundingUnavailableError
 
 
 def _client() -> GeminiVisionClient:
@@ -19,9 +20,14 @@ def _post_response(body: dict, status: int = 200) -> httpx.Response:
 # --- ground_search ---
 
 
-def test_ground_search_returns_none_without_key():
+def test_ground_search_raises_without_key():
+    # 실사용 중 발견(2026-08-31): 이전엔 이 경우와 "요청은 성공했지만 자료 없음"이
+    # 똑같이 None 하나로 뭉개져서 관리자 페이지에서 구분이 안 됐다 — 이제 이 경우는
+    # 예외로, "정말 자료가 없음"은 citations=[]인 정상 결과로 구분한다.
     client = GeminiVisionClient(api_key="")
-    assert asyncio.run(client.ground_search("아무 매장 메뉴 가격")) is None
+    with pytest.raises(GroundingUnavailableError) as exc_info:
+        asyncio.run(client.ground_search("아무 매장 메뉴 가격"))
+    assert exc_info.value.reason == "NO_API_KEY"
 
 
 def test_ground_search_parses_text_and_citations():
@@ -48,14 +54,28 @@ def test_ground_search_parses_text_and_citations():
     ]
 
 
-def test_ground_search_returns_none_on_request_failure():
+def test_ground_search_raises_with_reason_on_connection_failure():
     with patch("httpx.AsyncClient.post", new=AsyncMock(side_effect=httpx.ConnectError("boom"))):
-        assert asyncio.run(_client().ground_search("냉삼 메뉴 가격")) is None
+        with pytest.raises(GroundingUnavailableError) as exc_info:
+            asyncio.run(_client().ground_search("냉삼 메뉴 가격"))
+    assert exc_info.value.reason == "ConnectError"
 
 
-def test_ground_search_returns_none_on_unexpected_response_shape():
+def test_ground_search_raises_with_status_code_on_http_error():
+    with patch(
+        "httpx.AsyncClient.post",
+        new=AsyncMock(return_value=_post_response({"error": "nope"}, status=500)),
+    ):
+        with pytest.raises(GroundingUnavailableError) as exc_info:
+            asyncio.run(_client().ground_search("냉삼 메뉴 가격"))
+    assert exc_info.value.reason == "HTTP_500"
+
+
+def test_ground_search_raises_on_unexpected_response_shape():
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=_post_response({"candidates": []}))):
-        assert asyncio.run(_client().ground_search("냉삼 메뉴 가격")) is None
+        with pytest.raises(GroundingUnavailableError) as exc_info:
+            asyncio.run(_client().ground_search("냉삼 메뉴 가격"))
+    assert exc_info.value.reason == "BAD_RESPONSE_SHAPE"
 
 
 def test_ground_search_with_no_grounding_chunks_has_empty_citations():

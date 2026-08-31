@@ -10,6 +10,7 @@ from app.engine.price_discovery.candidate_selector import DiscoveryCandidate
 from app.engine.price_discovery.price_validator import PriceVerdict
 from app.integrations.gemini import (
     GroundingResult,
+    GroundingUnavailableError,
     PriceDiscoveryExtraction,
     PriceDiscoveryStoreMatch,
 )
@@ -86,6 +87,22 @@ def test_no_source_found_retries_then_gives_up():
     assert job.status == DiscoveryJobStatus.MANUAL_REVIEW
     assert job.attempt_count == 2
     assert job.error_code == "NO_SOURCE_FOUND"
+
+
+def test_search_request_failure_gets_distinct_error_code_from_no_source_found():
+    # 실사용 중 발견(2026-08-31): "정말 자료가 없음"(NO_SOURCE_FOUND)과 "검색 요청
+    # 자체가 실패함"이 예전엔 똑같이 NO_SOURCE_FOUND 하나로 보여서 관리자 페이지에서
+    # 구분이 안 됐다 — 이제 후자는 별도 error_code(SEARCH_ERR:<사유>)로 남는다.
+    job = _job(attempt_count=0)
+    session = _FakeSession(place=_place())
+    with patch(
+        "app.engine.price_discovery.orchestrator.discover_sources",
+        new=AsyncMock(side_effect=GroundingUnavailableError("HTTP_429")),
+    ):
+        asyncio.run(orchestrator._process_job(session, job, client=None))
+    assert job.status == DiscoveryJobStatus.PENDING
+    assert job.error_code == "SEARCH_ERR:HTTP_429"
+    assert job.error_code != "NO_SOURCE_FOUND"
 
 
 def test_place_not_found_gives_up_immediately():

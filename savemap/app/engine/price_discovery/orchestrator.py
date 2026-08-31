@@ -31,7 +31,7 @@ from app.engine.price_discovery.price_publisher import publish_prices
 from app.engine.price_discovery.price_validator import PriceVerdict, validate_prices
 from app.engine.price_discovery.source_discovery import discover_sources
 from app.engine.price_discovery.store_matcher import MatchDecision, decide_match
-from app.integrations.gemini import GeminiVisionClient
+from app.integrations.gemini import GeminiVisionClient, GroundingUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,14 @@ async def _process_job(
         await _give_up(session, job, "PLACE_NOT_FOUND")
         return 0
 
-    grounding = await discover_sources(place, client)
+    try:
+        grounding = await discover_sources(place, client)
+    except GroundingUnavailableError as exc:
+        # 검색 요청 자체가 실패한 경우 — "정말 자료가 없다"(NO_SOURCE_FOUND)와
+        # 구분해서 사유를 error_code에 남긴다(예: SEARCH_ERR:HTTP_429,
+        # SEARCH_ERR:NO_API_KEY). 32자 컬럼 한도를 넘지 않게 자른다.
+        await _retry_or_give_up(session, job, f"SEARCH_ERR:{exc.reason}"[:32])
+        return 0
     if grounding is None:
         await _retry_or_give_up(session, job, "NO_SOURCE_FOUND")
         return 0
