@@ -41,11 +41,23 @@
     <button id="metrics-btn" class="secondary">현재 커버리지/성공률 조회</button>
   </div>
 
-  <h2>검토 대기(manual_review) 작업 승인/거절</h2>
-  <p class="muted">Job ID는 여기서 직접 확인하는 것이 정상 경로입니다 — 아래 "목록 불러오기"로 확인하세요.</p>
-  <button id="list-review-btn" class="secondary">검토 대기 목록 불러오기</button>
+  <h2>작업 목록 확인 / 검토 승인·거절</h2>
+  <p class="muted">거절(failed)된 건도 여기서 상태를 바꿔 다시 확인할 수 있습니다 — result_summary(사유)는 거절해도 안 지워집니다.</p>
+  <div class="row">
+    <div>
+      <label for="review-status">상태</label>
+      <select id="review-status">
+        <option value="manual_review" selected>검토 대기 (manual_review)</option>
+        <option value="failed">실패/거절됨 (failed)</option>
+        <option value="pending">대기 중 (pending)</option>
+        <option value="processing">처리 중 (processing)</option>
+        <option value="completed">완료 (completed)</option>
+      </select>
+    </div>
+    <button id="list-review-btn" class="secondary">목록 불러오기</button>
+  </div>
   <table id="review-table" style="display:none;">
-    <thead><tr><th>Job ID</th><th>매장</th><th>요약</th><th></th></tr></thead>
+    <thead><tr><th>Job ID</th><th>매장</th><th>요약 / 사유</th><th></th></tr></thead>
     <tbody id="review-tbody"></tbody>
   </table>
 
@@ -185,24 +197,28 @@ document.getElementById('reject-btn').addEventListener('click', () => {
 async function loadReviewList() {
   const key = getKey();
   if (!key) return;
+  const status = document.getElementById('review-status').value;
   const tbody = document.getElementById('review-tbody');
   const table = document.getElementById('review-table');
   try {
-    const jobs = await getAdmin('/price-discovery/jobs', key, { status: 'manual_review', limit: 50 });
+    const jobs = await getAdmin('/price-discovery/jobs', key, { status, limit: 50 });
     table.style.display = jobs.length ? 'table' : 'none';
+    // approve/reject는 manual_review 상태에서만 백엔드가 받아준다 — 다른 상태를
+    // 보는 중엔(예: failed로 거절 사유만 확인) 버튼을 아예 안 보여준다.
+    const showActions = status === 'manual_review';
     tbody.innerHTML = jobs.length
       ? jobs.map((j) => `
         <tr>
           <td>${j.job_id}</td>
           <td>${j.place_name || ''}<br><span class="muted">${j.place_address || ''}</span></td>
           <td>${j.result_summary || ''}${j.error_code ? `<br><span class="muted">${j.error_code}</span>` : ''}</td>
-          <td>
+          <td>${showActions ? `
             <button onclick="approveJob(${j.job_id})">승인</button>
-            <button class="danger" onclick="rejectJob(${j.job_id})">거절</button>
+            <button class="danger" onclick="rejectJob(${j.job_id})">거절</button>` : ''}
           </td>
         </tr>`).join('')
       : '';
-    log(jobs.length ? `검토 대기 ${jobs.length}건` : '검토 대기 중인 작업이 없습니다.');
+    log(jobs.length ? `${status} 상태 ${jobs.length}건` : `${status} 상태인 작업이 없습니다.`);
   } catch (err) {
     log(`오류: ${err.message}`);
   }
