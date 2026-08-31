@@ -226,6 +226,10 @@ let lastSavingsSummaryData = null;
 let lastKnownStreakDays = null;
 const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100];
 
+// growthScore(발견+방문+추천 실카운트 합) 변화 감지용 — 위 lastKnownStreakDays와
+// 완전히 같은 패턴(null=아직 이번 세션에서 안 불러옴, 첫 로드는 축하 제외).
+let lastKnownGrowthScore = null;
+
 function renderStreakBadge(s) {
   const el = document.getElementById('avatar-streak-badge');
   if (!el) return;
@@ -735,7 +739,7 @@ function ensureAvatarRoamStarted() {
 // 네 번째 카테고리는 만들지 않는다(영수증 인증도 방문횟수 한 축에 합산되므로
 // certifyOffer/certifyWithReceipt는 둘 다 'visit'을 쓴다). kind가 없으면(탭-투-펫
 // 등) 기존 기본 바운스를 그대로 쓴다.
-const AVATAR_BOUNCE_CLASSES = ['avatar-bounce', 'avatar-bounce--discover', 'avatar-bounce--visit', 'avatar-bounce--recommend'];
+const AVATAR_BOUNCE_CLASSES = ['avatar-bounce', 'avatar-bounce--discover', 'avatar-bounce--visit', 'avatar-bounce--recommend', 'avatar-bounce--levelup'];
 let avatarBarkTimer = null;
 
 function triggerAvatarGrowthFeedback(kind) {
@@ -783,6 +787,39 @@ function spawnAvatarParticle(kind) {
     stage.appendChild(span);
     setTimeout(() => span.remove(), 1100);
   }
+}
+
+// 절약 활동 → 펫 성장 인과관계를 눈으로 보여주는 두 반응(2026-08-31,
+// "확실한 절약 활동으로 인해서 펫이 성장하는게 느껴지는 구조로") ---
+
+// 매번 조회 때 growthScore가 실제로 늘어난 만큼만 "+N 성장치"로 띄운다 —
+// 늘지 않았으면(중복 추천 등) 아예 안 부른다, 지어낸 숫자 없음.
+function spawnGrowthDeltaText(delta) {
+  const stage = document.getElementById('character-stage');
+  const avatarEl = document.getElementById('character-avatar');
+  if (!stage || !avatarEl || delta <= 0) return;
+  const span = document.createElement('span');
+  span.className = 'avatar-growth-delta';
+  span.textContent = `+${delta} 성장치`;
+  span.style.left = `${(avatarEl.offsetLeft || 0) + 8}px`;
+  span.style.top = `${(avatarEl.offsetTop || 0) - 4}px`;
+  stage.appendChild(span);
+  setTimeout(() => span.remove(), 1300);
+}
+
+// 성장치가 쌓여서 실제로 단계 번호가 올라간 순간 — 일반 반응(triggerAvatarGrowthFeedback)
+// 보다 훨씬 크게 튀고 반짝임도 더 많이 터뜨려서 "그냥 숫자가 아니라 진짜 컸다"를
+// 분명히 보여준다.
+function celebrateGrowthStageUp(growth) {
+  const el = document.getElementById('character-avatar');
+  if (!el) return;
+  el.classList.remove(...AVATAR_BOUNCE_CLASSES);
+  void el.offsetWidth;
+  el.classList.add('avatar-bounce--levelup');
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => spawnAvatarParticle('growth'), i * 140);
+  }
+  showSavingsToast(`🎉 펫이 자랐어요! ${growth.stageNumber}/${growth.totalStages}단계 · ${growth.name}`);
 }
 
 let merchantPlaces = [];
@@ -1025,6 +1062,15 @@ async function loadMyProfile() {
     // 합산("성장치")으로 단계를 정한다. 절약금액 레벨과는 완전히 분리된 축.
     const growthScore = s.discovered_place_count + s.visit_count + s.recommend_count;
     const growth = avatarGrowthStageFor(growthScore);
+
+    // "확실한 절약 활동으로 인해서 펫이 성장하는게 느껴지는 구조로"(2026-08-31) —
+    // 스트릭과 완전히 같은 패턴(지난 조회 대비 값이 실제로 늘었을 때만, 첫
+    // 로드는 제외)으로 growthScore 증가를 감지한다. 늘어난 게 성장 단계 자체를
+    // 밀어올렸으면(단계 번호가 올라갔으면) 훨씬 크게 축하한다 — "그냥 숫자가
+    // 쌓였다"가 아니라 "이번 행동으로 진짜 한 단계 컸다"는 순간을 분명히 보여준다.
+    const previousStageIndex = lastGrowthInfo ? lastGrowthInfo.stageIndex : null;
+    const growthDelta = lastKnownGrowthScore !== null ? growthScore - lastKnownGrowthScore : 0;
+
     // 실제 그림을 직접 갈아끼우지 않고 스프라이트 루프가 참조하는 단계만
     // 바꾼다 — 그래야 눈 깜빡임/꼬리 흔들기 재생이 끊기지 않고 이어진다.
     avatarSpriteStageIndex = growth.stageIndex;
@@ -1035,6 +1081,14 @@ async function loadMyProfile() {
     // 열 때(openAvatarCloset/renderTitlePicker)는 API를 다시 안 부른다.
     lastGrowthInfo = growth;
     lastSavingsSummaryData = s;
+
+    if (growthDelta > 0) {
+      spawnGrowthDeltaText(growthDelta);
+      if (previousStageIndex !== null && growth.stageIndex > previousStageIndex) {
+        celebrateGrowthStageUp(growth);
+      }
+    }
+    lastKnownGrowthScore = growthScore;
 
     // 연속 방문 스트릭 — 펫 무드(끊기기 직전이면 살짝 처져 보이게)와 배지를
     // 갱신하고, 지난번 조회 이후 실제로 늘었으면(오늘 첫 활동으로 이어졌거나
