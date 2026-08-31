@@ -72,10 +72,21 @@ def _candidate_stmt(*, region: str | None, pool_limit: int):
             [DiscoveryJobStatus.PENDING, DiscoveryJobStatus.PROCESSING]
         )
     )
+    # 관리자가 명시적으로 거절(reject_job)한 매장은 다시 후보로 뽑지 않는다 —
+    # 실사용 중 발견된 버그(2026-08-31): 거절해도 job.status는 FAILED가 될 뿐이라
+    # "진행 중" 조건(위 active_job_place_ids)에 안 걸리고, MenuItem도 여전히
+    # 없으니 다음 "한 번 실행" 때 같은 매장이 새 job으로 또 뽑혀서 관리자가
+    # 거절해도 거절한 티가 안 났다("또 떠 3건이"). REJECTED_BY_ADMIN은
+    # reject_job(orchestrator.py)이 남기는 값 그대로 — 여기서 새 상수로 만들지
+    # 않고 그 문자열을 그대로 재사용한다.
+    rejected_place_ids = select(PriceDiscoveryJob.place_id).where(
+        PriceDiscoveryJob.error_code == "REJECTED_BY_ADMIN"
+    )
     non_menu_place_ids = select(Offer.place_id).where(Offer.category.in_(_NON_MENU_CATEGORIES))
     stmt = select(Place).where(
         Place.id.notin_(priced_place_ids),
         Place.id.notin_(active_job_place_ids),
+        Place.id.notin_(rejected_place_ids),
         Place.id.notin_(non_menu_place_ids),
         Place.geom.isnot(None),
     )

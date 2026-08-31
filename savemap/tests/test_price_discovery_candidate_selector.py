@@ -58,3 +58,13 @@ def test_candidate_stmt_applies_region_filter_when_given():
     without_region = str(_candidate_stmt(region=None, pool_limit=100).compile(compile_kwargs={"literal_binds": True}))
     assert "평택시" in with_region
     assert "평택시" not in without_region
+
+
+# --- 실사용 중 발견된 버그(2026-08-31): 관리자가 거절한 매장이 다음 실행 때
+# 다시 후보로 뽑혔다("또 떠 3건이") — reject_job은 status를 FAILED로만 바꿔서
+# "진행 중(active)" 조건에 안 걸렸기 때문. ---
+
+
+def test_candidate_stmt_excludes_places_rejected_by_admin():
+    compiled = str(_candidate_stmt(region=None, pool_limit=100).compile(compile_kwargs={"literal_binds": True}))
+    assert "REJECTED_BY_ADMIN" in compiled
