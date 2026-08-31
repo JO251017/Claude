@@ -109,6 +109,20 @@ function avatarGrowthStageFor(growthScore) {
 // 둥글게 보이고, 몸통에 은은한 명암(밝은 베이지 톤)도 넣을 수 있다. 외곽선은
 // SVG feMorphology(dilate)로 실루엣 바깥에 자동으로 둘러서 배경에 안 묻힌다.
 // (실제 렌더 검토는 아바타 모델시트 아티팩트로 먼저 확인받았다, 2026-08-27.)
+//
+// 형태 리디자인(2026-08-31, "펫 디자인 지금 너무 허접해 — 아기자기하고
+// 귀엽게") — 42×48 격자/도형 래스터화 기법은 그대로 두고 _dogCellColor의
+// 도형 배치만 다시 짰다: (1) 머리를 몸통보다 훨씬 크게(치비 비율)해서
+// 마스코트다운 귀여움을 냈다, (2) 뾰족한 삼각형 귀를 끝을 둥글린(원 블렌드)
+// 귀로 바꿔 여우처럼 보이던 인상을 없앴다, (3) 목줄을 얇고 짧게 낮춰서
+// 예전엔 미소처럼 보이던 굵은 띠 문제를 없앴다, (4) 리본을 뾰족한 삼각형
+// 두 개(더듬이처럼 보였음)에서 회전 타원 날개+매듭+가운데 ink 핀치 라인으로
+// 바꿔 "리본"임이 분명하게 읽히게 했다, (5) 발을 몸통 실루엣 밖으로 확실히
+// 튀어나오게 그려 다리가 눈에 띄게 했다, (6) 꼬리는 한 번(첫 시도)엔 팔처럼
+// 튀어나와 보이는 실수를 했다가 — 몸통 오른쪽 옆, 엉덩이 높이의 작은 타원
+// 하나로 낮추고 크기를 줄여 몸통 뒤로 대부분 가려지게 고쳤다. 매 단계 실제
+// Playwright 헤드리스 렌더 스크린샷으로 확인하며 반복했다(사람 눈으로 못
+// 보고 추측만으로 커밋하지 않기 위함).
 const DOG_GRID_W = 42;
 const DOG_GRID_H = 48;
 const DOG_SHAPE_W = 100; // 도형 좌표계 폭 — 격자 크기와 무관하게 고정
@@ -119,6 +133,19 @@ function _dogInCircle(x, y, cx, cy, r) {
 }
 function _dogInEllipse(x, y, cx, cy, rx, ry) {
   return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+}
+// 리본을 회전된 타원 두 장으로 그리기 위해 추가(2026-08-31 리디자인) — 점을
+// 타원의 회전 전 좌표계로 되돌려서(역회전) 그 좌표계에서 축 정렬 타원 판정을
+// 그대로 재사용한다.
+function _dogInRotatedEllipse(x, y, cx, cy, rx, ry, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const dx = x - cx;
+  const dy = y - cy;
+  const cos = Math.cos(-rad);
+  const sin = Math.sin(-rad);
+  const lx = dx * cos - dy * sin;
+  const ly = dx * sin + dy * cos;
+  return (lx / rx) ** 2 + (ly / ry) ** 2 <= 1;
 }
 function _dogTriSign(px, py, ax, ay, bx, by) {
   return (px - bx) * (ay - by) - (ax - bx) * (py - by);
@@ -397,78 +424,87 @@ document.getElementById('avatar-title-close-btn')?.addEventListener('click', () 
 function _dogCellColor(px, py, o) {
   let color = null;
 
-  // 꼬리 — 꼬리 흔들기(tailWag) 프레임에서 자리를 살짝 옮겨 "휙" 움직이는 것처럼.
-  const tailCx = o.tailWag ? 74 : 78;
-  const tailCy = o.tailWag ? 59 : 63;
-  if (_dogInEllipse(px, py, tailCx, tailCy, 9, 17)) color = DOG_DENSE_PAL.body;
+  // 꼬리 — 엉덩이 옆에 작게 붙은 복슬 꼬리 하나만(몸통보다 먼저 그려서 겹치는
+  // 부분은 몸통이 덮는다 — 리디자인 전엔 어깨 높이까지 올라와 "팔"처럼 보이는
+  // 실수를 했다가, 엉덩이 높이로 낮추고 크기를 줄여 몸통 뒤로 대부분 가려지게
+  // 고쳤다). tailWag 프레임에서 살짝만 더 벌어진다.
+  const tailCx = o.tailWag ? 74 : 72;
+  if (_dogInEllipse(px, py, tailCx, 97, 7, 10)) color = DOG_DENSE_PAL.body;
 
-  // 귀(바깥 흰색 + 안쪽 분홍)
-  const earL = [[26, 32], [40, 26], [24, 4]];
-  const earLIn = [[30, 26], [38, 23], [29, 10]];
-  const earR = [[74, 32], [60, 26], [76, 4]];
-  const earRIn = [[70, 26], [62, 23], [71, 10]];
-  if (_dogInTriangle(px, py, ...earL)) color = DOG_DENSE_PAL.body;
-  if (_dogInTriangle(px, py, ...earR)) color = DOG_DENSE_PAL.body;
+  // 귀 — 끝을 원으로 둥글린 삼각형(뾰족한 여우 귀가 아니라 통통한 아기 강아지 귀).
+  const earL = [[22, 26], [35, 17], [21, 2]];
+  const earLIn = [[27, 22], [34, 17], [26, 8]];
+  const earR = [[78, 26], [65, 17], [79, 2]];
+  const earRIn = [[73, 22], [66, 17], [74, 8]];
+  if (_dogInTriangle(px, py, ...earL) || _dogInCircle(px, py, 21, 4, 4.5)) color = DOG_DENSE_PAL.body;
+  if (_dogInTriangle(px, py, ...earR) || _dogInCircle(px, py, 79, 4, 4.5)) color = DOG_DENSE_PAL.body;
   if (_dogInTriangle(px, py, ...earLIn)) color = DOG_DENSE_PAL.earIn;
   if (_dogInTriangle(px, py, ...earRIn)) color = DOG_DENSE_PAL.earIn;
 
-  // 뒷발
-  if (_dogInEllipse(px, py, 34, 95, 10, 8)) color = DOG_DENSE_PAL.body;
-  if (_dogInEllipse(px, py, 66, 95, 10, 8)) color = DOG_DENSE_PAL.body;
+  // 몸통 — 치비(chibi) 비율: 머리보다 작고 둥근 몸.
+  if (_dogInEllipse(px, py, 50, 87, 23, 21)) color = DOG_DENSE_PAL.body;
 
-  // 몸통 + 명암(오른쪽으로 치우친 밝은 베이지 톤 — 완전 평면이 아니라 입체로 보이게)
-  if (_dogInEllipse(px, py, 50, 68, 28, 24)) color = DOG_DENSE_PAL.body;
-  if (_dogInEllipse(px, py, 50, 68, 28, 24) && _dogInEllipse(px, py, 63, 73, 17, 19)) {
+  // 뒷발/앞발 — 몸통 실루엣보다 확실히 바깥/아래로 튀어나오게 그려서 다리가
+  // 눈에 띄게 한다(리디자인 전엔 몸통에 거의 파묻혀 안 보였다).
+  if (_dogInEllipse(px, py, 30, 103, 7.5, 6.5)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 70, 103, 7.5, 6.5)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 39, 107, 7.5, 5.8)) color = DOG_DENSE_PAL.body;
+  if (_dogInEllipse(px, py, 61, 107, 7.5, 5.8)) color = DOG_DENSE_PAL.body;
+
+  // 몸통 음영 — 아랫배 오른쪽에만 살짝(자국처럼 안 보이게 옅게).
+  if (_dogInEllipse(px, py, 50, 87, 23, 21) && _dogInEllipse(px, py, 63, 95, 11, 11)) {
     color = DOG_DENSE_PAL.shade;
   }
 
-  // 앞발
-  if (_dogInEllipse(px, py, 38, 98, 9, 8)) color = DOG_DENSE_PAL.body;
-  if (_dogInEllipse(px, py, 62, 98, 9, 8)) color = DOG_DENSE_PAL.body;
-
-  // 목줄(2단계 이상) — 곡선(목 아래로 살짝 처지는 띠) + 인식표.
+  // 목줄(2단계 이상) — 얇고 짧은 띠 + 인식표. 예전엔 두껍고 넓어서 웃는
+  // 입처럼 보였다 — 얇게 줄이고 몸통 쪽으로 낮췄다.
   if (o.collar) {
-    if (_dogNearQuad(px, py, [26, 60], [50, 74], [74, 60], 3.6)) color = o.collarColor;
-    if (_dogInCircle(px, py, 50, 73, 3.5)) color = DOG_DENSE_PAL.tag;
+    if (_dogNearQuad(px, py, [34, 65], [50, 75], [66, 65], 2.4)) color = o.collarColor;
+    if (_dogInCircle(px, py, 50, 75, 3)) color = DOG_DENSE_PAL.tag;
   }
 
-  // 머리 + 명암
-  if (_dogInCircle(px, py, 50, 38, 27)) color = DOG_DENSE_PAL.body;
-  if (_dogInCircle(px, py, 50, 38, 27) && _dogInEllipse(px, py, 63, 43, 15, 17)) {
+  // 머리 + 명암 — 몸통보다 훨씬 큰 동그란 머리(치비 비율의 핵심).
+  if (_dogInCircle(px, py, 50, 41, 30)) color = DOG_DENSE_PAL.body;
+  if (_dogInCircle(px, py, 50, 41, 30) && _dogInEllipse(px, py, 66, 47, 15, 17)) {
     color = DOG_DENSE_PAL.shade;
   }
 
-  // 리본(5단계 이상) — 귀 사이 맨 위, 매듭까지.
+  // 리본(5단계 이상) — 회전 타원 날개 2개 + 매듭 + 가운데 ink 핀치 라인.
+  // 예전엔 뾰족한 삼각형 두 개라 더듬이처럼 보였다 — 둥근 날개로 바꾸고,
+  // 저해상도에서 날개+매듭이 하나의 막대로 뭉쳐 보이지 않도록 가운데에
+  // 얇은 선을 넣어 "두 날개가 매듭으로 묶인 모양"임이 드러나게 했다.
   if (o.bandana) {
-    if (_dogInTriangle(px, py, [44, 10], [34, 4], [44, 18])) color = o.bandanaColor;
-    if (_dogInTriangle(px, py, [56, 10], [66, 4], [56, 18])) color = o.bandanaColor;
-    if (_dogInCircle(px, py, 50, 11, 4)) color = o.bandanaColor;
+    if (_dogInRotatedEllipse(px, py, 36, 9, 6.5, 4.6, -22)) color = o.bandanaColor;
+    if (_dogInRotatedEllipse(px, py, 64, 9, 6.5, 4.6, 22)) color = o.bandanaColor;
+    if (_dogInCircle(px, py, 50, 10, 3.4)) color = o.bandanaColor;
+    if (_dogNearQuad(px, py, [50, 6.5], [50, 10], [50, 13.5], 0.7)) color = DOG_DENSE_PAL.ink;
   }
 
   // 볼 발그레
-  if (_dogInEllipse(px, py, 31, 46, 5.5, 3.2)) color = DOG_DENSE_PAL.blush;
-  if (_dogInEllipse(px, py, 69, 46, 5.5, 3.2)) color = DOG_DENSE_PAL.blush;
+  if (_dogInEllipse(px, py, 29, 49, 6, 3.6)) color = DOG_DENSE_PAL.blush;
+  if (_dogInEllipse(px, py, 71, 49, 6, 3.6)) color = DOG_DENSE_PAL.blush;
 
-  // 눈 — 깜빡임(blink) 프레임이면 동그란 눈 대신 감은 눈(가로선)을 그린다.
+  // 눈 — 치비 마스코트 특유의 크고 또렷한 눈. 깜빡임(blink) 프레임이면
+  // 동그란 눈 대신 감은 눈(가로선)을 그린다.
   if (o.blink) {
-    if (_dogNearQuad(px, py, [37.5, 36], [41, 37.3], [44.5, 36], 0.9)) color = DOG_DENSE_PAL.ink;
-    if (_dogNearQuad(px, py, [55.5, 36], [59, 37.3], [62.5, 36], 0.9)) color = DOG_DENSE_PAL.ink;
+    if (_dogNearQuad(px, py, [36, 40], [40, 41.6], [44, 40], 1.0)) color = DOG_DENSE_PAL.ink;
+    if (_dogNearQuad(px, py, [56, 40], [60, 41.6], [64, 40], 1.0)) color = DOG_DENSE_PAL.ink;
   } else {
-    if (_dogInCircle(px, py, 41, 36, 4.5)) color = DOG_DENSE_PAL.ink;
-    if (_dogInCircle(px, py, 59, 36, 4.5)) color = DOG_DENSE_PAL.ink;
-    if (_dogInCircle(px, py, 39.3, 34.2, 1.5)) color = DOG_DENSE_PAL.body; // 눈 하이라이트
-    if (_dogInCircle(px, py, 57.3, 34.2, 1.5)) color = DOG_DENSE_PAL.body;
+    if (_dogInCircle(px, py, 40, 40, 5.2)) color = DOG_DENSE_PAL.ink;
+    if (_dogInCircle(px, py, 60, 40, 5.2)) color = DOG_DENSE_PAL.ink;
+    if (_dogInCircle(px, py, 38.2, 37.8, 1.8)) color = DOG_DENSE_PAL.body; // 눈 하이라이트
+    if (_dogInCircle(px, py, 58.2, 37.8, 1.8)) color = DOG_DENSE_PAL.body;
   }
 
-  // 코 + 인중
-  if (_dogInEllipse(px, py, 50, 49, 4.5, 3.2)) color = DOG_DENSE_PAL.ink;
-  if (_dogNearQuad(px, py, [50, 52], [50, 53.5], [50, 55], 0.8)) color = DOG_DENSE_PAL.ink;
+  // 코 — 작고 또렷하게(예전엔 인중선까지 붙어서 저해상도에서 코와 뭉쳐
+  // 얼룩처럼 보였다 — 인중선은 없앴다).
+  if (_dogInEllipse(px, py, 50, 53, 3.6, 2.6)) color = DOG_DENSE_PAL.ink;
 
-  // 입 — 짖는(bark) 프레임(방문 인증 반응, 2026-08-26)이면 웃는 곡선 대신
-  // 작게 벌어진 입을 그린다. 아니면 평소의 웃는 곡선.
+  // 입 — 코와 살짝 떨어뜨려 뭉치지 않게. 짖는(bark) 프레임(방문 인증 반응,
+  // 2026-08-26)이면 웃는 곡선 대신 작게 벌어진 입을 그린다.
   if (o.bark) {
-    if (_dogInEllipse(px, py, 50, 58, 4.2, 4.5)) color = DOG_DENSE_PAL.ink;
-  } else if (_dogNearQuad(px, py, [43, 55], [50, 60], [57, 55], 1.1)) {
+    if (_dogInEllipse(px, py, 50, 62, 4.2, 4.6)) color = DOG_DENSE_PAL.ink;
+  } else if (_dogNearQuad(px, py, [44, 58.5], [50, 63], [56, 58.5], 1.5)) {
     color = DOG_DENSE_PAL.ink;
   }
 
@@ -520,9 +556,14 @@ function avatarSvgFor(stageIndex, frame = {}) {
 // 성장 단계별 색상·리본 등은 몸통 버전과 항상 동일하게 유지된다. 목줄은
 // 크롭 경계에 어중간하게 걸쳐 잘려 보이는 게 더 어색해서 얼굴 버전에서는
 // 아예 그리지 않는다(o.collar를 강제로 false).
+// 리디자인(2026-08-31)으로 머리가 커지고(반지름 27→30) 아래로 더 내려와서
+// (중심 y 38→41) 기존 크롭 범위(y 2~62)로는 입 아랫부분이 살짝 잘렸다 —
+// 새 머리 범위(원 중심 41, 반지름 30 → y 11~71)와 입(y~63까지)이 전부 들어가게
+// Y0/SIZE를 넓혔다. X0/SIZE는 우연히도 새 머리 폭(20~80)과 똑같이 맞아
+// 그대로 둔다.
 const FACE_CROP_X0 = 20;
-const FACE_CROP_Y0 = 2;
-const FACE_CROP_SIZE = 60; // 정사각형 크롭(머리+귀+리본이 전부 들어가는 범위)
+const FACE_CROP_Y0 = 3;
+const FACE_CROP_SIZE = 66; // 정사각형 크롭(머리+귀+리본+입이 전부 들어가는 범위)
 const FACE_GRID = 28;
 
 function avatarFaceSvgFor(stageIndex, frame = {}) {
@@ -611,10 +652,19 @@ function ensureAvatarSpriteLoopStarted() {
   if (avatarSpriteTimer) return;
   renderAvatarSpriteFrame(); // 첫 프레임은 타이머를 기다리지 않고 바로 그린다
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return; // 정지 프레임 유지
-  avatarSpriteTimer = setInterval(() => {
-    avatarSpriteFrameIdx = (avatarSpriteFrameIdx + 1) % AVATAR_SPRITE_SEQUENCE.length;
-    renderAvatarSpriteFrame();
-  }, 450);
+  // 리디자인(2026-08-31, "동작을 더 개선해 생동감있게") — 예전엔 setInterval로
+  // 정확히 450ms마다 정확히 같은 박자로 프레임이 바뀌어서, 오래 보면 "기계적으로
+  // 깜빡인다"는 인상을 준다. 실제 강아지 눈 깜빡임처럼 박자가 살짝씩 어긋나게
+  // setTimeout을 스스로 다시 거는 방식으로 바꾸고, 매번 350~550ms 사이에서
+  // 무작위 간격을 고른다 — 프레임 순서·내용은 그대로라 기존 동작을 안 깨뜨린다.
+  const scheduleNextFrame = () => {
+    avatarSpriteTimer = setTimeout(() => {
+      avatarSpriteFrameIdx = (avatarSpriteFrameIdx + 1) % AVATAR_SPRITE_SEQUENCE.length;
+      renderAvatarSpriteFrame();
+      scheduleNextFrame();
+    }, 350 + Math.random() * 200);
+  };
+  scheduleNextFrame();
 }
 
 // --- 아바타 자유 이동 + 홉(hop) 물리(2026-08-27: "돌아다녀도 되는데 사진처럼
