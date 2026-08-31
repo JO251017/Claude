@@ -5,7 +5,12 @@ import httpx
 import pytest
 
 from app.core.errors import OcrServiceError, ReportImageFetchError
-from app.integrations.gemini import GeminiVisionClient, _offer_blurb_prompt, _route_summary_prompt
+from app.integrations.gemini import (
+    GeminiVisionClient,
+    _digest_prompt,
+    _offer_blurb_prompt,
+    _route_summary_prompt,
+)
 
 
 def _client() -> GeminiVisionClient:
@@ -321,4 +326,48 @@ def test_offer_blurb_prompt_includes_every_fact():
 
 def test_offer_blurb_prompt_forbids_new_numbers():
     prompt = _offer_blurb_prompt(_OFFER_FACTS)
+    assert "새로 만들어" in prompt
+
+
+# --- generate_digest / _digest_prompt (AI 활용 확대 안건 C, 2026-08-31) —
+# generate_offer_blurb와 완전히 같은 fail-soft 계약. ---
+
+_DIGEST_FACTS = {"이번 주 절약액": "8000원", "연속 활동 일수": "5일"}
+
+
+def test_generate_digest_returns_none_when_api_key_missing():
+    client = GeminiVisionClient(api_key="placeholder")
+    client._key = ""
+    result = asyncio.run(client.generate_digest(_DIGEST_FACTS))
+    assert result is None
+
+
+def test_generate_digest_returns_none_on_http_failure():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(503, request=post_request)
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_digest(_DIGEST_FACTS))
+    assert result is None
+
+
+def test_generate_digest_returns_stripped_text_on_success():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "  이번 주도 잘하셨어요!  "}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_digest(_DIGEST_FACTS))
+    assert result == "이번 주도 잘하셨어요!"
+
+
+def test_digest_prompt_includes_every_fact():
+    prompt = _digest_prompt(_DIGEST_FACTS)
+    assert "8000원" in prompt
+    assert "5일" in prompt
+
+
+def test_digest_prompt_forbids_new_numbers():
+    prompt = _digest_prompt(_DIGEST_FACTS)
     assert "새로 만들어" in prompt

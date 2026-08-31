@@ -2431,6 +2431,20 @@ select:focus {
   font-weight: 700;
 }
 
+/* 개인화 절약 다이제스트(AI 활용 확대 안건 C, 2026-08-31) — 숫자 타일들과는
+   톤을 다르게, 옅은 골드 배경의 "손편지 같은" 카드로 구분해서 이 문장이
+   AI/시스템이 그때그때 사용자에게 건네는 말이라는 인상을 준다. */
+.my-digest {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
 .saving-bar-track {
   height: 10px;
   border-radius: 999px;

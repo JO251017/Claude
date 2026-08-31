@@ -246,6 +246,13 @@ def test_savings_summary_requires_auth(client):
     assert resp.json()["detail"]["code"] == "SM4011"
 
 
+def test_digest_requires_auth(client):
+    # AI 활용 확대 안건 C(2026-08-31) — savings-summary와 같은 인증 우선 원칙.
+    resp = client.get("/v1/users/me/digest")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
 def test_merchant_create_place_requires_auth(client):
     resp = client.post(
         "/v1/merchant/places",

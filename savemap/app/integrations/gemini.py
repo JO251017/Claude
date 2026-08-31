@@ -181,6 +181,21 @@ def _offer_blurb_prompt(facts: dict[str, str]) -> str:
     )
 
 
+def _digest_prompt(facts: dict[str, str]) -> str:
+    """AI 활용 확대 안건 C(2026-08-31) — 개인화 절약 다이제스트. _offer_blurb_prompt와
+    똑같은 원칙(숫자/사실은 호출부가 준 것만, AI는 phrase만)이되, 대상 독자가
+    "이 서비스를 매주 쓰는 그 사용자 본인"이라 더 다정하고 응원하는 말투를 명시한다."""
+    lines = "\n".join(f"- {k}: {v}" for k, v in facts.items())
+    return (
+        "아래는 한 사용자가 이 서비스에서 실제로 활동한 기록이야. 이 사실 목록에 "
+        "있는 것만 근거로, 그 사용자에게 보여줄 다정하고 응원하는 말투의 한국어 "
+        "2문장 이내(60자 이내, 이모지 없이) 요약을 써줘. 목록에 없는 숫자나 사실은 "
+        "절대로 새로 만들어 쓰지 마. 잔소리나 다음 행동 강요 없이, 이미 한 일을 "
+        "인정해주는 톤으로. JSON이 아니라 그냥 문장으로 답해.\n\n"
+        f"활동 기록:\n{lines}\n"
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     return match.group(0) if match else text
@@ -533,6 +548,18 @@ class GeminiVisionClient:
         건너뛰고 다음 배치 실행 때 다시 시도하거나, 계속 결정론적 템플릿을 쓰게 한다)."""
         try:
             raw_text = await self._ask_text(_offer_blurb_prompt(facts))
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+        text = raw_text.strip()
+        return text or None
+
+    async def generate_digest(self, facts: dict[str, str]) -> str | None:
+        """AI 활용 확대 안건 C(2026-08-31) — 개인화 절약 다이제스트를 실제 활동
+        기록(facts)만 근거로 phrase한다. generate_offer_blurb/summarize_route와
+        같은 fail-soft 계약 — 실패하면 None (호출부인 savings_digest가 결정론적
+        템플릿 문장으로 대체)."""
+        try:
+            raw_text = await self._ask_text(_digest_prompt(facts))
         except (OcrServiceError, ReportImageFetchError):
             return None
         text = raw_text.strip()

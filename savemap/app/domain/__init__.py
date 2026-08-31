@@ -13,6 +13,7 @@ from app.domain.report import UserReport
 from app.domain.savings import SavingsAsset, SavingsCertification
 from app.domain.store_visit import StoreInterest, StoreStatusUpdate
 from app.domain.trust import TrustScore
+from app.domain.user_digest import UserDigest
 from app.domain.verification import Verification
 from app.domain.xp import XpLedger
 
@@ -39,4 +40,5 @@ __all__ = [
     "PriceHistory",
     "PriceDiscoveryJob",
     "DiscoveryJobStatus",
+    "UserDigest",
 ]

@@ -1212,6 +1212,22 @@ async function loadMyProfile() {
     // 자산 개수는 부가 정보라 실패해도 무시
   }
 
+  // 개인화 절약 다이제스트(AI 활용 확대 안건 C, 2026-08-31) — 부가 정보라
+  // 실패해도(네트워크 오류 등) 무시하고 hidden 유지, 지어낸 문구를 보여주지
+  // 않는다. 이번 주 활동이 아예 없으면 백엔드가 빈 격려 문구를 돌려주므로
+  // 그 경우에도 그냥 보여준다(완전 콜드스타트를 숨기지 않되, 예전 "첫 인증자가
+  // 되세요" 문구처럼 강요하는 톤은 아니다).
+  try {
+    const digest = await apiFetch('/users/me/digest');
+    const digestEl = document.getElementById('my-digest');
+    if (digestEl && digest.summary_text) {
+      digestEl.textContent = digest.summary_text;
+      digestEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.warn('절약 다이제스트를 불러오지 못했습니다:', err.message);
+  }
+
   // 사업자 콘솔 바로가기는 사업자 등록 자체를 비활성화하면서(사용자 지시,
   // 2026-08-18: "사장님 등록은 일단 비활성화 시키고 사용자가 메뉴 등록하는걸로
   // 구조를 바꿔") 인증 여부와 무관하게 항상 숨긴다. 예전엔 인증된 사용자에게만

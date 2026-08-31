@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
-from app.api.schemas.user import MerchantStatusResponse, SavingsSummaryResponse
+from app.api.schemas.user import DigestResponse, MerchantStatusResponse, SavingsSummaryResponse
+from app.engine.savings_digest import get_or_create_digest
 from app.gamification.service import (
     compute_visit_title,
     get_explorer_summary,
@@ -67,3 +68,15 @@ async def my_savings_summary(
         streak_active_today=streak.did_activity_today,
         streak_at_risk=streak.at_risk,
     )
+
+
+@router.get("/me/digest", response_model=DigestResponse)
+async def my_digest(
+    user_id: str = RequireUserDep,
+    session: AsyncSession = SessionDep,
+) -> DigestResponse:
+    """AI 활용 확대 안건 C(2026-08-31) — 개인화 절약 다이제스트. 이번 주 캐시가
+    있으면 그대로, 없으면 이 자리에서 한 번 생성해 캐시한다(Render 무료 플랜에
+    크론이 없어 온디맨드 방식)."""
+    text, source = await get_or_create_digest(session, user_id)
+    return DigestResponse(summary_text=text, source=source)

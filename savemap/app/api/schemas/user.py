@@ -47,3 +47,12 @@ class SavingsSummaryResponse(BaseModel):
     streak_days: int = 0
     streak_active_today: bool = False
     streak_at_risk: bool = False
+
+
+class DigestResponse(BaseModel):
+    """AI 활용 확대 안건 C(2026-08-31) — 개인화 절약 다이제스트. source가
+    one_line_source(SavingsReportItem)와 같은 원칙으로 "ai"|"template"를 그대로
+    노출한다 — AI 문장인지 결정론적 폴백인지 감추지 않는다."""
+
+    summary_text: str
+    source: str
