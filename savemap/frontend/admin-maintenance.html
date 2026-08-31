@@ -41,6 +41,10 @@
   </div>
 
   <div>
+    <button id="verify-btn" class="secondary">검증만 하기 (가격 이력/신선도 현황 조회)</button>
+  </div>
+
+  <div>
     <button id="run-btn">끝날 때까지 전체 재동기화 실행</button>
     <button id="stop-btn" class="secondary" disabled>중단</button>
   </div>
@@ -71,6 +75,27 @@ async function callResync(key, { region, offset, limit, dryRun }) {
   if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
   return data;
 }
+
+async function verifyOnly() {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  const qs = region ? `?region=${encodeURIComponent(region)}` : '';
+  try {
+    const resp = await fetch(`/v1/admin/places/stats${qs}`, { headers: { 'X-Admin-Key': key } });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+    log('--- 검증 결과 ---');
+    log(`전체 매장: ${data.total_places}`);
+    log(`가격 보유 매장: ${data.price_coverage.places_with_price} (${data.price_coverage.coverage_pct}%)`);
+    log(`가격 이력(price_history) 총 행: ${data.price_history.total_rows}, 현재 유효 행: ${data.price_history.current_rows}`);
+    log(`신선도 분포(현재 유효 행 기준): ${JSON.stringify(data.price_history.freshness_breakdown)}`);
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+}
+
+document.getElementById('verify-btn').addEventListener('click', verifyOnly);
 
 let stopRequested = false;
 

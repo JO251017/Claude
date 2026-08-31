@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.engine.freshness import freshness_tier
+from app.engine.freshness import freshness_breakdown, freshness_tier
 
 
 def _ago(days):
@@ -26,3 +26,19 @@ def test_boundaries_are_inclusive():
 def test_zero_days_is_fresh():
     now = datetime.now(timezone.utc)
     assert freshness_tier(now, now=now) == ("fresh", 0)
+
+
+# --- freshness_breakdown: GET /admin/places/stats의 검증 요약이 쓰는 집계 함수
+# (2026-08-31, 오퍼 재동기화 배치가 실제로 이력을 남겼는지 확인할 방법이 없어서
+# 추가됨) ---
+
+
+def test_breakdown_counts_each_tier():
+    now = datetime.now(timezone.utc)
+    observed_ats = [now, now - timedelta(days=8), now - timedelta(days=91), None]
+    result = freshness_breakdown(observed_ats, now=now)
+    assert result == {"fresh": 1, "normal": 1, "expired": 1, "unknown": 1}
+
+
+def test_breakdown_empty_input_is_empty_dict():
+    assert freshness_breakdown([]) == {}

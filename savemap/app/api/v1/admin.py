@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, File, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,8 @@ from app.core.errors import (
 from app.domain.menu_item import MenuItem
 from app.domain.place import Place
 from app.domain.price_discovery import DiscoveryJobStatus, PriceDiscoveryJob
+from app.domain.price_history import PriceHistory
+from app.engine.freshness import freshness_breakdown
 from app.engine.price_discovery.metrics import get_discovery_metrics
 from app.engine.price_discovery.orchestrator import (
     approve_job,
@@ -417,6 +421,30 @@ async def get_places_stats(
         row[0].value: row[1] for row in (await session.execute(by_source_stmt)).all()
     }
 
+    # 가격 이력/신선도 검증(2026-08-31) — 오퍼 재동기화 배치(resync-offers)가 실제로
+    # DB에 이력을 남겼는지, 그 결과 신선도가 "정보없음(unknown)"이 아니라 실제
+    # 등급으로 잡히는지를 이 엔드포인트 하나로 확인할 수 있게 한다. 이 세션은 도구
+    # 연결이 끊기면 DB를 직접 조회할 방법이 없어서, 이미 있는 조회 전용 엔드포인트에
+    # 얹는 편이 새 엔드포인트를 만드는 것보다 낫다(이 함수 자체의 목적과도 정확히
+    # 일치 — "방금 한 작업이 실제로 반영됐는지 확인").
+    history_filters = [Place.address.ilike(f"%{region}%")] if region else []
+    total_history_rows = (
+        await session.execute(
+            select(func.count())
+            .select_from(PriceHistory)
+            .join(Place, PriceHistory.place_id == Place.id)
+            .where(*history_filters)
+        )
+    ).scalar_one()
+    current_rows_stmt = (
+        select(PriceHistory.observed_at)
+        .join(Place, PriceHistory.place_id == Place.id)
+        .where(PriceHistory.is_current.is_(True), *history_filters)
+    )
+    current_observed_ats = (await session.execute(current_rows_stmt)).scalars().all()
+
+    breakdown = freshness_breakdown(current_observed_ats, now=datetime.now(UTC))
+
     return {
         "region_filter": region,
         "total_places": total,
@@ -425,6 +453,11 @@ async def get_places_stats(
             "places_with_price": places_with_price,
             "coverage_pct": round(places_with_price / total * 100, 1) if total else 0.0,
             "places_with_price_by_source": by_source,
+        },
+        "price_history": {
+            "total_rows": total_history_rows,
+            "current_rows": len(current_observed_ats),
+            "freshness_breakdown": breakdown,
         },
         "recent_samples": recent_samples,
     }

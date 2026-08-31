@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from app.core.config import settings
@@ -36,3 +37,18 @@ def freshness_tier(
     if days <= settings.price_freshness_stale_days:
         return "stale", days
     return "expired", days
+
+
+def freshness_breakdown(
+    observed_ats: Iterable[datetime | None], *, now: datetime | None = None
+) -> dict[str, int]:
+    """observed_at 목록을 freshness_tier로 나눠 등급별 건수를 센다 — 관리자
+    검증 화면(GET /admin/places/stats)이 "오퍼 재동기화가 실제로 신선도 데이터를
+    남겼는가"를 한 번에 확인할 수 있게 순수 함수로 분리했다(DB 세션 없이도
+    테스트 가능)."""
+    now = now or datetime.now(UTC)
+    breakdown: dict[str, int] = {}
+    for observed_at in observed_ats:
+        tier, _ = freshness_tier(observed_at, now=now)
+        breakdown[tier] = breakdown.get(tier, 0) + 1
+    return breakdown
