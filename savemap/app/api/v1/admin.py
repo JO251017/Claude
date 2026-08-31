@@ -451,7 +451,9 @@ async def run_price_discovery_endpoint(
 ) -> dict:
     """가격 없는 매장을 candidate_selector로 큐에 채운 뒤(이미 큐에 있으면 건너뜀),
     PENDING 큐에서 우선순위 순으로 처리한다. 한 번 클릭에 무제한 실행되지 않도록
-    limit(기본 PRICE_DISCOVERY_MAX_JOBS_PER_RUN, 기본 20)까지만 처리한다(28-22) —
+    limit(기본 PRICE_DISCOVERY_MAX_JOBS_PER_RUN, 기본 3 — 요청 하나가 HTTP
+    타임아웃 안에 끝나도록 보수적으로 잡음, 2026-08-31 502 재현 후 20에서
+    낮춤)까지만 처리한다(28-22) —
     Render 무료 플랜엔 크론이 없으므로 전체를 처리하려면 이 엔드포인트를 여러 번
     반복 호출해야 한다(admin-import.html의 자동 이어호출 루프 패턴과 동일)."""
     enqueued = await enqueue_candidates(session, region=region, limit=limit)
