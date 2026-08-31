@@ -1,5 +1,10 @@
 const API_BASE = '/v1';
 
+// 사용자 노출 브랜드명(2026-08-31, "쓸모" 브랜드 전환) — API 경로/DB/내부 식별자
+// (SAVEMAP_CONFIG, savemap-avatar-* localStorage 키 등)는 그대로 두고, 화면에
+// 실제로 보이는 문구에서만 이 상수를 재사용한다.
+const BRAND_NAME = '쓸모';
+
 // RPG 요소(레벨/칭호/XP 노출)는 잠시 비활성화 — 기본 베이스 구조 완성 후 다시
 // 입힌다(사용자 지시, 2026-08-12). 백엔드는 XP_REWARD(app/domain/enums.py)를
 // 그대로 계속 적립하고, 화면에서만 안 보여준다.
@@ -71,7 +76,7 @@ const AVATAR_GROWTH_STAGES = [
   { minScore: 100, name: '리본 두른 강아지' }, // 리본 장식 시작
   { minScore: 140, name: '든든한 파트너' }, // NEW: 100→180 구간 중간
   { minScore: 180, name: '수호자' },
-  { minScore: 300, name: 'SaveMap 전설' },
+  { minScore: 300, name: `${BRAND_NAME} 전설` },
 ];
 
 function avatarGrowthStageFor(growthScore) {
@@ -2340,7 +2345,7 @@ function openDiscoveredDetail(d) {
     </div>
     ${d.phone ? `<a class="store-info-line store-info-tel" href="tel:${escapeHtml(d.phone)}">${escapeHtml(d.phone)}</a>` : ''}
     <p class="empty-msg" style="margin:10px 0; text-align:left;">
-      아직 SaveMap에 가격 정보가 없는 매장이에요. <strong>메뉴판</strong>을 찍으면 메뉴
+      아직 ${BRAND_NAME}에 가격 정보가 없는 매장이에요. <strong>메뉴판</strong>을 찍으면 메뉴
       여러 개가 한 번에 등록되고, <strong>영수증</strong>을 찍으면 더 간편해요 — 편한
       쪽으로 찍어서 알려주시면 AI가 메뉴와 가격을 알아서 읽어요.
     </p>

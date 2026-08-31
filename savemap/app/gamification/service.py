@@ -9,6 +9,12 @@ from app.domain.savings import SavingsCertification
 from app.domain.store_visit import PlaceRecommendation, StoreInterest
 from app.domain.xp import XpLedger
 
+# 사용자 노출 브랜드명(2026-08-31, "쓸모" 브랜드 전환) — 최고 등급 칭호 3개에
+# 브랜드명이 박혀 있어서, 매번 문자열을 직접 쓰지 않고 여기 한 곳만 바꾸면
+# 전부 반영되게 상수로 뺐다. DB 테이블명/API/모듈명 등 내부 식별자(savemap*)는
+# 이 전환 대상이 아니다 — 사용자가 실제로 보는 문구만 바꾼다.
+BRAND_NAME = "쓸모"
+
 # 예전엔 여기에 XP 총량 기반 레벨링(compute_level/XP_PER_LEVEL/LEVEL_TITLES)이
 # 있었다 — "구조 재설계 제안서"(2026-08-13) §1 진단에서, 프론트가 실제로는
 # compute_savings_level()(실제 인증된 누적 절약금액 기반)만 쓰고 이쪽은 어디서도
@@ -181,7 +187,7 @@ EXPLORER_TITLE_THRESHOLDS: list[tuple[int, str]] = [
     (10, "골목 탐험가"),
     (30, "발품왕"),
     (50, "동네 마스터"),
-    (100, "SaveMap 전설"),
+    (100, f"{BRAND_NAME} 전설"),
 ]
 
 
@@ -247,7 +253,7 @@ VISIT_TITLE_THRESHOLDS: list[tuple[int, str]] = [
     (10, "동네 단골"),
     (30, "찐단골"),
     (50, "방문왕"),
-    (100, "SaveMap 터줏대감"),
+    (100, f"{BRAND_NAME} 터줏대감"),
 ]
 
 
@@ -278,7 +284,7 @@ RECOMMEND_TITLE_THRESHOLDS: list[tuple[int, str]] = [
     (5, "입소문 메이커"),
     (10, "찐추천러"),
     (30, "추천왕"),
-    (50, "SaveMap 인플루언서"),
+    (50, f"{BRAND_NAME} 인플루언서"),
     (100, "추천의 신"),
 ]
 

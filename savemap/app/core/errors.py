@@ -8,7 +8,11 @@ class SaveMapError(HTTPException):
         super().__init__(status_code=self.http_status, detail={"code": self.code, "message": detail or self.message})
 
     http_status: int = status.HTTP_400_BAD_REQUEST
-    message: str = "SaveMap error"
+    # 실제로는 아래 모든 서브클래스가 각자 message를 재정의해서 이 기본값이
+    # 사용자에게 노출될 일은 없지만(도달 불가), 혹시를 대비해 브랜드 문자열은
+    # 여기도 통일해둔다(2026-08-31, "쓸모" 브랜드 전환) — SaveMapError라는
+    # 클래스명 자체는 내부 식별자라 그대로 둔다.
+    message: str = "쓸모 오류"
 
 
 class MissingCoordinatesError(SaveMapError):

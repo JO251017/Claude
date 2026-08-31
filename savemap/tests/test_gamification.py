@@ -56,7 +56,7 @@ def test_mid_thresholds():
 
 def test_max_tier_has_no_next_threshold():
     s = compute_explorer_title(100)
-    assert s.title == "SaveMap 전설"
+    assert s.title == "쓸모 전설"
     assert s.next_threshold is None
     assert s.remaining_to_next is None
 
@@ -65,7 +65,7 @@ def test_beyond_max_tier_stays_at_top_title():
     # 방문 매장 수는 상한 없이 계속 늘 수 있지만, 최고 칭호 문구는 고정된다 —
     # 절약금액 레벨(compute_savings_level)과 달리 초과 확장 로직이 없다.
     s = compute_explorer_title(250)
-    assert s.title == "SaveMap 전설"
+    assert s.title == "쓸모 전설"
     assert s.discovered_place_count == 250
     assert s.next_threshold is None
 
@@ -108,7 +108,7 @@ def test_visit_title_starts_at_base():
 def test_visit_title_mid_and_max_tier():
     assert compute_visit_title(10).title == "동네 단골"
     assert compute_visit_title(29).title == "동네 단골"
-    assert compute_visit_title(100).title == "SaveMap 터줏대감"
+    assert compute_visit_title(100).title == "쓸모 터줏대감"
     assert compute_visit_title(100).next_threshold is None
 
 

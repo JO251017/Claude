@@ -3,8 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>SaveMap</title>
-  <link rel="stylesheet" href="style.css?v=20260831d" />
+  <!-- 사용자 노출 브랜드명(2026-08-31, "쓸모" 브랜드 전환) — 내부 기술 식별자
+       (SAVEMAP_CONFIG, localStorage 키, DB/celery/서비스명 등)는 그대로 두고
+       title/description처럼 사람이 실제로 보는 문구만 바꾼다. -->
+  <title>쓸모 | 내 주변의 절약 기회</title>
+  <meta name="description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <meta property="og:title" content="쓸모 | 내 주변의 절약 기회" />
+  <meta property="og:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="쓸모 | 내 주변의 절약 기회" />
+  <meta name="twitter:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <link rel="stylesheet" href="style.css?v=20260831e" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -688,6 +697,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260831d"></script>
+  <script src="app.js?v=20260831e"></script>
 </body>
 </html>
