@@ -203,6 +203,18 @@ def _digest_prompt(facts: dict[str, str]) -> str:
     )
 
 
+def _pet_levelup_prompt(stage_name: str) -> str:
+    """AI MVP §D(2026-09-01) — 펫이 성장 단계가 올라간 순간의 축하 대사. 이
+    단계 이름 하나만 근거로 하는 순수 축하 문구라 사용자별 사실을 하나도 안
+    준다(줄 게 없으니 숫자 환각 가능성 자체가 없다) — _digest_prompt처럼 별도
+    숫자-금지 가드가 필요 없는 이유."""
+    return (
+        f'한국어로, 막 "{stage_name}" 단계로 성장한 반려동물 강아지가 주인에게 '
+        "하는 짧고 신나는 축하 말 한 마디를 써줘. 15자 이내, 반말, 이모지 없이, "
+        "느낌표 최대 1개. JSON이 아니라 그냥 문장으로 답해."
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     return match.group(0) if match else text
@@ -569,6 +581,16 @@ class GeminiVisionClient:
         템플릿 문장으로 대체)."""
         try:
             raw_text = await self._ask_text(_digest_prompt(facts))
+        except (OcrServiceError, ReportImageFetchError):
+            return None
+        text = raw_text.strip()
+        return text or None
+
+    async def generate_pet_levelup_line(self, stage_name: str) -> str | None:
+        """AI MVP §D — generate_digest와 같은 fail-soft 계약. 실패하면 None
+        (호출부인 app.gamification.pet_reactions가 결정론적 템플릿으로 대체)."""
+        try:
+            raw_text = await self._ask_text(_pet_levelup_prompt(stage_name))
         except (OcrServiceError, ReportImageFetchError):
             return None
         text = raw_text.strip()

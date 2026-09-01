@@ -261,6 +261,13 @@ def test_digest_requires_auth(client):
     assert resp.json()["detail"]["code"] == "SM4011"
 
 
+def test_pet_reaction_requires_auth(client):
+    # AI MVP §D(2026-09-01) — savings-summary와 같은 인증 우선 원칙.
+    resp = client.get("/v1/users/me/pet-reaction", params={"stage_index": 3, "stage_name": "산책 나온 강아지"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
 def test_create_visit_requires_auth(client):
     # 방문 GPS 인증(2026-09-01) — 다른 보호된 엔드포인트와 같은 인증 우선 원칙,
     # NullSession이 실행을 막아둔 상태에서도 401이 나야 한다.

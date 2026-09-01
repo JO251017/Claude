@@ -13,7 +13,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="쓸모 | 내 주변의 절약 기회" />
   <meta name="twitter:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
-  <link rel="stylesheet" href="style.css?v=20260901b" />
+  <link rel="stylesheet" href="style.css?v=20260901c" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -369,6 +369,13 @@
                   <div class="avatar-ground-shadow" id="avatar-ground-shadow"></div>
                   <div class="avatar-hop-rig" id="avatar-hop-rig"></div>
                   <div class="avatar-decos" id="avatar-decos"></div>
+                  <!-- 펫 AI 반응(2026-09-01, AI MVP §D) — 발견/방문/추천/제보/
+                       인증/스트릭/레벨업 성공 직후 짧은 말풍선. character-avatar의
+                       자식이라 아바타가 돌아다녀도(roam/hop) 같이 따라간다. 새
+                       채팅 UI가 아니라 잠깐 떴다 사라지는 말풍선 하나뿐
+                       (showPetSpeech, app.js) — "과도한 채팅 UI는 만들지
+                       않는다"는 원칙 그대로. -->
+                  <div class="pet-speech-bubble hidden" id="pet-speech-bubble"></div>
                 </div>
               </div>
               <div class="character-level" id="my-level-badge">성장 1/9단계</div>
@@ -703,6 +710,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260901b"></script>
+  <script src="app.js?v=20260901c"></script>
 </body>
 </html>

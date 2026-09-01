@@ -61,3 +61,11 @@ class DigestResponse(BaseModel):
 
     summary_text: str
     source: str
+
+
+class PetReactionResponse(BaseModel):
+    """AI MVP §D(2026-09-01) — 펫 레벨업 축하 대사. source는 다른 AI 캐시
+    필드들과 같은 원칙으로 "ai"|"template"."""
+
+    message: str
+    source: str

@@ -411,3 +411,33 @@ def test_estimate_typical_price_without_region_matches_old_behavior():
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
         result = asyncio.run(_client().estimate_typical_price("김치찌개"))
     assert result == 9000.0
+
+
+# --- 펫 레벨업 대사(AI MVP §D, 2026-09-01) ---
+
+
+def test_generate_pet_levelup_line_returns_none_when_api_key_missing():
+    client = GeminiVisionClient(api_key="placeholder")
+    client._key = ""
+    result = asyncio.run(client.generate_pet_levelup_line("산책 나온 강아지"))
+    assert result is None
+
+
+def test_generate_pet_levelup_line_returns_none_on_http_failure():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(503, request=post_request)
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_pet_levelup_line("산책 나온 강아지"))
+    assert result is None
+
+
+def test_generate_pet_levelup_line_returns_stripped_text_on_success():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": "  신난다!  "}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().generate_pet_levelup_line("산책 나온 강아지"))
+    assert result == "신난다!"

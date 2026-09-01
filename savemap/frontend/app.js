@@ -284,6 +284,7 @@ function renderStreakBadge(s) {
 // 중복으로 넣지 않기 위해 loadMyProfile()의 스트릭 값 변화 감지에서만 부른다.
 function celebrateStreak(days) {
   triggerAvatarGrowthFeedback('streak');
+  showPetSpeech(petSpeechFor('streak'));
   showSavingsToast(
     STREAK_MILESTONES.includes(days)
       ? `🎉 ${days}일 연속 달성! 우리 아이가 무럭무럭 자라요`
@@ -790,6 +791,48 @@ function ensureAvatarRoamStarted() {
   scheduleNext();
 }
 
+// --- 펫 AI 반응(2026-09-01, AI MVP §D) ---
+// "AI 대화형 펫"은 아니다 — 대사는 우선 이 템플릿에서 무작위로 하나 골라
+// 즉시 보여준다(§5 "AI 호출 비용 최소화": 발견하기처럼 자주 일어나는 이벤트마다
+// AI를 부르면 안 됨). 딱 하나, 레벨업만 실제로 AI가 지은 문장을 쓸 수 있다
+// (celebrateGrowthStageUp 참고, 서버가 단계별로 전역 캐시). mood/action은
+// 여기서 정하지 않는다 — 기존 triggerAvatarGrowthFeedback의 바운스 클래스가
+// 이미 그 역할을 하므로(§D "AI가 새 애니메이션을 생성하지 않는다"), 말풍선은
+// 순수 텍스트만 얹는 장식이다.
+const PET_REACTION_LINES = {
+  discover: ['오! 여기구나!', '킁킁, 발견!', '나도 와봤어!'],
+  visit: ['오! 직접 찾아왔네!', '진짜 왔구나!', '여기 맞지?'],
+  recommend: ['좋은 곳이었나봐!', '추천 고마워!', '나도 좋아!'],
+  certify: ['가격까지 확인해줬네!', '꼼꼼한걸!', '이게 진짜 가격이구나!'],
+  report: ['메뉴판까지 찾아냈어!', '오! 새 메뉴다!', '대단한걸!'],
+  streak: ['오늘도 왔구나!', '꾸준하다!', '매일매일!'],
+  // 레벨업 전용 템플릿 — AI 응답이 늦거나 실패해도 즉시 보여줄 폴백
+  // (celebrateGrowthStageUp이 먼저 이걸 보여주고, 도착하면 AI 대사로 교체).
+  levelup: ['우와! 나 더 컸어!', '이만큼 컸어!', '더 튼튼해졌어!'],
+};
+
+let petSpeechHideTimer = null;
+
+function showPetSpeech(text, duration = 2200) {
+  const bubble = document.getElementById('pet-speech-bubble');
+  if (!bubble || !text) return;
+  bubble.textContent = text;
+  bubble.classList.remove('hidden');
+  void bubble.offsetWidth; // 리플로우 강제 — 연달아 불려도 트랜지션이 다시 재생되게
+  bubble.classList.add('pet-speech-bubble--show');
+  clearTimeout(petSpeechHideTimer);
+  petSpeechHideTimer = setTimeout(() => {
+    bubble.classList.remove('pet-speech-bubble--show');
+    setTimeout(() => bubble.classList.add('hidden'), 250);
+  }, duration);
+}
+
+function petSpeechFor(kind) {
+  const lines = PET_REACTION_LINES[kind];
+  if (!lines || !lines.length) return null;
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
 // 발견/방문/추천 성공 직후 아바타가 살짝 반응한다(다마고치의 "먹이 주면 바로
 // 반응" 감각) — 별도 API 호출 없이 이미 성공한 응답 시점에 클래스만 토글.
 // 반응 다양화(2026-08-26): 예전엔 세 이벤트가 전부 같은 바운스 하나였다.
@@ -878,6 +921,26 @@ function celebrateGrowthStageUp(growth) {
     setTimeout(() => spawnAvatarParticle('growth'), i * 140);
   }
   showSavingsToast(`🎉 펫이 자랐어요! ${growth.stageNumber}/${growth.totalStages}단계 · ${growth.name}`);
+  // 레벨업만 AI가 지은 대사를 쓸 수 있는 유일한 순간이다(AI MVP §D, 2026-09-01)
+  // — 단계별로 서버가 전역 캐시하므로(같은 단계는 앱 전체에서 딱 한 번만 AI를
+  // 부름) 매번 호출해도 비용이 거의 안 든다. 템플릿 말풍선을 먼저 즉시
+  // 보여주고, 응답이 늦거나 실패해도 이미 뭔가 보이고 있으니 아무 문제 없다
+  // (fail-soft — 실패해도 서비스가 멈추지 않는다).
+  showPetSpeech(petSpeechFor('levelup'));
+  fetchPetLevelupSpeech(growth.stageIndex, growth.name);
+}
+
+// 실패해도 조용히 무시한다 — 이미 위에서 템플릿 말풍선을 보여줬으므로 서비스
+// 동작에는 영향이 없다(§4 "AI가 전체 서비스를 중단시키면 안 된다").
+async function fetchPetLevelupSpeech(stageIndex, stageName) {
+  try {
+    const data = await apiFetch(
+      `/users/me/pet-reaction?stage_index=${stageIndex}&stage_name=${encodeURIComponent(stageName)}`
+    );
+    if (data && data.message) showPetSpeech(data.message, 3200);
+  } catch {
+    // 조용히 무시 — 템플릿 말풍선이 이미 떠 있다.
+  }
 }
 
 let merchantPlaces = [];
@@ -1923,6 +1986,7 @@ async function confirmVisit(place, btn) {
     renderVisitCheckState('done');
     btn.classList.add('hidden');
     triggerAvatarGrowthFeedback('visit');
+    showPetSpeech(petSpeechFor('visit'));
     showSavingsToast(`🐾 방문 완료! +${data.xp_awarded} 성장치`);
     loadMyProfile();
   } catch (err) {
@@ -2529,6 +2593,7 @@ async function recommendPlace(r, btn) {
     // 갱신한다(2-4) — 중복 추천 클릭으로 지어낸 성장은 없다.
     if (data.is_new) {
       triggerAvatarGrowthFeedback('recommend');
+      showPetSpeech(petSpeechFor('recommend'));
       loadMyProfile();
       showSavingsToast('👍 추천 완료!');
     }
@@ -2725,6 +2790,7 @@ async function confirmDiscoveredMenuReport(d) {
     statusEl.textContent = message;
     document.getElementById('discovered-menu-results').innerHTML = '';
     discoveredMenuImageUrl = null;
+    if (created + updated > 0) showPetSpeech(petSpeechFor('report'));
     if (totalXp > 0) loadSavingsBadge();
   } catch (err) {
     statusEl.textContent = `제보 실패: ${err.message}`;
@@ -2773,7 +2839,10 @@ async function submitStatusUpdate(r, status, btn) {
         // 때만 띄운다.
         triggerAvatarGrowthFeedback('discover');
         loadMyProfile();
-        if (status === 'open') showSavingsToast('🧭 발견 완료!');
+        if (status === 'open') {
+          showPetSpeech(petSpeechFor('discover'));
+          showSavingsToast('🧭 발견 완료!');
+        }
       } catch (err) {
         msgEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
       } finally {
@@ -2842,6 +2911,7 @@ async function certifyOffer(r) {
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
     triggerAvatarGrowthFeedback('visit');
+    showPetSpeech(petSpeechFor('certify'));
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
     showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);
@@ -2902,6 +2972,7 @@ async function certifyWithReceipt(r, fileInput) {
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
     triggerAvatarGrowthFeedback('visit');
+    showPetSpeech(petSpeechFor('certify'));
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
     showSavingsToast(`💰 +${Math.round(cert.amount).toLocaleString()}원 절약 확정!`);

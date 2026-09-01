@@ -1,9 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
-from app.api.schemas.user import DigestResponse, MerchantStatusResponse, SavingsSummaryResponse
+from app.api.schemas.user import (
+    DigestResponse,
+    MerchantStatusResponse,
+    PetReactionResponse,
+    SavingsSummaryResponse,
+)
 from app.engine.savings_digest import get_or_create_digest
+from app.gamification.pet_reactions import get_or_create_levelup_message
 from app.gamification.service import (
     compute_visit_title,
     get_explorer_summary,
@@ -88,3 +94,19 @@ async def my_digest(
     크론이 없어 온디맨드 방식)."""
     text, source = await get_or_create_digest(session, user_id)
     return DigestResponse(summary_text=text, source=source)
+
+
+@router.get("/me/pet-reaction", response_model=PetReactionResponse)
+async def my_pet_reaction(
+    stage_index: int = Query(ge=0, le=64, description="프론트 AVATAR_GROWTH_STAGES의 stageIndex"),
+    stage_name: str = Query(max_length=40, description="그 단계 이름(프론트가 이미 계산해 둔 값)"),
+    user_id: str = RequireUserDep,
+    session: AsyncSession = SessionDep,
+) -> PetReactionResponse:
+    """AI MVP §D(2026-09-01) — 펫 레벨업 축하 대사. 이 stage_index에 대한 전역
+    캐시가 있으면 그대로, 없으면 이 자리에서 한 번만 생성해 캐시한다(사용자별이
+    아니라 단계별 전역 캐시 — get_or_create_levelup_message 참고). 발견/방문/
+    추천/제보/인증/스트릭 등 다른 이벤트는 이 엔드포인트를 안 쓴다 — 그쪽은
+    프론트 템플릿 로테이션만으로 충분하다(§5 AI 호출 비용 최소화)."""
+    text, source = await get_or_create_levelup_message(session, stage_index, stage_name)
+    return PetReactionResponse(message=text, source=source)

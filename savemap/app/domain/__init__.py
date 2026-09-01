@@ -5,6 +5,7 @@ from app.domain.merchant_verification import MerchantVerification
 from app.domain.offer import Offer, OfferPaymentBenefit
 from app.domain.offer_verification import OfferVerification
 from app.domain.payment_method import PaymentMethodDerived
+from app.domain.pet_reaction import PetStageMessage
 from app.domain.place import Place
 from app.domain.price_discovery import DiscoveryJobStatus, PriceDiscoveryJob
 from app.domain.price_history import PriceHistory
@@ -43,4 +44,5 @@ __all__ = [
     "PriceDiscoveryJob",
     "DiscoveryJobStatus",
     "UserDigest",
+    "PetStageMessage",
 ]

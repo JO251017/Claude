@@ -1912,6 +1912,53 @@ select:focus {
   animation: avatar-breathe 3.6s ease-in-out infinite;
 }
 
+/* 펫 AI 반응 말풍선(2026-09-01, AI MVP §D) — character-avatar의 자식이라
+   roam/hop 이동에 같이 따라간다. 평소엔 hidden, showPetSpeech()가 텍스트를
+   채우고 잠깐 보여줬다 다시 숨긴다. */
+.pet-speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  max-width: 150px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 4;
+}
+
+.pet-speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(255, 255, 255, 0.96);
+}
+
+.pet-speech-bubble.pet-speech-bubble--show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-speech-bubble {
+    transition: opacity 0.2s ease;
+  }
+}
+
 /* 홉(점프) 이동 중엔 idle breathe를 잠깐 끈다 — animateAvatarHops()가 토글.
    breathe(작은 상하 흔들림)와 홉의 포물선 점프가 동시에 돌면 두 움직임이
    겹쳐 보여 오히려 산만해진다 — "걷는 중"과 "가만히 서서 숨쉬는 중"을 명확히
