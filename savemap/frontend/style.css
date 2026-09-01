@@ -2009,7 +2009,8 @@ select:focus {
    (2026-08-27) — .character-avatar 자체는 breathe/bounce 애니메이션이 transform을
    계속 갱신하므로, 그 위에서 충돌 없이 뒤집으려면 안쪽 svg에만 건다. 장식
    (avatar-deco)은 절대 위치라 같이 안 뒤집혀도 어색하지 않다. */
-.character-avatar.avatar-facing-left svg {
+.character-avatar.avatar-facing-left svg,
+.character-avatar.avatar-facing-left .avatar-pet-img {
   transform: scaleX(-1);
 }
 
@@ -2052,6 +2053,20 @@ select:focus {
      안 틀어진다. */
   width: 88px;
   height: 100px;
+}
+
+/* 새 PNG/WebP 캐릭터 이미지(2026-09-01, avatarImageHtml) — SVG와 같은 자리에
+   같은 크기로 들어간다. 기존 무대 레이아웃(stage-prop 배치 등)이 88×100 svg
+   박스 기준으로 짜여 있어, 지시서의 128px 기준을 그대로 쓰면 소품과 겹치거나
+   화면 밖으로 튀어나간다 — 기존 박스 크기를 유지하고 이미지 비율만
+   object-fit으로 맞춘다. draggable=false는 마크업에서 이미 막았지만 브라우저
+   기본 이미지 드래그 고스트(자리 이동을 방해)를 한 번 더 CSS로도 막는다. */
+.avatar-pet-img {
+  width: 88px;
+  height: 100px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 /* 발밑 그림자(2026-08-27) — 홉 도중 app.js가 크기·투명도를 바꿔서 "공중에
@@ -2676,6 +2691,23 @@ select:focus {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* 새 PNG/WebP 얼굴 크롭(2026-09-01, avatarFaceImageHtml) — 전용 얼굴 크롭
+   에셋이 없어(파일 규칙엔 lv{N}.png 정면 전신 한 장뿐) 전신 이미지를
+   object-fit:cover + object-position으로 위쪽(머리 부분)만 잘라 보여줘서
+   기존 avatarFaceSvgFor의 "얼굴만 크롭" 인상을 근사한다. 32×32 정사각형
+   마커 박스는 그대로 유지(§E "작은 사이즈 테스트"가 요구한 축소 표시와
+   같은 크기 등급). */
+.avatar-pet-face-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 10%;
+  border-radius: 50%;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 @keyframes map-avatar-breathe {
   0%, 100% { transform: translateY(0); }

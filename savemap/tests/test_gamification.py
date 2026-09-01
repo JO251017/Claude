@@ -187,42 +187,57 @@ def test_get_savings_summary_carries_period_totals_through():
     assert summary.yearly_saved == 80_000.0
 
 
-# --- 펫 성장치(2026-09-01, 사용자 확정 비율: 발견 2/추천 4/방문 6/가격 인증 12) ---
+# --- 펫 성장치(2026-09-01 재조정, 새 펫 이미지 지시서 값으로 교체:
+# 발견 5/추천 15/방문 30/구매 인증(직접입력) 50/영수증 인증 100) ---
 
 
 def test_compute_growth_score_applies_confirmed_weights():
-    assert GROWTH_WEIGHT == {"discover": 2, "visit": 6, "recommend": 4, "certify": 12}
+    assert GROWTH_WEIGHT == {
+        "discover": 5,
+        "recommend": 15,
+        "visit": 30,
+        "certify_direct": 50,
+        "certify_receipt": 100,
+    }
     score = compute_growth_score(
-        discovered_place_count=3, visited_place_count=2, recommend_count=1, receipt_certified_count=1
+        discovered_place_count=3,
+        visited_place_count=2,
+        recommend_count=1,
+        direct_certified_count=1,
+        receipt_certified_count=1,
     )
-    assert score == 3 * 2 + 2 * 6 + 1 * 4 + 1 * 12  # 6+12+4+12 = 34
+    assert score == 3 * 5 + 2 * 30 + 1 * 15 + 1 * 50 + 1 * 100  # 15+60+15+50+100 = 240
 
 
 def test_compute_growth_score_zero_activity_is_zero():
-    assert compute_growth_score(0, 0, 0, 0) == 0
+    assert compute_growth_score(0, 0, 0, 0, 0) == 0
 
 
-def test_compute_growth_score_only_direct_input_certification_contributes_nothing():
-    # 직접입력(자기신고)은 receipt_certified_count에 안 들어간다는 전제를
-    # get_growth_score 쪽에서 이미 필터링하므로, 여기서는 순수 함수가 인자로
-    # 받은 값만 정직하게 반영하는지만 본다.
-    assert compute_growth_score(0, 0, 0, receipt_certified_count=5) == 5 * 12
+def test_compute_growth_score_direct_and_receipt_certification_both_contribute():
+    # 이번 지시서부터 직접입력(자기신고)도 0이 아닌 값을 받는다 — 영수증
+    # 인증(사진 검증)의 절반 무게.
+    assert compute_growth_score(0, 0, 0, direct_certified_count=3, receipt_certified_count=0) == 3 * 50
+    assert compute_growth_score(0, 0, 0, direct_certified_count=0, receipt_certified_count=3) == 3 * 100
 
 
 class _FakeGrowthSession:
-    """get_visited_place_count → get_receipt_certified_count 순서로 execute를
-    두 번 부른다(둘 다 scalar_one())."""
+    """get_visited_place_count → get_direct_certified_count → get_receipt_certified_count
+    순서로 execute를 세 번 부른다(전부 scalar_one())."""
 
-    def __init__(self, visited: int, certified: int):
-        self._queue = [_FakeScalarResult(visited), _FakeScalarResult(certified)]
+    def __init__(self, visited: int, direct_certified: int, receipt_certified: int):
+        self._queue = [
+            _FakeScalarResult(visited),
+            _FakeScalarResult(direct_certified),
+            _FakeScalarResult(receipt_certified),
+        ]
 
     async def execute(self, *a, **kw):
         return self._queue.pop(0)
 
 
 def test_get_growth_score_combines_query_results_with_passed_in_counts():
-    session = _FakeGrowthSession(visited=4, certified=2)
+    session = _FakeGrowthSession(visited=4, direct_certified=1, receipt_certified=2)
     score = asyncio.run(
         get_growth_score(session, "user-1", discovered_place_count=10, recommend_count=3)
     )
-    assert score == compute_growth_score(10, 4, 3, 2)
+    assert score == compute_growth_score(10, 4, 3, 1, 2)

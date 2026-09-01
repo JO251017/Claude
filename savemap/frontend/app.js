@@ -61,25 +61,32 @@ const ICONS = {
 // 키우기 같은 형식 — 맵에서 가게 인증이나 추천기능을 통해 아바타가 성장하는
 // 구조로 가". 발견/방문/추천/가격 인증 — 실제 행동에서 결정론적으로 계산되는
 // 성장치(2-4) 하나로 단계를 정한다. 별도로 지어낸 점수는 없다.
-// 단계 간격 튜닝(아바타 업그레이드, 2026-08-26): 25→60(35), 100→180(80) 두
-// 구간이 유독 넓어서 그 사이에 정체 구간처럼 느껴졌다. 실제 사용자 성장
-// 속도 데이터가 없어 "정답"은 아니고, 기존 7단계 이름/취지는 그대로 두고
-// 넓은 두 구간에만 중간 단계를 하나씩 끼워 넣어 간격을 고르게 만든 추측치다.
-// 임계값 재조정(2026-09-01) — 성장치 계산이 서버로 옮겨가면서 행동별 가중치가
-// 생겼다(발견 2/추천 4/방문 6/가격 인증 12, 옛 체계는 행동 1회당 전부 1점).
-// 행동 1회의 평균 가치를 옛 "1점"에서 새 "약 6점"으로 보고 기존 임계값에
-// 동일 비율(×5, 근사)을 곱했다 — 실제 사용 데이터 기반 정답은 아니고, 위
-// 2026-08-26 조정과 같은 성격의 추측치다.
+//
+// 10단계 전면 교체(2026-09-01, 사용자가 새 펫 캐릭터 이미지 세트를 공식
+// 디자인으로 확정) — 예전 9단계(씨앗 강아지~쓸모 전설, 절차적 SVG 픽셀아트)를
+// 대체한다. 이름/순서는 사용자가 전달한 실제 이미지 파일 세트("[개별 PNG
+// 파일 세트] 쓸모의 성장 단계", 1~10번 패널)를 그대로 따른다 — 같이 온
+// 텍스트 지시서(LV.5/LV.6 이름·순서가 이미지와 반대, 8/9단계가 원래 하나로
+// "쓸모 마스터"만 있었음)보다 실제 이미지 파일이 최종 기준이라는 사용자
+// 확정에 따름. "절약 고수가 백구"는 이미지 라벨 오타로 보고 다른 이름들과
+// 같은 패턴("~백구")으로 "절약 고수 백구"로 정리했다. 8/9단계는 이미지에서
+// 둘 다 "쓸모 마스터"로만 표기돼 있어 구분을 위해 I/II를 붙였다(사용자 확정).
+//
+// 임계값은 새 행동별 가중치(발견5/추천15/방문30/구매인증50/영수증인증100 —
+// app/gamification/service.py:GROWTH_WEIGHT)에 맞춰 다시 잡은 추측치다.
+// 실제 사용자 성장 속도 데이터가 없어 "정답"은 아니고, 기존 단계 간격
+// 조정들(2026-08-26/2026-09-01)과 같은 성격 — 나중에 실사용 데이터로 조정.
 const AVATAR_GROWTH_STAGES = [
-  { minScore: 0, name: '씨앗 강아지' },
-  { minScore: 50, name: '새싹 강아지' },
-  { minScore: 120, name: '목줄 찬 강아지' }, // 목줄 장식 시작
-  { minScore: 200, name: '산책 나온 강아지' }, // NEW: 25→60 구간 중간
-  { minScore: 300, name: '배낭 여행자' },
-  { minScore: 500, name: '리본 두른 강아지' }, // 리본 장식 시작
-  { minScore: 700, name: '든든한 파트너' }, // NEW: 100→180 구간 중간
-  { minScore: 900, name: '수호자' },
-  { minScore: 1500, name: `${BRAND_NAME} 전설` },
+  { minScore: 0, name: '아기 백구' },
+  { minScore: 200, name: '꼬마 백구' },
+  { minScore: 500, name: '똑똑한 백구' },
+  { minScore: 1000, name: '탐험가 백구' },
+  { minScore: 1800, name: '쓸모 전문가 백구' },
+  { minScore: 3000, name: '절약 고수 백구' },
+  { minScore: 4500, name: '동네 보물사냥꾼 백구' },
+  { minScore: 6500, name: '쓸모 마스터 I' },
+  { minScore: 9000, name: '쓸모 마스터 II' },
+  { minScore: 13000, name: '전설의 쓸모 백구' },
 ];
 
 function avatarGrowthStageFor(growthScore) {
@@ -292,6 +299,14 @@ function celebrateStreak(days) {
   );
 }
 
+// 2026-09-01: 여기는 의도적으로 PNG 이미지로 안 바꾼다 — 옷장 미리보기의
+// 목적은 "지금 고른 목줄/리본 색이 실제로 어떻게 보이는지"이고, 그 색상
+// (getAvatarColorPref)은 avatarSvgFor가 매 프레임 다시 그리는 절차적 SVG에만
+// 반영된다. 새 PNG 에셋은 단계별 고정 그림이라 색상 커스터마이징을 표현할
+// 방법이 없다(파일명 규칙에 색상 변형이 없음) — 여기서 이미지로 바꾸면
+// "옷장 색상 커스터마이징" 기능(절대 원칙 보존 대상)이 미리보기에서만 무효화
+// 되는 셈이라 그대로 SVG를 쓴다. 무대/지도 마커의 기본 표시는 위
+// renderAvatarSpriteFrame/originAvatarOverlayContent에서 PNG로 바뀐다.
 function renderClosetPreview() {
   const el = document.getElementById('closet-avatar-preview');
   if (!el || !lastGrowthInfo) return;
@@ -515,8 +530,79 @@ function _dogCellColor(px, py, o) {
   return color;
 }
 
+// --- 펫 캐릭터 이미지(PNG/WebP, 2026-09-01) ---
+// 사용자가 확정한 공식 캐릭터 디자인(레퍼런스 이미지 1~10번 패널)을 실제
+// 서비스에 쓴다. 아래의 avatarSvgFor/avatarFaceSvgFor(절차적 픽셀아트)는
+// 지우지 않고 그대로 남긴다 — 이미지 파일이 아직 없거나(사용자가 이후 전달
+// 예정) 로드에 실패해도 화면이 깨진 아이콘으로 보이지 않도록 자동 폴백하는
+// 안전망이다(§4 "AI/에셋 실패가 서비스를 중단시키면 안 된다"와 같은 원칙을
+// 에셋 로딩에도 적용).
+//
+// 파일 규칙 — frontend/assets/pet/ 아래에 두면 자동으로 인식된다:
+//   lv1.png ~ lv10.png        — 필수, 단계별 기본(정면 서 있는) 이미지
+//   lv{N}_{state}.png         — 선택, 있으면 그 상태에서 우선 사용
+//     표정: happy, excited, proud, surprised, sleepy (normal=기본 이미지)
+//     포즈: walking, jumping, sleeping, celebrating
+// 특정 state 파일이 없으면 자동으로 lv{N}.png(기본)로, 그것도 없으면(에셋
+// 전달 전) 기존 SVG 렌더러로 넘어간다 — 그 이상 손볼 곳 없이 파일만 저
+// 경로에 넣으면 바로 반영된다.
+const PET_ASSET_DIR = 'assets/pet/';
+const PET_STAGE_COUNT = 10;
+
+function _petStageNumber(stageIndex) {
+  return Math.min(Math.max(stageIndex, 0), PET_STAGE_COUNT - 1) + 1;
+}
+
+function petAssetUrl(stageIndex, state) {
+  const n = _petStageNumber(stageIndex);
+  return state ? `${PET_ASSET_DIR}lv${n}_${state}.png` : `${PET_ASSET_DIR}lv${n}.png`;
+}
+
+// 에셋 파일이 하나라도 404면 true로 바뀌어 이후 세션 내내(새로고침 전까지)
+// 이미지 시도 자체를 건너뛰고 SVG만 그린다 — 그렇게 안 하면 renderAvatarSpriteFrame이
+// 350~550ms마다 다시 <img>를 그려 넣었다가 또 실패하는 깜빡임 루프가 생긴다.
+// 파일이 일부만 있는 경우(부분 업로드)는 고려하지 않는다 — "전부 있거나 전부
+// 없거나" 둘 중 하나로 취급해도 실사용상 문제없다(사용자가 세트를 통째로 전달
+// 예정이므로).
+let avatarImageAssetsUnavailable = false;
+
+// 이미지 로드 실패 시 되돌아갈 기존 SVG 렌더러로 부모(rig) 내용을 바꿔치기한다.
+// window에 달아두는 이유: onerror 인라인 핸들러(문자열)에서 호출해야 해서다.
+window.avatarSvgFallback = function avatarSvgFallback(imgEl, stageIndex) {
+  avatarImageAssetsUnavailable = true;
+  const rig = imgEl.parentElement;
+  if (rig) rig.innerHTML = avatarSvgFor(stageIndex, {});
+};
+
+window.avatarFaceSvgFallback = function avatarFaceSvgFallback(imgEl, stageIndex) {
+  avatarImageAssetsUnavailable = true;
+  const parent = imgEl.parentElement;
+  if (parent) parent.innerHTML = avatarFaceSvgFor(stageIndex, {});
+};
+
+// state별 파일 → 없으면 기본 이미지 → 그마저 없으면 SVG, 순서로 자동 폴백한다.
+function avatarImageHtml(stageIndex, state, className = 'avatar-pet-img') {
+  const n = _petStageNumber(stageIndex);
+  const base = petAssetUrl(stageIndex, null);
+  const primary = state ? petAssetUrl(stageIndex, state) : base;
+  const onerror = state
+    ? `if(this.src.indexOf('${base}')===-1){this.onerror=null;this.src='${base}';}else{avatarSvgFallback(this, ${stageIndex});}`
+    : `avatarSvgFallback(this, ${stageIndex});`;
+  return `<img class="${className}" src="${primary}" alt="쓸모 펫 ${n}단계" onerror="${onerror}" draggable="false" />`;
+}
+
+function avatarFaceImageHtml(stageIndex, className = 'avatar-pet-face-img') {
+  const n = _petStageNumber(stageIndex);
+  const base = petAssetUrl(stageIndex, null);
+  return `<img class="${className}" src="${base}" alt="쓸모 펫 ${n}단계" onerror="avatarFaceSvgFallback(this, ${stageIndex});" draggable="false" />`;
+}
+
 let _dogFilterSeq = 0;
 
+// 예전 절차적 픽셀아트 렌더러 — 위 avatarImageHtml/avatarFaceImageHtml의
+// SVG 폴백 경로로만 쓰인다(더 이상 기본 렌더러가 아님, 2026-09-01). 옷장
+// 미리보기 등에서 여전히 참조하므로 함수 자체는 지우지 않는다.
+//
 // 단계 인덱스는 AVATAR_GROWTH_STAGES 튜닝(9단계, 2026-08-26)에 맞춰
 // 목줄=2("목줄 찬 강아지"), 리본=5("리본 두른 강아지") 시작이다. 지도 마커·
 // 옷장 미리보기도 이 함수 하나만 부른다 — 임계값(2, 5)을 두 곳에 따로 적지
@@ -606,11 +692,15 @@ function avatarFaceSvgFor(stageIndex, frame = {}) {
 // 아래 renderAvatarSpriteFrame 참고) — 장식은 절대좌표라 홉 애니메이션이 흔드는
 // 안쪽 래퍼(avatar-hop-rig)가 아니라 바깥 #character-avatar 기준으로 그려야
 // 점프할 때 장식만 안 따라오는 일이 없다.
+// 임계값(2/5/8)은 옷장 잠금해제(2, 5)와 첫 값 두 개를 그대로 맞추고, 세
+// 번째만 9단계→10단계 확장(2026-09-01)에 맞춰 7→8로 옮겼다 — 예전 9단계
+// 기준 7/8(전체의 약 87.5%, 끝에서 두 번째)과 같은 상대 위치를 10단계에서
+// 유지한 값(8/9)이다.
 function avatarDecosHtmlFor(stageIndex) {
   const decos = [];
   if (stageIndex >= 2) decos.push(`<span class="avatar-deco avatar-deco--1" aria-hidden="true">${ICONS.sparkle}</span>`);
   if (stageIndex >= 5) decos.push(`<span class="avatar-deco avatar-deco--2" aria-hidden="true">${ICONS.sparkle}</span>`);
-  if (stageIndex >= 7) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
+  if (stageIndex >= 8) decos.push(`<span class="avatar-deco avatar-deco--3" aria-hidden="true">${ICONS.sparkle}</span>`);
   return decos.join('');
 }
 
@@ -633,6 +723,22 @@ let avatarSpriteTimer = null;
 // 눈 깜빡임/꼬리 흔들기 루프와 별개 상태라 시퀀스 프레임 위에 덧씌운다.
 let avatarBarking = false;
 
+// 표정(2026-09-01, 새 펫 이미지 지시서 §C) — 두 축으로 나눈다:
+//  - avatarCurrentExpression: 발견/방문/인증 등 "이벤트 직후" 잠깐 나타나는
+//    표정. triggerAvatarGrowthFeedback/celebrateGrowthStageUp이 설정하고
+//    타이머로 스스로 null(기본 표정)로 되돌아간다.
+//  - avatarAmbientExpression: 스트릭 위험(오래 비활성) 같은, 특정 순간이
+//    지나도 계속 유지돼야 하는 "배경" 표정. loadMyProfile()의 스트릭 판정이
+//    바뀔 때만 갱신한다.
+// 렌더 시엔 이벤트 표정이 배경 표정보다 우선한다(둘 다 있으면 방금 일어난
+// 일이 더 눈에 띄어야 자연스럽다). 두 축을 분리해둔 이유는 프로필을 새로고침
+// (loadMyProfile)할 때마다 배경 표정을 다시 계산하더라도, 마침 재생 중이던
+// 이벤트 표정(예: 방금 뜬 "인증 성공" 표정)을 덮어써서 끊겨 보이는 일이
+// 없게 하기 위해서다.
+let avatarCurrentExpression = null;
+let avatarAmbientExpression = null;
+let avatarExpressionResetTimer = null;
+
 function renderAvatarSpriteFrame() {
   // svg는 avatar-hop-rig 안에, 장식(avatar-deco)은 그 바깥 형제(avatar-decos)에
   // 따로 그린다(2026-08-27) — hop-rig는 홉 애니메이션 중 transform이 계속
@@ -642,8 +748,18 @@ function renderAvatarSpriteFrame() {
   // 무관) 매번 다시 그려도 눈에 띄는 낭비는 아니다.
   const rig = document.getElementById('avatar-hop-rig');
   if (!rig) return;
-  const frame = { ...AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx], bark: avatarBarking };
-  rig.innerHTML = avatarSvgFor(avatarSpriteStageIndex, frame);
+  if (avatarImageAssetsUnavailable) {
+    // 이미지 에셋이 없거나 실패한 세션 — 예전 그대로 절차적 SVG를 매 프레임
+    // 다시 그려서 눈 깜빡임/꼬리 흔들기 애니메이션을 유지한다.
+    const frame = { ...AVATAR_SPRITE_SEQUENCE[avatarSpriteFrameIdx], bark: avatarBarking };
+    rig.innerHTML = avatarSvgFor(avatarSpriteStageIndex, frame);
+  } else {
+    // 이미지 파일엔 프레임별 눈 깜빡임 그림이 없다 — state(표정)만 반영한다.
+    // 짖는 반응(avatarBarking)은 SVG의 bark 프레임과 같은 자리를 대신해
+    // excited 표정으로 잠깐 보여준다.
+    const state = avatarBarking ? 'excited' : (avatarCurrentExpression || avatarAmbientExpression);
+    rig.innerHTML = avatarImageHtml(avatarSpriteStageIndex, state);
+  }
   const decosEl = document.getElementById('avatar-decos');
   if (decosEl) decosEl.innerHTML = avatarDecosHtmlFor(avatarSpriteStageIndex);
 }
@@ -843,7 +959,26 @@ function petSpeechFor(kind) {
 const AVATAR_BOUNCE_CLASSES = ['avatar-bounce', 'avatar-bounce--discover', 'avatar-bounce--visit', 'avatar-bounce--recommend', 'avatar-bounce--levelup'];
 let avatarBarkTimer = null;
 
-function triggerAvatarGrowthFeedback(kind) {
+// 이벤트 종류 → 기본 표정(2026-09-01, 새 펫 이미지 지시서 §C). 지시서가 명시한
+// 매핑만 옮긴다: "좋은 할인 발견"=discover→excited, "방문 인증 성공"(GPS
+// 방문 확정)=visit→happy. "미션 완료"(가격 인증)는 kind가 똑같이 'visit'을
+// 재사용하는 자리라(아래 certifyOffer/certifyWithReceipt 주석 참고) 이 표에
+// 넣지 않고 호출부에서 expression 인자로 직접 넘긴다. 추천/스트릭/탭은
+// 지시서에 명시된 표정이 없어 여기 없는 채로 둔다(지어내지 않음) — 기본
+// 표정(null)으로 남는다.
+const AVATAR_KIND_EXPRESSION = { discover: 'excited', visit: 'happy' };
+
+// "큰 절약 성공"(§C) 판정 기준 — 서버가 계산한 cert.amount(실제 절약액)를
+// 그대로 쓴다(지어낸 값 없음). 이 금액 자체는 UX 연출 임계값일 뿐 절약
+// 데이터에는 영향이 없다 — 정답이 있는 수치가 아니라 추후 실사용 데이터로
+// 조정 가능한 값이라고 남겨둔다.
+const BIG_SAVINGS_AMOUNT_THRESHOLD = 10000;
+
+// kind: 바운스 애니메이션 종류(기존과 동일). expression: 생략하면
+// AVATAR_KIND_EXPRESSION[kind]를 쓰고, 명시하면(예: 가격 인증 성공) 그 값을
+// 우선한다. 이미지 에셋이 없는 세션에선 avatarCurrentExpression이 렌더에
+// 반영되지 않는다(SVG 폴백 경로는 표정 파일이 없어 무시).
+function triggerAvatarGrowthFeedback(kind, expression) {
   const el = document.getElementById('character-avatar');
   if (!el) return;
   el.classList.remove(...AVATAR_BOUNCE_CLASSES);
@@ -855,6 +990,13 @@ function triggerAvatarGrowthFeedback(kind) {
   el.classList.add(cls);
   spawnAvatarParticle(kind);
 
+  avatarCurrentExpression = expression || AVATAR_KIND_EXPRESSION[kind] || null;
+  clearTimeout(avatarExpressionResetTimer);
+  avatarExpressionResetTimer = setTimeout(() => {
+    avatarCurrentExpression = null;
+    renderAvatarSpriteFrame();
+  }, 1800);
+
   if (kind === 'visit') {
     // 방문 인증만 짖는 프레임을 잠깐 보여준다 — 눈 깜빡임/꼬리 흔들기 루프는
     // 그대로 두고 위에 덧씌운 뒤 원래대로 되돌린다.
@@ -865,6 +1007,8 @@ function triggerAvatarGrowthFeedback(kind) {
       avatarBarking = false;
       renderAvatarSpriteFrame();
     }, 550);
+  } else {
+    renderAvatarSpriteFrame();
   }
 }
 
@@ -920,6 +1064,16 @@ function celebrateGrowthStageUp(growth) {
   for (let i = 0; i < 3; i++) {
     setTimeout(() => spawnAvatarParticle('growth'), i * 140);
   }
+  // 레벨업은 이벤트 표정 중 가장 특별한 연출이라 excited를 쓰고, 토스트/말풍선이
+  // 떠 있는 동안(아래 showSavingsToast/showPetSpeech) 계속 보이도록 다른
+  // 이벤트 표정(1.8초)보다 길게 유지한다.
+  avatarCurrentExpression = 'excited';
+  clearTimeout(avatarExpressionResetTimer);
+  avatarExpressionResetTimer = setTimeout(() => {
+    avatarCurrentExpression = null;
+    renderAvatarSpriteFrame();
+  }, 3200);
+  renderAvatarSpriteFrame();
   showSavingsToast(`🎉 펫이 자랐어요! ${growth.stageNumber}/${growth.totalStages}단계 · ${growth.name}`);
   // 레벨업만 AI가 지은 대사를 쓸 수 있는 유일한 순간이다(AI MVP §D, 2026-09-01)
   // — 단계별로 서버가 전역 캐시하므로(같은 단계는 앱 전체에서 딱 한 번만 AI를
@@ -1226,6 +1380,12 @@ async function loadMyProfile() {
     // 갱신하고, 지난번 조회 이후 실제로 늘었으면(오늘 첫 활동으로 이어졌거나
     // 새 스트릭이 막 시작됐으면) 축하한다.
     avatarEl.classList.toggle('character-avatar--waiting', !!s.streak_at_risk);
+    // 오래 비활성(스트릭 끊기기 직전)→SLEEPY(§C) — 이벤트 표정과 별개인
+    // "배경" 표정이라 avatarCurrentExpression(방금 일어난 일)은 건드리지
+    // 않는다. 위 필터(saturate/brightness)와 표정 이미지가 함께 "처져
+    // 보인다"는 인상을 만든다.
+    avatarAmbientExpression = s.streak_at_risk ? 'sleepy' : null;
+    renderAvatarSpriteFrame();
     renderStreakBadge(s);
     if (lastKnownStreakDays !== null && s.streak_days > lastKnownStreakDays) {
       celebrateStreak(s.streak_days);
@@ -1780,10 +1940,15 @@ function treasureMarkerImage() {
 // 2026-08-30: 지도 마커 크기에선 전신이 잘 안 읽힌다는 지적을 받아 avatarSvgFor
 // (전신) 대신 avatarFaceSvgFor(얼굴만 크롭)로 바꿨다 — MY탭 무대의 전신
 // 아바타는 그대로 유지(거기선 전신이 맞다).
+// 2026-09-01: 이미지 에셋이 있으면 avatarFaceImageHtml(정면 이미지를 CSS로
+// 얼굴 부위만 크롭)로, 없거나 실패하면 기존 avatarFaceSvgFor로 자동 폴백한다.
 function originAvatarOverlayContent() {
   const el = document.createElement('div');
   el.className = 'map-avatar-marker';
-  el.innerHTML = avatarFaceSvgFor(lastGrowthInfo ? lastGrowthInfo.stageIndex : 0);
+  const stageIndex = lastGrowthInfo ? lastGrowthInfo.stageIndex : 0;
+  el.innerHTML = avatarImageAssetsUnavailable
+    ? avatarFaceSvgFor(stageIndex)
+    : avatarFaceImageHtml(stageIndex);
   return el;
 }
 
@@ -2910,7 +3075,11 @@ async function certifyOffer(r) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
-    triggerAvatarGrowthFeedback('visit');
+    // 인증 성공 표정 — 통상 proud, 절약액이 크면(§C "큰 절약 성공") excited로
+    // 격상하고 반짝임을 한 번 더 터뜨려 특별 연출을 준다.
+    const bigSavings = cert.amount >= BIG_SAVINGS_AMOUNT_THRESHOLD;
+    triggerAvatarGrowthFeedback('visit', bigSavings ? 'excited' : 'proud');
+    if (bigSavings) setTimeout(() => spawnAvatarParticle('visit'), 200);
     showPetSpeech(petSpeechFor('certify'));
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.
@@ -2971,7 +3140,11 @@ async function certifyWithReceipt(r, fileInput) {
     });
     msgEl.innerHTML = certifyResultHtml(cert, r.dining_count === 0);
     loadSavingsBadge();
-    triggerAvatarGrowthFeedback('visit');
+    // 인증 성공 표정 — 통상 proud, 절약액이 크면(§C "큰 절약 성공") excited로
+    // 격상하고 반짝임을 한 번 더 터뜨려 특별 연출을 준다.
+    const bigSavings = cert.amount >= BIG_SAVINGS_AMOUNT_THRESHOLD;
+    triggerAvatarGrowthFeedback('visit', bigSavings ? 'excited' : 'proud');
+    if (bigSavings) setTimeout(() => spawnAvatarParticle('visit'), 200);
     showPetSpeech(petSpeechFor('certify'));
     loadMyProfile();
     // 실제 서버가 계산한 절약액(cert.amount)만 문구에 쓴다 — 지어낸 숫자 없음.

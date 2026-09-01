@@ -327,25 +327,42 @@ async def get_recommend_summary(session: AsyncSession, user_id: str) -> Recommen
     return compute_recommend_title(int(count))
 
 
-# --- 펫 성장치(2026-09-01, 사용자 확정 비율: 발견 +2, 추천 +4, 방문 +6,
-# 가격 인증 +12) --- 지금까지 성장치는 프론트 한 줄(discovered_place_count +
-# visit_count + recommend_count, 전부 가중치 1)이 유일한 계산 지점이라 서버는
-# 이 숫자를 전혀 몰랐다. "실제 사용자의 실제 행동으로만 증가한다"를 서버가
-# 보장하려면 서버가 직접 계산해야 하므로 여기로 옮긴다.
-GROWTH_WEIGHT: dict[str, int] = {"discover": 2, "visit": 6, "recommend": 4, "certify": 12}
+# --- 펫 성장치(2026-09-01 재조정, 사용자가 새 펫 이미지 지시서 값으로 교체
+# 확정) — 이전 비율(발견2/추천4/방문6/영수증인증12, 직접입력 인증은 0)을
+# 새 지시서의 값으로 덮어쓴다:
+#   매장 정보 확인(발견하기)      +5
+#   추천                         +15  (새 지시서에 없는 항목 — "유용한 정보
+#                                       저장" +10과 "매장 방문 인증" +30 사이,
+#                                       발견보다는 무겁고 방문보다는 가벼운
+#                                       행동으로 판단한 추정치)
+#   매장 방문 인증(GPS PlaceVisit) +30
+#   구매 인증(직접입력, 자기신고)   +50
+#   영수증 인증(사진 검증)         +100
+# 직접입력 인증이 이번에 처음으로 0이 아닌 값을 받는다 — "사진 검증 없이는
+# 경험치 0"이라던 이전 지시를 사용자가 이번 지시서로 명시적으로 덮어썼다
+# (자기신고도 실제 절약 인증 행위이므로 사진 인증의 절반만 인정).
+GROWTH_WEIGHT: dict[str, int] = {
+    "discover": 5,
+    "recommend": 15,
+    "visit": 30,
+    "certify_direct": 50,
+    "certify_receipt": 100,
+}
 
 
 def compute_growth_score(
     discovered_place_count: int,
     visited_place_count: int,
     recommend_count: int,
+    direct_certified_count: int,
     receipt_certified_count: int,
 ) -> int:
     return (
         discovered_place_count * GROWTH_WEIGHT["discover"]
         + visited_place_count * GROWTH_WEIGHT["visit"]
         + recommend_count * GROWTH_WEIGHT["recommend"]
-        + receipt_certified_count * GROWTH_WEIGHT["certify"]
+        + direct_certified_count * GROWTH_WEIGHT["certify_direct"]
+        + receipt_certified_count * GROWTH_WEIGHT["certify_receipt"]
     )
 
 
@@ -359,20 +376,24 @@ async def get_visited_place_count(session: AsyncSession, user_id: str) -> int:
     ).scalar_one()
 
 
-async def get_receipt_certified_count(session: AsyncSession, user_id: str) -> int:
-    """"가격 인증"(§32)은 사진 증거가 있는 영수증 인증만 센다 — 직접입력(자기신고)은
-    XP 로그엔 남아도 성장치 축에서는 제외한다(사용자 지시: 사진 검증 없이는
-    경험치를 주지 말라는 원칙과 같은 결을 성장치에도 적용)."""
+async def _get_certified_count(session: AsyncSession, user_id: str, method: CertificationMethod) -> int:
     return (
         await session.execute(
             select(func.count())
             .select_from(SavingsCertification)
-            .where(
-                SavingsCertification.user_id == user_id,
-                SavingsCertification.method == CertificationMethod.RECEIPT,
-            )
+            .where(SavingsCertification.user_id == user_id, SavingsCertification.method == method)
         )
     ).scalar_one()
+
+
+async def get_direct_certified_count(session: AsyncSession, user_id: str) -> int:
+    """"구매 인증" — 영수증 없이 직접 가격을 입력해 인증한 건수(자기신고)."""
+    return await _get_certified_count(session, user_id, CertificationMethod.SIMPLE)
+
+
+async def get_receipt_certified_count(session: AsyncSession, user_id: str) -> int:
+    """"영수증 인증" — 사진 증거가 있는 인증 건수."""
+    return await _get_certified_count(session, user_id, CertificationMethod.RECEIPT)
 
 
 async def get_growth_score(
@@ -382,5 +403,8 @@ async def get_growth_score(
     explorer/recommend 요약을 구하며 이미 조회해둔 값을 그대로 받는다 — 같은
     카운트를 왕복 쿼리로 다시 구하지 않는다."""
     visited = await get_visited_place_count(session, user_id)
-    certified = await get_receipt_certified_count(session, user_id)
-    return compute_growth_score(discovered_place_count, visited, recommend_count, certified)
+    direct_certified = await get_direct_certified_count(session, user_id)
+    receipt_certified = await get_receipt_certified_count(session, user_id)
+    return compute_growth_score(
+        discovered_place_count, visited, recommend_count, direct_certified, receipt_certified
+    )
