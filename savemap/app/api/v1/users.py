@@ -7,6 +7,7 @@ from app.engine.savings_digest import get_or_create_digest
 from app.gamification.service import (
     compute_visit_title,
     get_explorer_summary,
+    get_growth_score,
     get_recommend_summary,
     get_savings_summary,
 )
@@ -40,6 +41,12 @@ async def my_savings_summary(
     visit = compute_visit_title(summary.certification_count)
     recommend = await get_recommend_summary(session, user_id)
     streak = await get_streak_summary(session, user_id)
+    growth_score = await get_growth_score(
+        session,
+        user_id,
+        discovered_place_count=explorer.discovered_place_count,
+        recommend_count=recommend.recommend_count,
+    )
     return SavingsSummaryResponse(
         total_saved=summary.total_saved,
         level=summary.level,
@@ -67,6 +74,7 @@ async def my_savings_summary(
         streak_days=streak.current_streak,
         streak_active_today=streak.did_activity_today,
         streak_at_risk=streak.at_risk,
+        growth_score=growth_score,
     )
 
 

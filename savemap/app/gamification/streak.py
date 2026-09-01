@@ -5,13 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.savings import SavingsCertification
-from app.domain.store_visit import PlaceRecommendation, StoreStatusUpdate
+from app.domain.store_visit import PlaceRecommendation, PlaceVisit, StoreStatusUpdate
 
 # 연속 방문 스트릭(2026-08-30, "재미 개선 — 연속 방문 스트릭") — 발견하기/영수증
-# (또는 직접입력) 인증/추천 중 하나라도 한 날을 "활동한 날"로 센다. 프론트의
-# growthScore(discovered_place_count + visit_count + recommend_count)와 정확히
-# 같은 세 축이라, "오늘 뭘 해야 스트릭이 이어지나"와 "오늘 뭘 해야 펫이 크나"가
-# 사용자 입장에서 같은 질문이 되게 맞췄다.
+# (또는 직접입력) 인증/추천/GPS 방문 기록 중 하나라도 한 날을 "활동한 날"로 센다.
+# 서버 성장치(app/gamification/service.py:get_growth_score)가 실제로 반영하는
+# 네 축과 맞춰서, "오늘 뭘 해야 스트릭이 이어지나"와 "오늘 뭘 해야 펫이 크나"가
+# 사용자 입장에서 같은 질문이 되게 한다. PlaceVisit(2026-09-01 신설, GPS 인증
+# 공식 기준을 통과한 확정 방문)도 이 네 축에 새로 합류한다.
 #
 # 발견 쪽은 매장별로 딱 한 행만 남기는 StoreInterest(discovered_place_count가
 # 쓰는 테이블)가 아니라 원본 이벤트 로그인 StoreStatusUpdate를 쓴다 — 같은
@@ -60,8 +61,18 @@ async def get_streak_summary(session: AsyncSession, user_id: str) -> StreakSumma
             )
         )
     ).scalars().all()
+    visit_rows = (
+        await session.execute(
+            select(PlaceVisit.created_at).where(
+                PlaceVisit.user_id == user_id,
+                PlaceVisit.created_at >= since,
+            )
+        )
+    ).scalars().all()
 
-    activity_dates = {_to_kst_date(ts) for ts in (*cert_rows, *discover_rows, *recommend_rows)}
+    activity_dates = {
+        _to_kst_date(ts) for ts in (*cert_rows, *discover_rows, *recommend_rows, *visit_rows)
+    }
 
     today = _to_kst_date(datetime.now(UTC))
     did_activity_today = today in activity_dates

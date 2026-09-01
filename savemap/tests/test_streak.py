@@ -16,11 +16,12 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """세 번의 session.execute 호출(인증/발견/추천)에 순서대로 미리 정해둔
-    created_at 리스트를 하나씩 돌려준다."""
+    """네 번의 session.execute 호출(인증/발견/추천/방문)에 순서대로 미리 정해둔
+    created_at 리스트를 하나씩 돌려준다. visit_rows 생략 시 빈 리스트(기존
+    테스트가 방문 축을 신경 쓰지 않아도 되게)."""
 
-    def __init__(self, cert_rows, discover_rows, recommend_rows):
-        self._queue = [cert_rows, discover_rows, recommend_rows]
+    def __init__(self, cert_rows, discover_rows, recommend_rows, visit_rows=()):
+        self._queue = [cert_rows, discover_rows, recommend_rows, list(visit_rows)]
 
     async def execute(self, *a, **kw):
         return _FakeResult(self._queue.pop(0))
@@ -86,3 +87,12 @@ def test_duplicate_activities_same_day_count_once():
     )
     result = asyncio.run(get_streak_summary(session, "user-1"))
     assert result.current_streak == 1
+
+
+def test_place_visit_alone_counts_as_activity():
+    # 방문 GPS 인증(2026-09-01 신설)도 발견/인증/추천과 같은 축으로 스트릭에
+    # 들어간다 — 다른 세 소스가 전부 비어 있어도 방문 하나만으로 스트릭이 잡힌다.
+    session = _FakeSession([], [], [], visit_rows=[_kst_days_ago(0)])
+    result = asyncio.run(get_streak_summary(session, "user-1"))
+    assert result.current_streak == 1
+    assert result.did_activity_today is True

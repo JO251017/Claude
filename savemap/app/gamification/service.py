@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import XP_REWARD, XpReason
+from app.domain.enums import XP_REWARD, CertificationMethod, XpReason
 from app.domain.savings import SavingsCertification
-from app.domain.store_visit import PlaceRecommendation, StoreInterest
+from app.domain.store_visit import PlaceRecommendation, PlaceVisit, StoreInterest
 from app.domain.xp import XpLedger
 
 # 사용자 노출 브랜드명(2026-08-31, "쓸모" 브랜드 전환) — 최고 등급 칭호 3개에
@@ -325,3 +325,62 @@ async def get_recommended_place_count(session: AsyncSession, user_id: str) -> in
 async def get_recommend_summary(session: AsyncSession, user_id: str) -> RecommendSummary:
     count = await get_recommended_place_count(session, user_id)
     return compute_recommend_title(int(count))
+
+
+# --- 펫 성장치(2026-09-01, 사용자 확정 비율: 발견 +2, 추천 +4, 방문 +6,
+# 가격 인증 +12) --- 지금까지 성장치는 프론트 한 줄(discovered_place_count +
+# visit_count + recommend_count, 전부 가중치 1)이 유일한 계산 지점이라 서버는
+# 이 숫자를 전혀 몰랐다. "실제 사용자의 실제 행동으로만 증가한다"를 서버가
+# 보장하려면 서버가 직접 계산해야 하므로 여기로 옮긴다.
+GROWTH_WEIGHT: dict[str, int] = {"discover": 2, "visit": 6, "recommend": 4, "certify": 12}
+
+
+def compute_growth_score(
+    discovered_place_count: int,
+    visited_place_count: int,
+    recommend_count: int,
+    receipt_certified_count: int,
+) -> int:
+    return (
+        discovered_place_count * GROWTH_WEIGHT["discover"]
+        + visited_place_count * GROWTH_WEIGHT["visit"]
+        + recommend_count * GROWTH_WEIGHT["recommend"]
+        + receipt_certified_count * GROWTH_WEIGHT["certify"]
+    )
+
+
+async def get_visited_place_count(session: AsyncSession, user_id: str) -> int:
+    """GPS 인증 공식 기준(app/sources/store_visit/service.py:submit_visit)까지
+    통과한 확정 방문 수 — StoreInterest(발견)와는 다른 축이다."""
+    return (
+        await session.execute(
+            select(func.count()).select_from(PlaceVisit).where(PlaceVisit.user_id == user_id)
+        )
+    ).scalar_one()
+
+
+async def get_receipt_certified_count(session: AsyncSession, user_id: str) -> int:
+    """"가격 인증"(§32)은 사진 증거가 있는 영수증 인증만 센다 — 직접입력(자기신고)은
+    XP 로그엔 남아도 성장치 축에서는 제외한다(사용자 지시: 사진 검증 없이는
+    경험치를 주지 말라는 원칙과 같은 결을 성장치에도 적용)."""
+    return (
+        await session.execute(
+            select(func.count())
+            .select_from(SavingsCertification)
+            .where(
+                SavingsCertification.user_id == user_id,
+                SavingsCertification.method == CertificationMethod.RECEIPT,
+            )
+        )
+    ).scalar_one()
+
+
+async def get_growth_score(
+    session: AsyncSession, user_id: str, *, discovered_place_count: int, recommend_count: int
+) -> int:
+    """discovered_place_count/recommend_count는 호출부(my_savings_summary)가
+    explorer/recommend 요약을 구하며 이미 조회해둔 값을 그대로 받는다 — 같은
+    카운트를 왕복 쿼리로 다시 구하지 않는다."""
+    visited = await get_visited_place_count(session, user_id)
+    certified = await get_receipt_certified_count(session, user_id)
+    return compute_growth_score(discovered_place_count, visited, recommend_count, certified)

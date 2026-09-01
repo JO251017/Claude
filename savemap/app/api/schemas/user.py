@@ -47,6 +47,11 @@ class SavingsSummaryResponse(BaseModel):
     streak_days: int = 0
     streak_active_today: bool = False
     streak_at_risk: bool = False
+    # 펫 성장치(2026-09-01, 사용자 확정 비율: 발견 2/추천 4/방문 6/가격 인증 12) —
+    # 예전엔 프론트가 discovered_place_count+visit_count+recommend_count를 전부
+    # 가중치 1로 직접 더했다(app.js:1124). 이제 서버가 가중치를 적용해 계산한
+    # 값을 그대로 내려준다 — "실제 행동으로만 증가한다"를 서버가 보장하기 위함.
+    growth_score: int = 0
 
 
 class DigestResponse(BaseModel):

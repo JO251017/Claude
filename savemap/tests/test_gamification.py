@@ -2,12 +2,15 @@ import asyncio
 
 from app.gamification.service import (
     EXPLORER_TITLE_THRESHOLDS,
+    GROWTH_WEIGHT,
     RECOMMEND_TITLE_THRESHOLDS,
     VISIT_TITLE_THRESHOLDS,
     compute_explorer_title,
+    compute_growth_score,
     compute_recommend_title,
     compute_visit_title,
     get_discovered_place_count,
+    get_growth_score,
     get_recommended_place_count,
     get_savings_summary,
 )
@@ -182,3 +185,44 @@ def test_get_savings_summary_carries_period_totals_through():
     assert summary.weekly_saved == 5_000.0
     assert summary.monthly_saved == 20_000.0
     assert summary.yearly_saved == 80_000.0
+
+
+# --- 펫 성장치(2026-09-01, 사용자 확정 비율: 발견 2/추천 4/방문 6/가격 인증 12) ---
+
+
+def test_compute_growth_score_applies_confirmed_weights():
+    assert GROWTH_WEIGHT == {"discover": 2, "visit": 6, "recommend": 4, "certify": 12}
+    score = compute_growth_score(
+        discovered_place_count=3, visited_place_count=2, recommend_count=1, receipt_certified_count=1
+    )
+    assert score == 3 * 2 + 2 * 6 + 1 * 4 + 1 * 12  # 6+12+4+12 = 34
+
+
+def test_compute_growth_score_zero_activity_is_zero():
+    assert compute_growth_score(0, 0, 0, 0) == 0
+
+
+def test_compute_growth_score_only_direct_input_certification_contributes_nothing():
+    # 직접입력(자기신고)은 receipt_certified_count에 안 들어간다는 전제를
+    # get_growth_score 쪽에서 이미 필터링하므로, 여기서는 순수 함수가 인자로
+    # 받은 값만 정직하게 반영하는지만 본다.
+    assert compute_growth_score(0, 0, 0, receipt_certified_count=5) == 5 * 12
+
+
+class _FakeGrowthSession:
+    """get_visited_place_count → get_receipt_certified_count 순서로 execute를
+    두 번 부른다(둘 다 scalar_one())."""
+
+    def __init__(self, visited: int, certified: int):
+        self._queue = [_FakeScalarResult(visited), _FakeScalarResult(certified)]
+
+    async def execute(self, *a, **kw):
+        return self._queue.pop(0)
+
+
+def test_get_growth_score_combines_query_results_with_passed_in_counts():
+    session = _FakeGrowthSession(visited=4, certified=2)
+    score = asyncio.run(
+        get_growth_score(session, "user-1", discovered_place_count=10, recommend_count=3)
+    )
+    assert score == compute_growth_score(10, 4, 3, 2)

@@ -59,24 +59,27 @@ const ICONS = {
 // --- 아바타 성장(다마고치식, 2-4, 2026-08-13) ---
 // 예전엔 절약금액 레벨(compute_savings_level) 기준이었다. 사용자 지시: "다마고치
 // 키우기 같은 형식 — 맵에서 가게 인증이나 추천기능을 통해 아바타가 성장하는
-// 구조로 가". 그래서 이제 발견(discovered_place_count) + 방문(visit_count) +
-// 추천(recommend_count) — 이미 실제 행동에서 결정론적으로 계산되는 세 칭호(2-2)의
-// 원본 카운트를 그대로 합산한 값 하나("성장치")로 단계를 정한다. 별도로 지어낸
-// 점수는 없다.
+// 구조로 가". 발견/방문/추천/가격 인증 — 실제 행동에서 결정론적으로 계산되는
+// 성장치(2-4) 하나로 단계를 정한다. 별도로 지어낸 점수는 없다.
 // 단계 간격 튜닝(아바타 업그레이드, 2026-08-26): 25→60(35), 100→180(80) 두
 // 구간이 유독 넓어서 그 사이에 정체 구간처럼 느껴졌다. 실제 사용자 성장
 // 속도 데이터가 없어 "정답"은 아니고, 기존 7단계 이름/취지는 그대로 두고
 // 넓은 두 구간에만 중간 단계를 하나씩 끼워 넣어 간격을 고르게 만든 추측치다.
+// 임계값 재조정(2026-09-01) — 성장치 계산이 서버로 옮겨가면서 행동별 가중치가
+// 생겼다(발견 2/추천 4/방문 6/가격 인증 12, 옛 체계는 행동 1회당 전부 1점).
+// 행동 1회의 평균 가치를 옛 "1점"에서 새 "약 6점"으로 보고 기존 임계값에
+// 동일 비율(×5, 근사)을 곱했다 — 실제 사용 데이터 기반 정답은 아니고, 위
+// 2026-08-26 조정과 같은 성격의 추측치다.
 const AVATAR_GROWTH_STAGES = [
   { minScore: 0, name: '씨앗 강아지' },
-  { minScore: 10, name: '새싹 강아지' },
-  { minScore: 25, name: '목줄 찬 강아지' }, // 목줄 장식 시작
-  { minScore: 40, name: '산책 나온 강아지' }, // NEW: 25→60 구간 중간
-  { minScore: 60, name: '배낭 여행자' },
-  { minScore: 100, name: '리본 두른 강아지' }, // 리본 장식 시작
-  { minScore: 140, name: '든든한 파트너' }, // NEW: 100→180 구간 중간
-  { minScore: 180, name: '수호자' },
-  { minScore: 300, name: `${BRAND_NAME} 전설` },
+  { minScore: 50, name: '새싹 강아지' },
+  { minScore: 120, name: '목줄 찬 강아지' }, // 목줄 장식 시작
+  { minScore: 200, name: '산책 나온 강아지' }, // NEW: 25→60 구간 중간
+  { minScore: 300, name: '배낭 여행자' },
+  { minScore: 500, name: '리본 두른 강아지' }, // 리본 장식 시작
+  { minScore: 700, name: '든든한 파트너' }, // NEW: 100→180 구간 중간
+  { minScore: 900, name: '수호자' },
+  { minScore: 1500, name: `${BRAND_NAME} 전설` },
 ];
 
 function avatarGrowthStageFor(growthScore) {
@@ -1119,9 +1122,14 @@ async function loadMyProfile() {
   try {
     const s = await apiFetch('/users/me/savings-summary');
 
-    // 아바타 성장(다마고치식, 2-4, 2026-08-13) — 발견+방문+추천 실제 카운트
-    // 합산("성장치")으로 단계를 정한다. 절약금액 레벨과는 완전히 분리된 축.
-    const growthScore = s.discovered_place_count + s.visit_count + s.recommend_count;
+    // 아바타 성장(다마고치식, 2-4, 2026-08-13) — 성장치는 서버가 계산해서
+    // 내려준다(2026-09-01부터, 사용자 확정 비율: 발견 2/추천 4/방문 6/가격
+    // 인증 12 — app/gamification/service.py:compute_growth_score). 예전엔
+    // 여기서 discovered_place_count+visit_count+recommend_count를 전부
+    // 가중치 1로 직접 더했는데, "확실한 절약 활동"(가격 인증)이 "그냥
+    // 발견"과 똑같은 무게였던 게 그 원인 중 하나였다. 절약금액 레벨과는
+    // 완전히 분리된 축인 건 그대로.
+    const growthScore = s.growth_score;
     const growth = avatarGrowthStageFor(growthScore);
 
     // "확실한 절약 활동으로 인해서 펫이 성장하는게 느껴지는 구조로"(2026-08-31) —
