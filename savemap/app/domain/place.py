@@ -32,6 +32,12 @@ class Place(Base, TimestampMixin):
     # 검색 결과에 배지로만 노출).
     accepts_local_currency: Mapped[bool] = mapped_column(Boolean, default=False)
     local_currency_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 이 좌표가 어디서 왔는지(예: "kakao_local", "public_data") — 대형 매장/복합
+    # 시설은 건물 중심 좌표와 실제 출입구 위치가 다를 수 있다는 걸 감안해 향후
+    # 좌표 품질을 추적할 수 있게 기록만 해둔다(2026-09-01). 출입구 좌표 시스템
+    # 자체는 이번 범위 밖 — 기존 적재 파이프라인이 이미 아는 출처 문자열을
+    # 채워 넣는 컬럼일 뿐, 새 판정 로직은 없다.
+    location_source: Mapped[str | None] = mapped_column(String(32))
 
     offers = relationship("Offer", back_populates="place", cascade="all, delete-orphan")
     menu_items = relationship("MenuItem", back_populates="place", cascade="all, delete-orphan")

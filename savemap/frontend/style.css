@@ -621,19 +621,6 @@ body {
   font-weight: 600;
 }
 
-/* 발견/방문 인증이 0건인 매장 — treasure 마커의 금색 테마는 유지하되 점선
-   테두리로 "아직 비어있음"을 표시한다(현장 활동 유도 기획안 §3-A, 2026-08-13).
-   discovered(카카오로만 발견, 절약 정보 자체가 없음)와는 다르다 — 이쪽은 절약
-   정보는 있고 방문 인증만 없는 상태. */
-.map-label--unverified {
-  border-style: dashed;
-  border-color: var(--gold, #d97706);
-}
-
-.map-label--unverified .map-label-savings {
-  color: var(--gold, #d97706);
-}
-
 /* --- 아직 절약 정보 없는 발견된 매장 (카카오 로컬 검색, 콜드스타트 대응) --- */
 .discovered-section {
   margin-top: 16px;
@@ -1565,6 +1552,42 @@ select:focus {
 .menu-photo-row .mp-price {
   flex: 1;
   text-align: right;
+}
+
+/* --- 방문 GPS 인증(2026-09-01, 사용자 확정 공식 기준) --- */
+/* 상세를 보는 동안 위치 조건(거리 50m·정확도 30m·2회 연속 측정)이 판정될 때만
+   나타난다 — 평소엔 hidden. */
+.visit-check {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gold, #d97706);
+  background: rgba(251, 191, 36, 0.1);
+  text-align: center;
+}
+
+.visit-check-status {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.visit-check-status strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.visit-check-status span {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-soft, #64748b);
+  font-size: 0.78rem;
+}
+
+.visit-check-btn {
+  margin-top: 10px;
+  width: 100%;
 }
 
 /* --- 현장 인증 통합(10번 항목, 2026-08-13) --- */

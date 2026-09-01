@@ -10,6 +10,8 @@ from app.api.schemas.place import (
     RecommendationResponse,
     StatusUpdateCreate,
     StatusUpdateResponse,
+    VisitCreate,
+    VisitResponse,
 )
 from app.core.errors import PlacePublicNotFoundError
 from app.domain.menu_item import MenuItem
@@ -17,7 +19,12 @@ from app.domain.place import Place
 from app.engine.menu_photo_analysis import analyze_menu_photo_upload
 from app.engine.price_comparison import compare_menu_item
 from app.sources.community_menu.service import find_or_create_place, submit_menu_report_batch
-from app.sources.store_visit.service import submit_recommendation, submit_status_update
+from app.sources.store_visit.service import (
+    VisitReading,
+    submit_recommendation,
+    submit_status_update,
+    submit_visit,
+)
 
 router = APIRouter(tags=["places"], prefix="/places")
 
@@ -137,8 +144,10 @@ async def create_recommendation(
     user_id: str = RequireUserDep,
     session: AsyncSession = SessionDep,
 ) -> RecommendationResponse:
-    is_new, count = await submit_recommendation(session, user_id, place_id)
-    return RecommendationResponse(place_id=place_id, is_new=is_new, recommend_count=count)
+    is_new, count, xp_awarded = await submit_recommendation(session, user_id, place_id)
+    return RecommendationResponse(
+        place_id=place_id, is_new=is_new, recommend_count=count, xp_awarded=xp_awarded
+    )
 
 
 @router.post("/{place_id}/status-updates", response_model=StatusUpdateResponse, status_code=201)
@@ -164,4 +173,30 @@ async def create_status_update(
         is_new_interest=result.is_new_interest,
         interest_count=result.interest_count,
         xp_awarded=result.xp_awarded,
+    )
+
+
+@router.post("/{place_id}/visits", response_model=VisitResponse, status_code=201)
+async def create_visit(
+    place_id: int,
+    payload: VisitCreate,
+    user_id: str = RequireUserDep,
+    session: AsyncSession = SessionDep,
+) -> VisitResponse:
+    """방문 GPS 인증 공식 기준(2026-09-01, 사용자 확정) — 거리 50m·GPS 정확도
+    30m·서로 다른 시점 2회 연속 측정을 모두 서버가 재검증한 뒤에만 방문으로
+    인정한다. 클라이언트가 계산한 distance는 최종 판정에 쓰지 않는다."""
+    readings = [
+        VisitReading(
+            lat=r.lat, lng=r.lng, accuracy_m=r.accuracy_m, client_timestamp=r.client_timestamp
+        )
+        for r in payload.readings
+    ]
+    result = await submit_visit(session, user_id, place_id, readings)
+    return VisitResponse(
+        place_id=result.place_id,
+        distance_m=result.distance_m,
+        already_today=result.already_today,
+        xp_awarded=result.xp_awarded,
+        visit_count=result.visit_count,
     )

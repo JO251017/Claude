@@ -11,7 +11,7 @@ from app.domain.price_history import PriceHistory
 from app.domain.regional_price import RegionalPriceStat
 from app.domain.report import UserReport
 from app.domain.savings import SavingsAsset, SavingsCertification
-from app.domain.store_visit import StoreInterest, StoreStatusUpdate
+from app.domain.store_visit import PlaceRecommendation, PlaceVisit, StoreInterest, StoreStatusUpdate
 from app.domain.trust import TrustScore
 from app.domain.user_digest import UserDigest
 from app.domain.verification import Verification
@@ -33,6 +33,8 @@ __all__ = [
     "MenuItem",
     "StoreStatusUpdate",
     "StoreInterest",
+    "PlaceRecommendation",
+    "PlaceVisit",
     "MerchantVerification",
     "RegionalPriceStat",
     "FranchiseBrand",

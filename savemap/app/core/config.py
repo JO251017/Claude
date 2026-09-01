@@ -142,6 +142,18 @@ class Settings(BaseSettings):
     price_freshness_normal_days: int = 30
     price_freshness_stale_days: int = 90
 
+    # 방문 GPS 인증 공식 기준(2026-09-01, 사용자 확정 — "임의로 변경하지 않는다").
+    # 발견하기(app/sources/store_visit/service.py의 MAX_VISIT_DISTANCE_M=50.0/
+    # MAX_GPS_ACCURACY_M=100.0)와 거리 기준은 같지만, GPS 정확도는 훨씬 엄격한
+    # 30m를 따로 쓴다 — "방문 기록"은 실제 성장치가 걸린 더 무거운 행동이라
+    # 발견하기보다 오판정 여지를 좁혀야 한다는 사용자 지시.
+    visit_distance_max_m: float = 50.0
+    visit_gps_accuracy_max_m: float = 30.0
+    visit_min_consecutive_readings: int = 2
+    # 서로 다른 timestamp의 측정 2회를 요구하되(§7), 같은 cached 좌표를 두 번
+    # 받은 것을 2회로 인정하지 않기 위한 최소 시간 간격.
+    visit_reading_min_gap_sec: float = 1.5
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -253,6 +253,14 @@ def test_digest_requires_auth(client):
     assert resp.json()["detail"]["code"] == "SM4011"
 
 
+def test_create_visit_requires_auth(client):
+    # 방문 GPS 인증(2026-09-01) — 다른 보호된 엔드포인트와 같은 인증 우선 원칙,
+    # NullSession이 실행을 막아둔 상태에서도 401이 나야 한다.
+    resp = client.post("/v1/places/1/visits", json={"readings": []})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "SM4011"
+
+
 def test_merchant_create_place_requires_auth(client):
     resp = client.post(
         "/v1/merchant/places",

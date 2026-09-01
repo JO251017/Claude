@@ -112,6 +112,11 @@ class XpReason(str, enum.Enum):
     STORE_VISIT_UPDATE = "store_visit_update"
     RECEIPT_VERIFIED = "receipt_verified"
     MENU_REPORT = "menu_report"
+    # 2026-09-01 신설(사용자 확정 성장치 비율) — PLACE_VISIT은 서버 재검증까지
+    # 마친 확정 방문(app/domain/store_visit.py:PlaceVisit) 전용. PLACE_RECOMMEND는
+    # 지금까지 추천(submit_recommendation)이 XP를 전혀 안 주고 있던 걸 새로 챙긴다.
+    PLACE_VISIT = "place_visit"
+    PLACE_RECOMMEND = "place_recommend"
 
 
 # 1차: 매장 근처(50m)에서 "발견하기"만 눌러도 고정 보상 — 비교 데이터가 있어야만
@@ -119,13 +124,23 @@ class XpReason(str, enum.Enum):
 # 안 보이는 원인이었다. 2차: 영수증으로 실제 식사를 인증하면 1차의 3배.
 # MENU_REPORT: 메뉴판 사진 제보로 그 매장에 "새로운" 메뉴 가격이 추가될 때만 지급
 # (같은 메뉴 반복 제보로 XP를 캐지 못하도록).
+#
+# 2026-09-01 재조정(사용자 확정 — "발견 +2, 추천 +4, 방문 +6, 가격 인증 +12"):
+# STORE_VISIT_UPDATE(발견) 5→2, RECEIPT_VERIFIED(가격 인증=영수증 검증) 15→12.
+# PLACE_VISIT(방문 기록)=6, PLACE_RECOMMEND(추천)=4 신설. SAVINGS_CERTIFIED
+# (영수증 없이 직접입력)는 XP 로그엔 그대로 10을 남기되(감사 추적), 펫 성장치
+# 축(app/gamification/service.py의 compute_growth_score)에서는 "가격 인증"에
+# 포함하지 않는다 — 사진 증거가 없는 자기신고라 §31 "실제 행동" 기준을 사진
+# 검증만큼 만족하지 못한다고 판단.
 XP_REWARD: dict[XpReason, int] = {
     XpReason.VALID_REPORT: 20,
     XpReason.FIELD_VERIFICATION: 5,
     XpReason.SAVINGS_CERTIFIED: 10,
-    XpReason.STORE_VISIT_UPDATE: 5,
-    XpReason.RECEIPT_VERIFIED: 15,
+    XpReason.STORE_VISIT_UPDATE: 2,
+    XpReason.RECEIPT_VERIFIED: 12,
     XpReason.MENU_REPORT: 10,
+    XpReason.PLACE_VISIT: 6,
+    XpReason.PLACE_RECOMMEND: 4,
 }
 
 

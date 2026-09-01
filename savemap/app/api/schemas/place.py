@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.domain.enums import BusinessStatus
@@ -56,6 +58,7 @@ class RecommendationResponse(BaseModel):
     place_id: int
     is_new: bool
     recommend_count: int
+    xp_awarded: int = 0
 
 
 class StatusUpdateResponse(BaseModel):
@@ -65,3 +68,26 @@ class StatusUpdateResponse(BaseModel):
     is_new_interest: bool
     interest_count: int
     xp_awarded: int
+
+
+class VisitReadingIn(BaseModel):
+    lat: float
+    lng: float
+    accuracy_m: float
+    client_timestamp: datetime
+
+
+class VisitCreate(BaseModel):
+    """방문 GPS 공식 기준(§7) — 서로 다른 시점의 위치 측정 2회 연속을 그대로
+    받는다. 정확히 2개가 아니면 InvalidVisitReadingsError(서비스 레이어에서
+    재확인)."""
+
+    readings: list[VisitReadingIn] = Field(min_length=2, max_length=2)
+
+
+class VisitResponse(BaseModel):
+    place_id: int
+    distance_m: float
+    already_today: bool
+    xp_awarded: int
+    visit_count: int

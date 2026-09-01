@@ -180,3 +180,31 @@ class AiSavingPlanDisabledError(SaveMapError):
 # 최초 1건 제한 대신 항목 단위 갱신(같은 가격=무시, 다른 가격=AI 검토)으로
 # 바뀌면서 이 에러 자체가 더 이상 발생하지 않는다. app/sources/community_menu/
 # service.py의 submit_menu_report_batch 참고.
+
+
+# --- 방문 GPS 인증(2026-09-01, 사용자 확정 공식 기준) ---
+# 발견하기(LowGpsAccuracyError, 100m)와는 별도의 더 엄격한 기준(30m)을 쓴다 —
+# 두 행동의 요구 정확도가 다르다는 사용자 지시를 그대로 반영, 기존 발견하기
+# 임계값/에러는 건드리지 않는다.
+class LowGpsAccuracyVisitError(SaveMapError):
+    code = "SM4229"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "현재 위치가 정확하지 않아요. 잠시 기다려 주세요"
+
+
+class StaleLocationReadingError(SaveMapError):
+    """client_timestamp가 미래이거나 너무 오래된(재전송/캐시값) 위치 측정 —
+    서버가 클라이언트 값을 그대로 신뢰하지 않는다는 원칙의 일부."""
+
+    code = "SM4230"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "위치 정보가 오래됐어요. 다시 시도해주세요"
+
+
+class InvalidVisitReadingsError(SaveMapError):
+    """readings가 정확히 2개가 아니거나, 두 측정 timestamp 간격이 너무 짧아
+    (동일 캐시 좌표 재사용 의심) 서로 다른 시점의 측정으로 인정할 수 없을 때."""
+
+    code = "SM4231"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "위치를 다시 확인해주세요"

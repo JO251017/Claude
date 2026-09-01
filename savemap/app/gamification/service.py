@@ -23,9 +23,11 @@ BRAND_NAME = "쓸모"
 # 배지 등 활동 지표 전용으로 역할이 좁혀졌을 뿐이다.
 
 
-async def award_xp(session: AsyncSession, user_id: str, reason: XpReason) -> int:
+async def award_xp(
+    session: AsyncSession, user_id: str, reason: XpReason, place_id: int | None = None
+) -> int:
     delta = XP_REWARD[reason]
-    session.add(XpLedger(user_id=user_id, delta=delta, reason=reason))
+    session.add(XpLedger(user_id=user_id, delta=delta, reason=reason, place_id=place_id))
     await session.commit()
     return delta
 

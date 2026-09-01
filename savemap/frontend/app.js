@@ -1390,7 +1390,14 @@ function updateOriginMarkerPosition(lat, lng) {
 function startOriginLocationWatch() {
   if (!navigator.geolocation || originWatchId !== null) return;
   originWatchId = navigator.geolocation.watchPosition(
-    (pos) => updateOriginMarkerPosition(pos.coords.latitude, pos.coords.longitude),
+    (pos) => {
+      updateOriginMarkerPosition(pos.coords.latitude, pos.coords.longitude);
+      // 방문 GPS 인증(§7~§9, 2026-09-01) — 새 watch를 만들지 않고 이미 돌고 있는
+      // 이 콜백에 얹는다. 상세 모달이 열려 있을 때만(activeVisitPlace) 판정한다
+      // (§8 "자동 방문 처리 금지" — 백그라운드에서 알아서 여러 매장을 판정하지
+      // 않고, 사용자가 그 매장 화면을 보고 있을 때만).
+      evaluateVisitProximity(pos);
+    },
     () => {}, // 추적 실패는 조용히 무시 — 마커가 마지막으로 알려진 위치에 그대로 남는다
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );
@@ -1658,13 +1665,15 @@ function clearMarkers() {
 
 // 다른 지도 앱들처럼 마커 아래에 상호명 라벨을 붙인다.
 // treasure(절약 정보 있는 매장)는 "찾아가면 얼마나 아끼는지"까지 라벨에 바로 보여줘서
-// 사용자가 지도만 보고도 방문(GPS 인증→XP) 동기를 갖게 한다.
+// 사용자가 지도만 보고도 방문 동기를 갖게 한다.
+// 마커 단순화(2026-09-01, 사용자 지시 — "가게 아이콘에 첫인증 관련 내용 빼고
+// 복잡하게 구성하지마"): 미검증(점선 테두리, 🙋 접두사) 상태를 없애고 금색/회색
+// 두 상태만 남긴다. opts.unverified/tierCls는 더 이상 아무도 넘기지 않는다.
 function createLabelOverlay(pos, name, variant, onClick, opts = {}) {
   const el = document.createElement('div');
-  const extraCls = [opts.tierCls, opts.unverified ? 'map-label--unverified' : ''].filter(Boolean).join(' ');
-  el.className = `map-label map-label--${variant}${extraCls ? ' ' + extraCls : ''}`;
+  el.className = `map-label map-label--${variant}`;
   el.innerHTML = `
-    <span class="map-label-name">${opts.unverified ? '🙋 ' : ''}${escapeHtml(name)}</span>
+    <span class="map-label-name">${escapeHtml(name)}</span>
     ${opts.savingsText ? `<span class="map-label-savings">${escapeHtml(opts.savingsText)}</span>` : ''}
   `;
   if (onClick) el.addEventListener('click', onClick);
@@ -1681,21 +1690,11 @@ function createLabelOverlay(pos, name, variant, onClick, opts = {}) {
 }
 
 // "절약 보물" 마커: 매장 아이콘보다 "여기서 얼마를 아낄 수 있는가"를 먼저 보여준다.
+// 가격/절약 정보가 있는 매장은 발견/방문 인증 여부와 무관하게 전부 이 금색
+// 마커 하나로 표시한다(2026-09-01, 미검증 점선 마커 제거).
 function treasureMarkerImage() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
     <circle cx="13" cy="13" r="10" fill="#f59e0b" stroke="white" stroke-width="3"/>
-  </svg>`;
-  return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(26, 26));
-}
-
-// "절약 보물" 마커인데 발견/방문 인증이 0건인 매장 — 절약 정보 자체는 있지만
-// 아무도 실제로 다녀가지 않았다는 뜻이라, 같은 금색 계열을 쓰되 속을 비운(점선
-// 테두리) 스타일로 "아직 채워지지 않았다"를 표시한다(현장 활동 유도 기획안
-// §3-A, 2026-08-13). 절약 정보 자체가 없는 discoveredMarkerImage()(회색, 카카오
-// 로컬 검색으로만 발견된 곳)와는 다른 상태다.
-function unverifiedTreasureMarkerImage() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
-    <circle cx="13" cy="13" r="9" fill="white" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="3,2"/>
   </svg>`;
   return new kakao.maps.MarkerImage('data:image/svg+xml;base64,' + btoa(svg), new kakao.maps.Size(26, 26));
 }
@@ -1752,36 +1751,28 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
   results.forEach((r) => {
     const pos = new kakao.maps.LatLng(r.lat, r.lng);
     bounds.extend(pos);
-    // 발견/방문 인증이 하나도 없으면 "아직 아무도 안 가본 곳"으로 마커를 다르게
-    // 표시한다 — 실제 카운트 기반이라 지어낼 게 없다(현장 활동 유도 기획안
-    // §3-A, 2026-08-13).
-    const isUnverified = r.discover_count === 0 && r.dining_count === 0;
+    // 마커 단순화(2026-09-01): 발견/방문 인증 여부와 무관하게 가격/절약 정보가
+    // 있는 매장은 전부 같은 금색 마커 하나로 표시한다.
     const marker = new kakao.maps.Marker({
       map: kakaoMap,
       position: pos,
-      image: isUnverified ? unverifiedTreasureMarkerImage() : treasureMarkerImage(),
+      image: treasureMarkerImage(),
     });
     kakao.maps.event.addListener(marker, 'click', () => openOfferDetail(r));
     mapMarkers.push(marker);
 
-    // 라벨의 핵심은 가격이 아니라 "AI 절약점수/절약률" — 데이터가 부족하면 지어내지
-    // 않고 "계산 중"으로 표시한다.
-    // RPG 희귀도 색상(getRarityTier)은 잠시 비활성화 — 기본 베이스 구조 완성 후
-    // 다시 켠다(사용자 지시, 2026-08-12). tierCls를 안 넘기면 색상 없이 기본
-    // 스타일로만 표시된다.
+    // 라벨 둘째 줄은 "절약 기회 점수/절약률"이 있을 때만 붙인다 — 둘 다 없으면
+    // (2026-09-01) 줄 자체를 생략한다("계산 중" 문구는 정보가 아니라 잡음이라 제거).
     const hasScore = r.report && r.report.score != null;
     const savingsText =
       r.total_savings > 0
         ? `${Math.round(r.savings_rate)}%↓ · 약 ${Math.round(r.total_savings).toLocaleString()}원 절약`
         : hasScore
-          ? `AI 절약점수 ${r.report.score}점`
-          : isUnverified
-            ? '아직 미검증 · 가보면 첫 인증'
-            : '절약 정보 계산 중';
+          ? `절약 기회 점수 ${r.report.score}점`
+          : null;
     mapLabels.push(
       createLabelOverlay(pos, r.place_name, 'treasure', () => openOfferDetail(r), {
         savingsText,
-        unverified: isUnverified,
       })
     );
   });
@@ -1799,12 +1790,146 @@ function renderMapMarkers(originLat, originLng, results, discovered = []) {
   kakaoMap.setBounds(bounds);
 }
 
+// --- 방문 GPS 인증(2026-09-01, 사용자 확정 공식 기준) ---
+// distance<=50m AND accuracy<=30m AND 서로 다른 시점 2회 연속 측정 AND 사용자가
+// [방문 기록] 버튼 클릭 AND 서버 재검증 — 전부 통과해야 방문으로 인정한다(§4).
+// 여기 판정은 전부 UX용(§9 상태 문구를 보여주기 위함)이고, 최종 승인은 서버가
+// 다시 계산한다(app/sources/store_visit/service.py:submit_visit) — 이 프론트
+// 값을 최종 판정으로 쓰지 않는다(§10).
+const VISIT_DISTANCE_MAX_M = 50;
+const VISIT_ACCURACY_MAX_M = 30;
+// 같은 cached 좌표를 두 번 받은 걸 2회 측정으로 인정하지 않기 위한 최소 간격(§7).
+const VISIT_READING_MIN_GAP_MS = 1500;
+// 첫 통과 읽음이 이보다 오래되면 처음부터 다시 잰다 — "불필요하게 긴 대기
+// 시간"을 만들지 않으면서도, 한참 전에 지나갔던 매장 근처 기록이 나중에
+// 엉뚱하게 살아남지 않게 한다.
+const VISIT_READING_WINDOW_MS = 15000;
+
+// 하버사인 거리(m) — 백엔드 app/core/spatial.py:haversine_m과 같은 공식.
+// 프론트엔 지금까지 거리 계산 함수가 하나도 없었다(서버 계산값을 텍스트로만
+// 받아 보여줬음) — 방문 판정 UX 전용으로 신설.
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// §9 상태 문구 — 임의로 다시 쓰지 않고 그대로 고정.
+const VISIT_STATE_COPY = {
+  farAway: { title: '조금 더 가까이 가주세요.', sub: '매장과의 거리를 확인하고 있어요.' },
+  badAccuracy: { title: '현재 위치가 정확하지 않아요.', sub: '잠시 기다려 주세요.' },
+  firstPass: { title: '매장 근처에 있어요.', sub: '위치를 한 번 더 확인하고 있어요.' },
+  ready: { title: '방문 기록을 남길 수 있어요.', sub: '' },
+  done: { title: '방문 완료', sub: '' },
+};
+
+let activeVisitPlace = null; // 현재 열린 상세 모달의 매장(r) — 모달이 닫히면 null
+let visitPassedReadings = []; // 조건(거리/정확도)을 통과한 읽음들 [{lat,lng,accuracy,ts}]
+let visitConfirmed = false; // 이번 모달을 여는 동안 이미 방문 완료했는지(중복 방지 UX)
+
+function resetVisitCheckState() {
+  activeVisitPlace = null;
+  visitPassedReadings = [];
+  visitConfirmed = false;
+  const box = document.getElementById('visit-check');
+  if (box) box.classList.add('hidden');
+}
+
+function renderVisitCheckState(kind) {
+  const box = document.getElementById('visit-check');
+  const statusEl = document.getElementById('visit-check-status');
+  const btn = document.getElementById('visit-check-btn');
+  if (!box || !statusEl || !btn) return;
+  box.classList.remove('hidden');
+  const copy = VISIT_STATE_COPY[kind];
+  statusEl.innerHTML = copy.sub
+    ? `<strong>${escapeHtml(copy.title)}</strong><span>${escapeHtml(copy.sub)}</span>`
+    : `<strong>${escapeHtml(copy.title)}</strong>`;
+  btn.classList.toggle('hidden', kind !== 'ready');
+}
+
+// watchPosition 콜백에서 매 좌표 갱신마다 불린다(§7~§9). 자동으로 방문 처리하지
+// 않는다(§8) — 조건을 만족하면 버튼만 보여주고, 실제 저장은 사용자가 버튼을
+// 눌러야만 일어난다(confirmVisit).
+function evaluateVisitProximity(pos) {
+  if (!activeVisitPlace || visitConfirmed) return;
+  const place = activeVisitPlace;
+  const distance = haversineM(pos.coords.latitude, pos.coords.longitude, place.lat, place.lng);
+  const accuracy = pos.coords.accuracy;
+  const ts = pos.timestamp;
+
+  if (distance > VISIT_DISTANCE_MAX_M) {
+    visitPassedReadings = [];
+    renderVisitCheckState('farAway');
+    return;
+  }
+  if (accuracy > VISIT_ACCURACY_MAX_M) {
+    renderVisitCheckState('badAccuracy');
+    return;
+  }
+
+  const last = visitPassedReadings[visitPassedReadings.length - 1];
+  if (last) {
+    // 동일 cached 좌표 재사용 의심 — 새 읽음으로 세지 않는다(§7).
+    if (ts - last.ts < VISIT_READING_MIN_GAP_MS) return;
+    // 첫 통과 읽음이 너무 오래됐으면 처음부터 다시 센다.
+    if (ts - visitPassedReadings[0].ts > VISIT_READING_WINDOW_MS) visitPassedReadings = [];
+  }
+  visitPassedReadings.push({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy, ts });
+
+  if (visitPassedReadings.length >= 2) {
+    visitPassedReadings = visitPassedReadings.slice(-2);
+    renderVisitCheckState('ready');
+  } else {
+    renderVisitCheckState('firstPass');
+  }
+}
+
+async function confirmVisit(place, btn) {
+  if (visitPassedReadings.length < 2) return;
+  btn.disabled = true;
+  const statusEl = document.getElementById('visit-check-status');
+  try {
+    const data = await apiFetch(`/places/${place.place_id}/visits`, {
+      method: 'POST',
+      body: JSON.stringify({
+        readings: visitPassedReadings.map((reading) => ({
+          lat: reading.lat,
+          lng: reading.lng,
+          accuracy_m: reading.accuracy,
+          client_timestamp: new Date(reading.ts).toISOString(),
+        })),
+      }),
+    });
+    if (data.already_today) {
+      statusEl.innerHTML = '<strong>오늘은 이미 방문 완료했어요.</strong>';
+      btn.classList.add('hidden');
+      return;
+    }
+    visitConfirmed = true;
+    renderVisitCheckState('done');
+    btn.classList.add('hidden');
+    triggerAvatarGrowthFeedback('visit');
+    showSavingsToast(`🐾 방문 완료! +${data.xp_awarded} 성장치`);
+    loadMyProfile();
+  } catch (err) {
+    statusEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+    btn.disabled = false;
+  }
+}
+
 // --- 절약 정보 상세 (예상 절약 확인 + 절약 인증) ---
 const detailOverlay = document.getElementById('offer-detail-overlay');
 const detailContent = document.getElementById('detail-content');
 
 document.getElementById('detail-close-btn').addEventListener('click', () => {
   detailOverlay.classList.add('hidden');
+  resetVisitCheckState();
 });
 
 // --- AI 절약 리포트: SaveMap의 핵심 콘텐츠. 메뉴는 카카오맵의 역할이고, SaveMap은
@@ -1883,7 +2008,7 @@ function savingsReportHtml(r) {
       </div>`}
       <div class="ai-report-scores">
         <div class="ai-report-cell"><span class="cell-label">절약 등급</span><span class="cell-value grade">${escapeHtml(report.grade)}</span></div>
-        <div class="ai-report-cell"><span class="cell-label">AI 절약점수</span><span class="cell-value">${report.score}점</span></div>
+        <div class="ai-report-cell"><span class="cell-label">절약 기회 점수</span><span class="cell-value">${report.score}점</span></div>
       </div>
       <div class="report-confidence">${icon} ${escapeHtml(report.confidence_label)} ${confidenceStarsHtml(report.confidence_stars)}</div>
       <div class="report-reasons">
@@ -1937,6 +2062,10 @@ function relativeTimeFromNow(isoString) {
 }
 
 function openOfferDetail(r) {
+  // 방문 GPS 인증 추적 대상을 이 상세로 갱신한다(§8, 모달이 열려 있는 매장
+  // 하나만 판정) — 이전에 다른 매장 상세가 열려 있었다면 그 진행 상태는 버린다.
+  resetVisitCheckState();
+  activeVisitPlace = r;
   const shortCategory = r.category_name ? r.category_name.split(' > ').pop() : '';
   const kakaoUrl = r.kakao_url || `https://map.kakao.com/link/search/${encodeURIComponent(r.place_name)}`;
   const statusLabel = STATUS_LABELS[r.business_status] || '';
@@ -2009,6 +2138,15 @@ function openOfferDetail(r) {
       <button type="button" class="btn-secondary hidden" id="detail-save-asset-btn">저장하기</button>
     </div>
 
+    <!-- 방문 GPS 인증(§4~§9, 2026-09-01) — 이 상세를 보고 있는 동안 위치가
+         조건(거리 50m·정확도 30m·2회 연속 측정)을 만족하면 여기 상태가 바뀐다.
+         평소엔 숨김(hidden), evaluateVisitProximity가 처음 판정이 나오는 순간
+         보여준다. -->
+    <div class="visit-check hidden" id="visit-check">
+      <p class="visit-check-status" id="visit-check-status"></p>
+      <button type="button" class="btn-primary visit-check-btn hidden" id="visit-check-btn">방문 기록</button>
+    </div>
+
     <!-- 현장 인증 통합(10번 항목, 2026-08-13) — 예전엔 "발견하기"(관심 표시)와
          "영수증/직접 인증"이 서로 다른 섹션으로, 추천은 위 detail-actions에
          따로 있었다. 사용자 확정(2-2): "영수증 인증을 방문횟수로 해, 기존
@@ -2064,6 +2202,7 @@ function openOfferDetail(r) {
   });
   document.getElementById('detail-recommend-btn').addEventListener('click', (e) => recommendPlace(r, e.currentTarget));
   document.getElementById('detail-save-asset-btn').addEventListener('click', (e) => saveOfferAsAsset(r, e.currentTarget));
+  document.getElementById('visit-check-btn').addEventListener('click', (e) => confirmVisit(r, e.currentTarget));
 
   document.getElementById('detail-discover-btn').addEventListener('click', (e) => submitStatusUpdate(r, 'open', e.currentTarget));
   document.getElementById('detail-report-closed-btn').addEventListener('click', () => {
@@ -2845,7 +2984,7 @@ async function runSearch() {
         ${hasScore
           ? `<div class="card-score-line">
               ${confidenceStarsHtml(report.confidence_stars)}
-              <span class="card-score">AI 절약점수 <strong>${report.score}점</strong></span>
+              <span class="card-score">절약 기회 점수 <strong>${report.score}점</strong></span>
               <span class="card-grade">${escapeHtml(report.grade)}</span>
             </div>
             ${r.total_savings > 0
