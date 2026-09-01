@@ -738,6 +738,10 @@ let avatarBarking = false;
 let avatarCurrentExpression = null;
 let avatarAmbientExpression = null;
 let avatarExpressionResetTimer = null;
+// 포즈(2026-09-01) — 표정과 별개 축. 지금은 걷는 동안만 'walking'으로 켜진다
+// (animateAvatarWalk). 우선순위는 표정 > 포즈 > 배경 표정 — 걷는 도중에도
+// 방금 일어난 이벤트 표정(예: 발견 성공)이 있으면 그게 더 눈에 띄어야 한다.
+let avatarCurrentPose = null;
 
 function renderAvatarSpriteFrame() {
   // svg는 avatar-hop-rig 안에, 장식(avatar-deco)은 그 바깥 형제(avatar-decos)에
@@ -757,7 +761,7 @@ function renderAvatarSpriteFrame() {
     // 이미지 파일엔 프레임별 눈 깜빡임 그림이 없다 — state(표정)만 반영한다.
     // 짖는 반응(avatarBarking)은 SVG의 bark 프레임과 같은 자리를 대신해
     // excited 표정으로 잠깐 보여준다.
-    const state = avatarBarking ? 'excited' : (avatarCurrentExpression || avatarAmbientExpression);
+    const state = avatarBarking ? 'excited' : (avatarCurrentExpression || avatarCurrentPose || avatarAmbientExpression);
     rig.innerHTML = avatarImageHtml(avatarSpriteStageIndex, state);
   }
   const decosEl = document.getElementById('avatar-decos');
@@ -787,19 +791,24 @@ function ensureAvatarSpriteLoopStarted() {
   scheduleNextFrame();
 }
 
-// --- 아바타 자유 이동 + 홉(hop) 물리(2026-08-27: "돌아다녀도 되는데 사진처럼
-// 고정된 각도로 움직이는게 부자연스럽다 — 움직임도 자연스러운 동작을 넣어라")
-// --- 한 번은 "캐릭터 사진은 움직이지마"라는 피드백을 받아 이동 자체를 없앤
-// 적이 있는데(같은 날, 캐시가 안 갱신돼 사용자가 실제로는 이 홉 물리를 못 본
-// 채로 준 피드백이었을 가능성이 크다 — 그 직후 캐시 버스터 문제를 발견/수정),
-// 바로 다음 메시지에서 "돌아다녀도 된다"고 정정하며 "움직임 자체가 자연스러워야
-// 한다"는 원래 요지를 다시 확인해줬다. 그래서 이동은 그대로 두고 자연스러움에
-// 집중한 홉 물리를 복원한다: 목적지까지를 여러 번의 짧은 "홉"으로 쪼개고, 매
-// 홉마다 requestAnimationFrame으로 (1) 포물선 점프 높이 (2) 이륙/착지 순간
-// 눌리고(squash) 공중에서 늘어나는(stretch) 정도 (3) 발밑 그림자 크기·진하기를
-// 동시에 맞춰 돌린다 — 이 세 가지가 같이 움직여야 "무게가 있는 것이 실제로
-// 뛰어오른다"는 인상이 생긴다. 방향 반전(왼쪽 이동 시 좌우 뒤집기)도 유지.
+// --- 아바타 자유 이동 + 걷기(walk) 물리 ---
+// 2026-08-27엔 "고정된 각도로 움직이는게 부자연스럽다"는 지적에 토끼처럼
+// 통통 튀는 홉(포물선 점프 + 몸통 squash/stretch)으로 만들었었다. 절차적
+// 픽셀아트(단순 도형)에는 잘 맞았지만, 2026-09-01 실제 일러스트 이미지로
+// 바뀐 뒤 "동작이 허접하다"는 피드백을 받았다 — 세밀하게 그려진 고정 비율
+// 그림을 매 홉마다 비균일로 눌렀다 늘렸다(scaleX≠scaleY) 하면 그림 자체가
+// 찌그러져 보이고, 몸 전체가 통통 공중부양하는 것도 "강아지가 걷는다"보다는
+// "장난감이 튄다"에 가깝다. 그래서 이동 방식을 바꾼다: 목적지까지 한 번에
+// 이어서(포물선 구간 나누기 없이) 걷는 속도(px/s)로 부드럽게 미끄러지듯
+// 이동시키고, 그 위에 아주 작은 상하 바운스(발걸음 리듬)만 얹는다 — 비균일
+// 스케일(찌그러짐)은 완전히 뺀다. 방향 반전(왼쪽 이동 시 좌우 뒤집기)은 유지.
 const AVATAR_ROAM_RADIUS_RATIO = 0.55;
+const AVATAR_WALK_SPEED_PX_S = 78; // 실제 걷는 속도감 — 너무 빠르면 미끄러지듯 보인다
+const AVATAR_WALK_MIN_MS = 450;
+const AVATAR_WALK_MAX_MS = 2200;
+const AVATAR_WALK_STEP_HZ = 2.4; // 초당 발걸음 수(바운스 주기)
+const AVATAR_WALK_BOB_PX = 2.6; // 발걸음마다 위아래로 뜨는 폭(과장하지 않음)
+const AVATAR_WALK_RAMP_MS = 160; // 출발/정지 직전엔 바운스를 서서히 줄여 "멈춰 선다"는 느낌
 let avatarRoamTimer = null;
 let _avatarHopToken = 0;
 
@@ -807,11 +816,12 @@ function _dogEase(t) {
   return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
 }
 
-// fromLeft/Top → toLeft/Top까지 hopCount번의 짧은 도약으로 나눠 이동시킨다.
-// 도중에 새 이동이 시작되면(roamAvatarToRandomSpot이 다시 불리면) 토큰이
-// 바뀌어 이전 시퀀스는 다음 프레임에서 스스로 멈춘다 — 두 이동이 동시에
-// left/top을 건드려 위치가 튀는 걸 막는다.
-function animateAvatarHops(fromLeft, fromTop, toLeft, toTop) {
+// fromLeft/Top → toLeft/Top까지 한 번의 연속된 걸음으로 이동시킨다(중간에
+// 여러 번 나누지 않음 — 실제 보행처럼 끊김 없이 미끄러지되, 위아래 바운스로
+// "발을 딛는다"는 리듬만 표현). 도중에 새 이동이 시작되면(roamAvatarToRandomSpot이
+// 다시 불리면) 토큰이 바뀌어 이전 시퀀스는 다음 프레임에서 스스로 멈춘다 —
+// 두 이동이 동시에 left/top을 건드려 위치가 튀는 걸 막는다.
+function animateAvatarWalk(fromLeft, fromTop, toLeft, toTop) {
   const avatarEl = document.getElementById('character-avatar');
   const rigEl = document.getElementById('avatar-hop-rig');
   if (!avatarEl || !rigEl) return;
@@ -826,54 +836,42 @@ function animateAvatarHops(fromLeft, fromTop, toLeft, toTop) {
   const myToken = ++_avatarHopToken;
   const dx = toLeft - fromLeft;
   const dy = toTop - fromTop;
-  const hopCount = Math.max(2, Math.min(5, Math.round(Math.hypot(dx, dy) / 45)));
-  const hopDuration = 340; // ms, 홉 하나당
-  avatarEl.classList.add('avatar-hopping'); // 물리 연출 중엔 idle breathe를 잠깐 끔(이중으로 안 겹치게)
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return;
+  const duration = Math.min(AVATAR_WALK_MAX_MS, Math.max(AVATAR_WALK_MIN_MS, (dist / AVATAR_WALK_SPEED_PX_S) * 1000));
+  avatarEl.classList.add('avatar-walking'); // 걷는 동안엔 idle breathe를 잠깐 끔(이중으로 안 겹치게)
+  avatarCurrentPose = 'walking'; // lv{N}_walking.png가 있으면 그 프레임을 우선 쓴다(없으면 기본 이미지)
+  renderAvatarSpriteFrame();
 
-  function runHop(hopIndex) {
+  const start = performance.now();
+
+  function frame(now) {
     if (myToken !== _avatarHopToken) return;
-    if (hopIndex >= hopCount) {
+    const elapsed = now - start;
+    const t = Math.min(1, elapsed / duration);
+    const eased = _dogEase(t); // 출발/도착만 부드럽게 가속·감속 — 구간을 안 나누므로 발이 안 미끄러진다
+    avatarEl.style.left = `${fromLeft + dx * eased}px`;
+    avatarEl.style.top = `${fromTop + dy * eased}px`;
+
+    const remain = duration - elapsed;
+    const ramp = Math.min(1, elapsed / AVATAR_WALK_RAMP_MS, remain / AVATAR_WALK_RAMP_MS);
+    const bob = Math.abs(Math.sin((elapsed / 1000) * AVATAR_WALK_STEP_HZ * Math.PI * 2)) * AVATAR_WALK_BOB_PX * Math.max(0, ramp);
+    rigEl.style.transform = `translateY(${-bob}px)`; // scaleX/scaleY 찌그러짐 없음 — 그림 비율을 그대로 유지
+    if (shadowEl) {
+      shadowEl.style.transform = `translateX(-50%) scale(${1 - bob * 0.035})`;
+    }
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
       rigEl.style.transform = '';
-      if (shadowEl) {
-        shadowEl.style.transform = '';
-        shadowEl.style.opacity = '';
-      }
-      avatarEl.classList.remove('avatar-hopping');
-      return;
+      if (shadowEl) shadowEl.style.transform = '';
+      avatarEl.classList.remove('avatar-walking');
+      avatarCurrentPose = null;
+      renderAvatarSpriteFrame();
     }
-    const segFromLeft = fromLeft + dx * (hopIndex / hopCount);
-    const segFromTop = fromTop + dy * (hopIndex / hopCount);
-    const segToLeft = fromLeft + dx * ((hopIndex + 1) / hopCount);
-    const segToTop = fromTop + dy * ((hopIndex + 1) / hopCount);
-    const start = performance.now();
-
-    function frame(now) {
-      if (myToken !== _avatarHopToken) return;
-      const t = Math.min(1, (now - start) / hopDuration);
-      const eased = _dogEase(t);
-      avatarEl.style.left = `${segFromLeft + (segToLeft - segFromLeft) * eased}px`;
-      avatarEl.style.top = `${segFromTop + (segToTop - segFromTop) * eased}px`;
-
-      const arc = Math.sin(t * Math.PI); // 홉 중간(t=0.5)에 최고, 이착륙(t=0/1)에 0
-      const edgePulse = Math.max(0, 1 - Math.abs(t) * 9) + Math.max(0, 1 - Math.abs(t - 1) * 9);
-      const scaleY = 1 + 0.14 * arc - 0.16 * edgePulse;
-      const scaleX = 1 - 0.09 * arc + 0.14 * edgePulse;
-      rigEl.style.transform = `translateY(${-10 * arc}px) scale(${scaleX}, ${scaleY})`;
-
-      if (shadowEl) {
-        shadowEl.style.transform = `translateX(-50%) scale(${1 - 0.45 * arc})`;
-        shadowEl.style.opacity = String(1 - 0.55 * arc);
-      }
-
-      if (t < 1) {
-        requestAnimationFrame(frame);
-      } else {
-        runHop(hopIndex + 1);
-      }
-    }
-    requestAnimationFrame(frame);
   }
-  runHop(0);
+  requestAnimationFrame(frame);
 }
 
 function roamAvatarToRandomSpot() {
@@ -891,7 +889,7 @@ function roamAvatarToRandomSpot() {
   const nextTop = Math.min(Math.max(curTop + (Math.random() * 2 - 1) * radiusY, 0), maxTop);
 
   avatarEl.classList.toggle('avatar-facing-left', nextLeft < curLeft - 2); // 2px 이내 오차는 방향전환으로 안 침
-  animateAvatarHops(curLeft, curTop, nextLeft, nextTop);
+  animateAvatarWalk(curLeft, curTop, nextLeft, nextTop);
 }
 
 function ensureAvatarRoamStarted() {

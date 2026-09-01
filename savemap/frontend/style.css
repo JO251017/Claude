@@ -1893,7 +1893,7 @@ select:focus {
 }
 
 /* 원형 배경/그림자(테두리)를 없애고 그림만 남긴다. position:absolute + left/top으로
-   무대 안 어디로든 걸어다닌다. left/top은 app.js의 animateAvatarHops()가
+   무대 안 어디로든 걸어다닌다. left/top은 app.js의 animateAvatarWalk()가
    requestAnimationFrame으로 매 프레임 직접 계산해서 넣는다(2026-08-27,
    "돌아다녀도 되는데 사진처럼 고정된 각도로 움직이는게 부자연스럽다") — CSS
    transition은 일부러 안 쓴다. JS가 프레임마다 값을 새로 넣는데 transition까지
@@ -1959,11 +1959,11 @@ select:focus {
   }
 }
 
-/* 홉(점프) 이동 중엔 idle breathe를 잠깐 끈다 — animateAvatarHops()가 토글.
-   breathe(작은 상하 흔들림)와 홉의 포물선 점프가 동시에 돌면 두 움직임이
-   겹쳐 보여 오히려 산만해진다 — "걷는 중"과 "가만히 서서 숨쉬는 중"을 명확히
+/* 걷는 이동 중엔 idle breathe를 잠깐 끈다 — animateAvatarWalk()가 토글.
+   breathe(작은 상하 흔들림)와 걸음 바운스가 동시에 돌면 두 움직임이 겹쳐
+   보여 오히려 산만해진다 — "걷는 중"과 "가만히 서서 숨쉬는 중"을 명확히
    구분한다. */
-.character-avatar.avatar-hopping {
+.character-avatar.avatar-walking {
   animation: none;
 }
 
@@ -2023,25 +2023,31 @@ select:focus {
   transform: scale(0.94) !important;
 }
 
-/* 대기 중에도 살짝 위아래로 통통 튀면서 좌우로 갸웃거려서 "살아있는" 느낌을
-   준다(예전 다마고치의 제자리 걸음/뒤뚱거림 느낌, 사용자 지시 2026-08-18) —
-   동작할 이유가 분명한 모션만(디자인 스킬 5. Motion Must Be Motivated). 실제
-   눈 깜빡임/꼬리 흔들기는 CSS가 아니라 app.js의 스프라이트 프레임 재생
+/* 대기 중에도 살짝 숨을 쉬듯 위아래로 움직여서 "살아있는" 느낌을 준다(예전
+   다마고치의 제자리 걸음/뒤뚱거림 느낌, 사용자 지시 2026-08-18) — 동작할
+   이유가 분명한 모션만(디자인 스킬 5. Motion Must Be Motivated). 실제 눈
+   깜빡임/꼬리 흔들기는 CSS가 아니라 app.js의 스프라이트 프레임 재생
    (avatarSpriteTimer)이 그림 자체를 바꿔서 만든다 — 이 keyframe은 그 위에
-   얹히는 몸통 전체의 통통 튐만 담당한다. */
+   얹히는 몸통 전체의 숨쉬기만 담당한다.
+   진폭 축소(2026-09-01, "동작이 허접하다") — 절차적 픽셀아트일 땐 ±3deg
+   갸웃거림이 귀엽게 보였지만, 세밀한 일러스트 이미지에 그대로 걸면 그림
+   전체가 좌우로 기우뚱 흔들리는 장난감처럼 보인다. 회전은 거의 없애고
+   상하 이동만 살짝 남겨 "숨을 쉰다"에 더 가깝게 조정했다. */
 @keyframes avatar-breathe {
   0% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-2px) rotate(-3deg); }
-  50% { transform: translateY(-3px) rotate(0deg); }
-  75% { transform: translateY(-2px) rotate(3deg); }
+  25% { transform: translateY(-1px) rotate(-0.6deg); }
+  50% { transform: translateY(-2px) rotate(0deg); }
+  75% { transform: translateY(-1px) rotate(0.6deg); }
   100% { transform: translateY(0) rotate(0deg); }
 }
 
-/* 점프 물리(2026-08-27) — 실제 그림(svg)이 들어가는 안쪽 래퍼. 홉 도중엔
-   app.js가 매 프레임 여기 transform(translateY 점프 높이 + scale 찌그러짐)만
-   직접 써넣는다. transform-origin을 발밑(하단 중앙)으로 둬야 찌그러질 때
-   발이 땅에 붙어있는 것처럼 보인다 — 기본값(중앙)이면 몸 전체가 위아래로
-   같이 밀리는 것처럼 보여 "땅을 딛고 뛴다"는 느낌이 안 산다. */
+/* 걷기 물리 — 실제 그림(svg/img)이 들어가는 안쪽 래퍼. 걷는 동안 app.js가
+   매 프레임 여기 transform(발걸음 바운스용 translateY)만 직접 써넣는다
+   (2026-09-01부터 scale 찌그러짐은 뺐다 — 세밀한 일러스트 이미지를 비균일로
+   누르면 그림이 찌그러져 보여서 "허접하다"는 피드백을 받음, animateAvatarWalk
+   참고). transform-origin을 발밑(하단 중앙)으로 둬야 바운스할 때 발이 땅에
+   붙어있는 것처럼 보인다 — 기본값(중앙)이면 몸 전체가 위아래로 같이 밀리는
+   것처럼 보여 "땅을 딛고 걷는다"는 느낌이 안 산다. */
 .avatar-hop-rig {
   transform-origin: 50% 100%;
 }
@@ -2114,8 +2120,8 @@ select:focus {
 
 @keyframes avatar-bounce {
   0% { transform: scale(1); }
-  30% { transform: scale(1.18) rotate(-4deg); }
-  55% { transform: scale(0.94) rotate(3deg); }
+  30% { transform: scale(1.1) rotate(-2deg); }
+  55% { transform: scale(0.97) rotate(1.5deg); }
   100% { transform: scale(1) rotate(0); }
 }
 
@@ -2127,7 +2133,7 @@ select:focus {
 }
 @keyframes avatar-bounce-discover {
   0% { transform: scale(1); }
-  40% { transform: scale(1.1) rotate(-2deg); }
+  40% { transform: scale(1.06) rotate(-1deg); }
   100% { transform: scale(1) rotate(0); }
 }
 
@@ -2136,9 +2142,9 @@ select:focus {
 }
 @keyframes avatar-bounce-visit {
   0% { transform: scale(1) translateY(0); }
-  25% { transform: scale(1.22) translateY(-6px) rotate(-5deg); }
-  50% { transform: scale(0.92) translateY(0) rotate(4deg); }
-  75% { transform: scale(1.1) translateY(-3px) rotate(-2deg); }
+  25% { transform: scale(1.13) translateY(-5px) rotate(-2deg); }
+  50% { transform: scale(0.96) translateY(0) rotate(1.5deg); }
+  75% { transform: scale(1.05) translateY(-2px) rotate(-1deg); }
   100% { transform: scale(1) translateY(0) rotate(0); }
 }
 
@@ -2147,10 +2153,10 @@ select:focus {
 }
 @keyframes avatar-bounce-recommend {
   0% { transform: scale(1) rotate(0); }
-  20% { transform: scale(1.12) rotate(8deg); }
-  40% { transform: scale(1.12) rotate(-8deg); }
-  60% { transform: scale(1.12) rotate(6deg); }
-  80% { transform: scale(1.05) rotate(-3deg); }
+  20% { transform: scale(1.07) rotate(4deg); }
+  40% { transform: scale(1.07) rotate(-4deg); }
+  60% { transform: scale(1.07) rotate(3deg); }
+  80% { transform: scale(1.02) rotate(-1.5deg); }
   100% { transform: scale(1) rotate(0); }
 }
 
@@ -2162,10 +2168,10 @@ select:focus {
 }
 @keyframes avatar-bounce-levelup {
   0% { transform: scale(1) rotate(0) translateY(0); }
-  20% { transform: scale(1.32) rotate(-6deg) translateY(-8px); }
-  40% { transform: scale(0.9) rotate(5deg) translateY(2px); }
-  60% { transform: scale(1.22) rotate(-4deg) translateY(-6px); }
-  80% { transform: scale(1.06) rotate(2deg) translateY(0); }
+  20% { transform: scale(1.18) rotate(-2.5deg) translateY(-7px); }
+  40% { transform: scale(0.95) rotate(2deg) translateY(1px); }
+  60% { transform: scale(1.1) rotate(-1.5deg) translateY(-5px); }
+  80% { transform: scale(1.03) rotate(1deg) translateY(0); }
   100% { transform: scale(1) rotate(0) translateY(0); }
 }
 
@@ -2213,7 +2219,7 @@ select:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* 홉 이동 자체는 app.js의 animateAvatarHops()가 matchMedia로 직접 감지해
+  /* 걷기 이동 자체는 app.js의 animateAvatarWalk()가 matchMedia로 직접 감지해
      애니메이션 없이 즉시 최종 위치로 스냅한다(별도 CSS 불필요) — 여기서는
      idle 쪽 애니메이션만 끈다. */
   .character-avatar { animation: none; }
