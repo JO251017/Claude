@@ -123,10 +123,17 @@ def _price_update_review_prompt(
     )
 
 
-def _typical_price_prompt(item_name: str) -> str:
+def _typical_price_prompt(item_name: str, region: str | None = None) -> str:
+    # region 반영(2026-09-01, §26~27) — 전국 단일 추정치는 "평택 김치찌개"와
+    # "서울 강남 김치찌개"를 같은 통상가로 취급하는 문제가 있었다. 지역을 알면
+    # 프롬프트에 넣어서 그 지역 기준으로 짐작하게 하고, 캐시 키도 (menu, region)
+    # 조합으로 나눈다(app/engine/typical_price_backfill.py) — region을 모르면
+    # (지역 파싱 실패 등) 예전처럼 전국 단일 추정을 그대로 쓴다.
+    region_line = f"\n지역: {region}" if region else ""
     return (
         f'한국의 동네 식당/카페에서 "{item_name}"과(와) 같은 메뉴를 판매한다면, '
-        "일반적으로 얼마 정도에 판매될지 대략적인 통상 가격을 알려줘. "
+        "일반적으로 얼마 정도에 판매될지 대략적인 통상 가격을 알려줘."
+        f"{region_line}\n"
         "이건 특정 매장이나 지역의 실제 조사 데이터가 아니라 참고용 짐작이라는 걸 감안해서, "
         "합리적으로 짐작할 수 있으면 원 단위 숫자로, 메뉴 이름이 너무 모호하거나 "
         "짐작이 무의미하면 null로 답해줘. "
@@ -494,13 +501,15 @@ class GeminiVisionClient:
             location_text=parsed.get("location_text"),
         )
 
-    async def estimate_typical_price(self, item_name: str) -> float | None:
+    async def estimate_typical_price(self, item_name: str, region: str | None = None) -> float | None:
         """메뉴의 통상 시세를 추정한다 — 주변에 같은 메뉴를 등록한 매장이 아직 없어도
         절약 정보를 계산할 수 있게 하는 콜드스타트 보조값. 실측 비교가 가능해지면
-        그쪽이 항상 우선하며, 사용자에게는 항상 "AI 추정"으로 표시한다.
+        그쪽이 항상 우선하며, 사용자에게는 항상 "AI 추정"으로 표시한다. region을
+        주면 그 지역 기준으로 짐작하도록 프롬프트에 반영한다(2026-09-01, §26~27) —
+        생략하면 예전과 같은 전국 단일 추정.
         추정이 불가능하거나 API 호출이 실패하면 None (지어내지 않고 비워둔다)."""
         try:
-            raw_text = await self._ask_text(_typical_price_prompt(item_name))
+            raw_text = await self._ask_text(_typical_price_prompt(item_name, region))
         except (OcrServiceError, ReportImageFetchError):
             return None
 

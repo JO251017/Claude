@@ -99,13 +99,14 @@ def test_medium_confidence_without_enough_for_high():
 
 
 def test_ai_estimated_savings_with_no_behavior_signal_still_low_but_shows_the_number():
-    # 행동 신호(방문/인증/추천)가 전혀 없으면 tier는 여전히 "low"이고 score/grade는
-    # 지어내지 않지만(신뢰도는 실제 신호로만 매김), 계산 자체는 이미 됐다는 걸
-    # "계산 중"으로 뭉개지 않고 정직하게 알려줘야 한다.
+    # 행동 신호(방문/인증/추천)가 전혀 없으면 tier는 여전히 "low"지만(신뢰도는 실제
+    # 신호로만 매김), 가격 근거가 있으면 점수는 계산한다(2026-09-01, §18 — 점수와
+    # 신뢰도는 독립된 축). "계산 중"으로 뭉개지 않고 정직하게 알려준다.
     r = _report(savings_rate=12.0, benchmark_source="ai")
     assert r.confidence_tier == "low"
-    assert r.score is None
-    assert r.grade is None
+    assert r.score is not None
+    assert r.score <= 75  # _NO_SIGNAL_SCORE_CAP — 사람 신호가 없으면 상한
+    assert r.grade is not None
     assert "AI" in r.one_line
     assert any("AI" in reason for reason in r.reasons)
 
@@ -113,9 +114,36 @@ def test_ai_estimated_savings_with_no_behavior_signal_still_low_but_shows_the_nu
 def test_region_estimated_savings_with_no_behavior_signal_mentions_region_not_ai():
     r = _report(savings_rate=12.0, benchmark_source="region")
     assert r.confidence_tier == "low"
-    assert r.score is None
+    assert r.score is not None
+    assert r.score <= 75
     assert "실측" in r.one_line
     assert "AI" not in r.one_line
+
+
+def test_low_tier_score_never_exceeds_no_signal_cap():
+    # 신뢰도가 낮으면(사람 신호 0) 절약률이 아무리 커도 점수 상한(75)을 넘지
+    # 않는다 — "점수가 높다고 신뢰도가 자동 상승하지 않는다"의 반대 방향도
+    # 마찬가지로, 신뢰도가 없으면 점수도 무한정 높아지지 않는다. tier=="low"
+    # 자체가 요구하는 낮은 행동 신호 제약 때문에 실제로는 상한보다 낮게 나오지만
+    # (여기서는 65), 상한 로직이 실제로 적용되는지는 이 사실 자체로 확인된다.
+    r = _report(
+        savings_rate=999.0,
+        benchmark_source="region",
+        benchmark_sample_count=50,
+        last_verified_at=datetime.now(timezone.utc),
+    )
+    assert r.confidence_tier == "low"
+    assert r.score is not None
+    assert r.score <= 75
+    assert r.score == 65  # 가격 경쟁력 55(상한) + 최신성 +10, 사람 신호 0
+
+
+def test_low_tier_without_price_evidence_still_reports_no_score():
+    # 가격 비교 자체가 안 된 진짜 콜드스타트는 여전히 score=None — 지어내지 않는다.
+    r = _report(savings_rate=0.0, benchmark_source=None)
+    assert r.confidence_tier == "low"
+    assert r.score is None
+    assert r.grade is None
 
 
 def test_zero_savings_still_uses_generic_low_data_message():

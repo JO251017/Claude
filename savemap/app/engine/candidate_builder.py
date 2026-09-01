@@ -33,6 +33,7 @@ def build_candidate(offer: Offer, place: Place, distance_m: float) -> OfferCandi
         benchmark_sample_count=offer.benchmark_sample_count,
         accepts_local_currency=place.accepts_local_currency,
         ai_one_line=offer.ai_one_line,
+        source=offer.source,
         payment_benefits=[
             PaymentBenefit(
                 method_type=b.method_type,

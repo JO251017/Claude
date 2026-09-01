@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
-from app.domain.enums import Category, Layer
+from app.domain.enums import Category, Layer, SourceType
 from app.engine.models import OfferCandidate
 from app.engine.ranker import (
     _distance_norm,
     _freshness_multiplier,
+    _source_quality_multiplier,
     _weather_norm,
     dedupe_by_place,
     rank_candidates,
@@ -207,4 +208,39 @@ def test_unknown_freshness_is_not_penalized_in_ranking():
     fresh.last_verified_at = datetime.now(timezone.utc) - timedelta(days=1)
 
     ranked = rank_candidates([unknown, fresh])
+    assert ranked[0].score == ranked[1].score
+
+
+# --- 데이터 품질(2026-09-01, §24~25) ---
+
+
+def test_source_quality_multiplier_unknown_source_not_penalized():
+    # source가 아예 없으면(구 데이터) 벌점을 주지 않는다 — freshness와 같은 원칙.
+    assert _source_quality_multiplier(None) == 1.0
+
+
+def test_source_quality_multiplier_ranks_verification_highest():
+    assert _source_quality_multiplier(SourceType.S5_VERIFICATION) == 1.0
+    assert _source_quality_multiplier(SourceType.S6_AI_DISCOVERY_WEB) < _source_quality_multiplier(
+        SourceType.S5_VERIFICATION
+    )
+
+
+def test_low_quality_source_lowers_rank_when_otherwise_tied():
+    verified = _c(1, 10000, 2000, 0.8)
+    verified.source = SourceType.S5_VERIFICATION
+    ai_web = _c(2, 10000, 2000, 0.8)
+    ai_web.source = SourceType.S6_AI_DISCOVERY_WEB
+
+    ranked = rank_candidates([ai_web, verified])
+    assert ranked[0].candidate.offer_id == 1  # 사용자 인증 출처가 위로 옴
+    assert ranked[0].score > ranked[1].score
+
+
+def test_unknown_source_is_not_penalized_in_ranking():
+    unknown = _c(1, 10000, 2000, 0.8)
+    verified = _c(2, 10000, 2000, 0.8)
+    verified.source = SourceType.S5_VERIFICATION
+
+    ranked = rank_candidates([unknown, verified])
     assert ranked[0].score == ranked[1].score

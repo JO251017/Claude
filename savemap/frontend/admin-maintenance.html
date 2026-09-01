@@ -72,6 +72,28 @@
   </div>
   <progress id="blurb-progress" value="0" max="1" hidden></progress>
 
+  <h2>AI 통상가 백필 (절약 기회 점수 활성화)</h2>
+  <p class="warn">주변 이웃 매장도 없고(region) 참가격 품목도 아닌(gov) 메뉴는
+  ai_typical_price가 채워져야만 절약 기회 점수가 계산됩니다. 아직 안 채워진
+  메뉴에 AI 통상가(지역 반영)를 채웁니다. 같은 (메뉴명, 지역) 조합은 API를 다시
+  부르지 않고 복사합니다(reused_from_cache). <b>채운 뒤엔 위 "전체 재동기화"를
+  다시 돌려야</b> 실제 오퍼에 반영됩니다(이 배치는 메뉴 통상가만 채우고, 오퍼
+  벤치마크 재계산은 재동기화가 담당).</p>
+
+  <label for="typical-price-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="typical-price-limit" value="50" min="10" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="typical-price-dry-run" />
+    <label for="typical-price-dry-run">미리보기만 (dry_run — 채우기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="typical-price-run-btn">끝날 때까지 통상가 백필</button>
+    <button id="typical-price-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="typical-price-progress" value="0" max="1" hidden></progress>
+
   <div id="log"></div>
 
 <script>
@@ -250,6 +272,73 @@ async function runBlurbLoop() {
 
 document.getElementById('blurb-run-btn').addEventListener('click', runBlurbLoop);
 document.getElementById('blurb-stop-btn').addEventListener('click', () => { blurbStopRequested = true; });
+
+// --- AI 통상가 백필 (절약 기회 점수 활성화, 2026-09-01) --- 위 두 루프와
+// 완전히 같은 패턴.
+let typicalPriceStopRequested = false;
+
+async function callTypicalPriceBackfill(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/backfill-typical-prices?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runTypicalPriceLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('typical-price-limit').value, 10) || 50;
+  const dryRun = document.getElementById('typical-price-dry-run').checked;
+
+  const runBtn = document.getElementById('typical-price-run-btn');
+  const stopBtn = document.getElementById('typical-price-stop-btn');
+  const progressEl = document.getElementById('typical-price-progress');
+  typicalPriceStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalEstimated = 0, totalReused = 0, totalFailed = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (typicalPriceStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callTypicalPriceBackfill(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalEstimated += result.estimated;
+    totalReused += result.reused_from_cache;
+    totalFailed += result.failed;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} estimated=${result.estimated} reused_from_cache=${result.reused_from_cache} failed=${result.failed}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} estimated=${totalEstimated} reused_from_cache=${totalReused} failed=${totalFailed}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n채워졌습니다 — 이제 위 "끝날 때까지 전체 재동기화 실행"을 다시 돌려서 오퍼에 반영하세요.');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('typical-price-run-btn').addEventListener('click', runTypicalPriceLoop);
+document.getElementById('typical-price-stop-btn').addEventListener('click', () => { typicalPriceStopRequested = true; });
 </script>
 </body>
 </html>

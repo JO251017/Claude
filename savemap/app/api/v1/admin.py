@@ -65,6 +65,7 @@ from app.sources.public_api.local_currency import (
 from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
 from app.engine.offer_blurb_backfill import backfill_offer_blurbs
+from app.engine.typical_price_backfill import backfill_typical_prices
 from app.engine.offer_resync import resync_offers
 from app.sources.public_api.restaurant_registry import sync_restaurant_registry
 from app.sources.public_api.service import sync_all_public_sources
@@ -386,6 +387,24 @@ async def backfill_offer_blurbs_endpoint(
     저장하지 않고 건너뛴다 — 다음 실행 때 다시 시도된다(ai_one_line이 여전히
     null이므로)."""
     return await backfill_offer_blurbs(session, offset=offset, limit=limit, dry_run=dry_run)
+
+
+@router.post("/maintenance/backfill-typical-prices")
+async def backfill_typical_prices_endpoint(
+    offset: int = Query(default=0, ge=0, description="menu_item.id 기준 몇 번째부터 처리할지"),
+    limit: int = Query(default=50, ge=1, le=500, description="한 번에 처리할 건수"),
+    dry_run: bool = Query(default=False, description="true면 채우기만 하고 저장하지 않음"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """절약 기회 점수 활성화(2026-09-01, §17~18)의 구제 경로 — ai_typical_price가
+    아직 없는 메뉴에 AI 통상가를 채운다. backfill-offer-blurbs와 같은 관례로
+    limit 기본값을 작게(50) 잡는다(행당 실제 Gemini 호출). 같은 (정규화된 메뉴명,
+    지역) 조합은 API를 다시 부르지 않고 이미 채워진 값을 복사한다
+    (reused_from_cache로 집계, §42 "동일 benchmark 반복 생성 금지"). 채운 뒤
+    기존 "오퍼 일괄 재동기화"를 다시 돌리면 compare_menu_item이 재평가되어
+    ai 벤치마크가 오퍼에 자동으로 붙는다(새 발행 경로 없음)."""
+    return await backfill_typical_prices(session, offset=offset, limit=limit, dry_run=dry_run)
 
 
 @router.get("/places/stats")

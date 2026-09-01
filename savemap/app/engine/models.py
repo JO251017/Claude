@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from app.domain.enums import Category, Layer, PaymentMethodType
+from app.domain.enums import Category, Layer, PaymentMethodType, SourceType
 
 
 @dataclass
@@ -51,3 +51,8 @@ class OfferCandidate:
     # 카드 한 줄 소개. Offer.ai_one_line을 그대로 옮긴다. None이면
     # result_assembly.py가 savings_report.py의 결정론적 템플릿 문구로 폴백한다.
     ai_one_line: str | None = None
+    # 데이터 품질 축(2026-09-01, §24~25) — "누가/무엇이 이 오퍼를 만들었는지"
+    # (S1_PUBLIC~S6_AI_DISCOVERY_WEB). benchmark_source("무엇과 비교했는지")와는
+    # 다른 축이다. Offer.source를 그대로 옮겨, ranker가 내부 신뢰도 보정에만
+    # 쓴다(사용자에게 숫자로 노출하지 않음).
+    source: SourceType | None = None

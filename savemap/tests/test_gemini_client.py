@@ -10,6 +10,7 @@ from app.integrations.gemini import (
     _digest_prompt,
     _offer_blurb_prompt,
     _route_summary_prompt,
+    _typical_price_prompt,
 )
 
 
@@ -371,3 +372,42 @@ def test_digest_prompt_includes_every_fact():
 def test_digest_prompt_forbids_new_numbers():
     prompt = _digest_prompt(_DIGEST_FACTS)
     assert "새로 만들어" in prompt
+
+
+# --- 통상가 지역 세분화(2026-09-01, §26~27) ---
+
+
+def test_typical_price_prompt_includes_region_when_given():
+    prompt = _typical_price_prompt("김치찌개", "충남")
+    assert "지역: 충남" in prompt
+
+
+def test_typical_price_prompt_omits_region_when_none():
+    prompt = _typical_price_prompt("김치찌개")
+    assert "지역:" not in prompt
+
+
+def test_estimate_typical_price_forwards_region_into_prompt():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": '{"typical_price": 9000}'}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)) as mock_post:
+        result = asyncio.run(_client().estimate_typical_price("김치찌개", "충남"))
+    assert result == 9000.0
+    sent_prompt = mock_post.call_args.kwargs["json"]["contents"][0]["parts"][0]["text"]
+    assert "지역: 충남" in sent_prompt
+
+
+def test_estimate_typical_price_without_region_matches_old_behavior():
+    post_request = httpx.Request("POST", "https://generativelanguage.googleapis.com/x")
+    post_response = httpx.Response(
+        200,
+        request=post_request,
+        json={"candidates": [{"content": {"parts": [{"text": '{"typical_price": 9000}'}]}}]},
+    )
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
+        result = asyncio.run(_client().estimate_typical_price("김치찌개"))
+    assert result == 9000.0

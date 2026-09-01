@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.core.config import settings
-from app.domain.enums import RouteActivity
+from app.domain.enums import RouteActivity, SourceType
 from app.engine.activity_classifier import classify_activity
 from app.engine.freshness import freshness_tier
 from app.engine.models import OfferCandidate
@@ -16,6 +16,23 @@ from app.integrations.weather import WeatherSnapshot
 # 주석 참고)을 다시 흔들고 싶지 않아서다. last_verified_at이 아예 없으면("unknown")
 # 깎지 않는다 — 확인한 적이 없다는 것과 오래전에 확인했다는 것은 다른 사실이다.
 _EXPIRED_FRESHNESS_PENALTY = 0.7
+
+# 데이터 품질(2026-09-01, §24~25) — "이 오퍼를 누가/무엇이 만들었는지"
+# (Offer.source, S1~S6)를 trust_norm 보정에 곱한다. 위 freshness 보정과 같은
+# 패턴(새 가중치 슬롯을 추가하지 않고 곱셈으로 반영, rank_*_weight 합 1.0 불변식
+# 유지). 개념적 우선순위(§24): 최근 사용자 영수증/메뉴판 인증(S5) > 프랜차이즈
+# 공식가/AI가 공식 자료에서 찾은 값(S2/S6_OFFICIAL) > 사용자 제보(S4) > AI가
+# 일반 웹에서 찾은 값(S6_WEB) > 참가격류 공공데이터(S1). 사용자에게 숫자로
+# 노출하지 않는다 — 내부 랭킹 보정 전용.
+_SOURCE_QUALITY_MULTIPLIER: dict[SourceType, float] = {
+    SourceType.S5_VERIFICATION: 1.0,
+    SourceType.S6_AI_DISCOVERY_OFFICIAL: 0.95,
+    SourceType.S3_MERCHANT: 0.9,
+    SourceType.S2_PARTNER: 0.9,
+    SourceType.S4_REPORT: 0.85,
+    SourceType.S6_AI_DISCOVERY_WEB: 0.75,
+    SourceType.S1_PUBLIC: 0.8,
+}
 
 # 날씨가 실제로 그 업종과 맞아떨어질 때만 중립(0.5)에서 이만큼 올려준다 — 지어낸
 # 취향이 아니라 "비 오면 카페 간다"류의 상식적인 상관관계만 반영(아래 _weather_norm
@@ -65,6 +82,14 @@ def _freshness_multiplier(last_verified_at: datetime | None) -> float:
     return _EXPIRED_FRESHNESS_PENALTY if tier == "expired" else 1.0
 
 
+def _source_quality_multiplier(source: SourceType | None) -> float:
+    # 출처를 모르면(None — 예: 오퍼가 아직 source를 안 채우던 구 데이터) 벌점을
+    # 주지 않는다. freshness와 같은 원칙: "모른다"와 "품질이 낮다"는 다른 사실이다.
+    if source is None:
+        return 1.0
+    return _SOURCE_QUALITY_MULTIPLIER.get(source, 1.0)
+
+
 def _score(
     breakdown: SavingsBreakdown,
     trust: float,
@@ -72,9 +97,14 @@ def _score(
     place_category_name: str | None,
     weather: WeatherSnapshot | None,
     last_verified_at: datetime | None = None,
+    source: SourceType | None = None,
 ) -> float:
     savings_norm = min(breakdown.savings_rate / 100.0, 1.0)
-    trust_norm = min(max(trust, 0.0), 1.0) * _freshness_multiplier(last_verified_at)
+    trust_norm = (
+        min(max(trust, 0.0), 1.0)
+        * _freshness_multiplier(last_verified_at)
+        * _source_quality_multiplier(source)
+    )
     distance_norm = _distance_norm(distance_m)
     weather_norm = _weather_norm(place_category_name, weather)
     return (
@@ -98,6 +128,7 @@ def rank_candidates(
             candidate.place_category_name,
             weather,
             candidate.last_verified_at,
+            candidate.source,
         )
         ranked.append(RankedOffer(candidate, breakdown, score))
     # 동점은 흔하다(콜드스타트에서 특히) — 예전엔 안정정렬이라 입력 순서(대개 거리순)가

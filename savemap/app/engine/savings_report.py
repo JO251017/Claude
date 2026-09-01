@@ -75,6 +75,16 @@ BENCHMARK_TIER_CAP = {"ai": "medium"}
 # 데이터가 아예 없다고 벌점을 주면 없는 사실을 있는 것처럼 취급하는 셈이 된다.
 _FRESHNESS_SCORE_BONUS = {"unknown": 0, "fresh": 10, "normal": 6, "stale": 0, "expired": -10}
 
+# "절약 기회 점수"와 신뢰도(confidence_tier)는 서로 독립된 축이다(2026-09-01,
+# 사용자 지시 §18 "점수가 높다고 신뢰도가 자동 상승하지 않는다"). 예전엔 사람
+# 신호(방문/인증/추천)가 하나도 없으면(tier=="low") 점수 자체를 아예 안 매겨서,
+# 활동 이력이 없는 콜드스타트 매장은 가격 비교가 끝났는데도 화면에 "계산 중"만
+# 떴다. 이제 가격 근거만 있으면 tier와 무관하게 점수를 계산하되, 사람 신호가
+# 전혀 없는 상태에서는 점수가 아무리 싸도 여기까지만 올라가게 상한을 둔다 —
+# "절약 기회는 있어 보이지만 아직 아무도 검증하지 않았다"는 사실 자체를 점수에도
+# 정직하게 반영한다.
+_NO_SIGNAL_SCORE_CAP = 75
+
 
 def _confidence_tier(
     dining_count: int, discover_count: int, verification_count: int, recommend_count: int
@@ -164,22 +174,17 @@ def build_savings_report(
     elif benchmark_source == "ai":
         reasons.append("AI(Gemini) 추정 통상가 대비 비교")
 
-    if tier == "low":
-        has_estimate = savings_rate > 0 and benchmark_source is not None
+    # medium/high tier(사람 신호가 이미 medium 문턱을 넘음)는 예전부터 benchmark_source
+    # 유무와 무관하게 항상 점수를 계산해왔다 — 그 동작은 그대로 둔다. 이번에 새로
+    # 여는 건 tier=="low"(사람 신호가 전혀 없는 콜드스타트) 케이스뿐이라, "진짜
+    # 데이터 부족"(점수를 아예 못 매기는 경우) 판정도 low일 때만 가격 근거 유무로
+    # 가른다.
+    has_price_evidence = savings_rate > 0 and benchmark_source is not None
+
+    if tier == "low" and not has_price_evidence:
+        # 진짜 데이터 부족 — 가격 비교 자체가 안 됐으니 점수를 지어낼 게 없다.
         if not reasons:
             reasons = ["실제 방문 데이터 부족", "영수증 데이터 부족", "가격 데이터 부족"]
-        if has_estimate:
-            # 가격 비교 자체는 이미 됐다(실측이든 AI 추정이든) — 다만 "신뢰도 점수"는
-            # 실제 방문/인증처럼 사람이 남긴 신호가 있어야 매기므로 score/grade는 여전히
-            # None이다. 계산이 안 된 것처럼 "계산 중"이라고 뭉개지 않고, 무엇을
-            # 기준으로 얼마나 절약되는지는 있는 그대로 보여준다.
-            source_label = BENCHMARK_LABELS.get(benchmark_source, "비교 기준가")
-            one_line = (
-                f"{source_label} 대비로는 저렴하지만, 아직 실제 방문/인증 데이터가 부족해 "
-                "신뢰도 점수는 매기지 않았어요."
-            )
-        else:
-            one_line = "아직 충분한 데이터가 쌓이지 않아 절약 정보를 계산 중이에요."
         return SavingsReport(
             score=None,
             grade=None,
@@ -190,21 +195,49 @@ def build_savings_report(
             freshness_label=fresh_label,
             days_since_verified=days_since_verified,
             reasons=reasons,
+            one_line="아직 충분한 데이터가 쌓이지 않아 절약 정보를 계산 중이에요.",
+        )
+
+    # 절약 기회 점수 배점(2026-09-01 재조정, 사용자 지시 §18 — 신뢰도와 독립):
+    # 가격 경쟁력(최대 55점)에 벤치마크 품질을 곱한다 — AI 추정 기반 절약률은
+    # 최대 24.75점, 참가격 통계는 41.25점, 실측(표본이 얇으면 46.75점)은 55점까지만
+    # 받는다. 근거가 약한 숫자가 실측과 똑같은 무게로 점수를 만드는 일이 없게
+    # 하려는 것이다.
+    benchmark_weight = _benchmark_score_weight(benchmark_source, benchmark_sample_count)
+    score = 0.0
+    score += min(max(savings_rate, 0.0), 55.0) * benchmark_weight  # 가격 경쟁력, 최대 55점
+    score += min(dining_count * 5, 18)  # 영수증 인증, 최대 18점
+    score += min(discover_count * 1, 10)  # 실제 발견/방문, 최대 10점
+    score += min(recommend_count * 2, 7)  # 추천, 최대 7점
+    score += _FRESHNESS_SCORE_BONUS[fresh_tier]  # 데이터 최신성, -10~+10점
+    score = max(0, min(round(score), 100))
+
+    if tier == "low":
+        # 사람 신호가 전혀 없다 — "절약 기회는 있어 보이지만 아직 아무도
+        # 검증하지 않았다"는 사실을 점수에도 정직하게 반영해 상한을 씌운다
+        # (confidence_tier/stars는 그대로 "low"/0 — 점수와 신뢰도는 독립된 축).
+        score = min(score, _NO_SIGNAL_SCORE_CAP)
+        grade = _grade_for_score(score)
+        source_label = BENCHMARK_LABELS.get(benchmark_source, "비교 기준가")
+        one_line = (
+            f"{source_label} 대비로는 저렴하지만, 아직 실제 방문/인증 데이터가 부족해 "
+            "신뢰도는 낮게 매겨졌어요."
+        )
+        if not reasons:
+            reasons = ["실제 방문 데이터 부족", "영수증 데이터 부족"]
+        return SavingsReport(
+            score=score,
+            grade=grade,
+            confidence_tier=tier,
+            confidence_stars=stars,
+            confidence_label=label,
+            freshness_tier=fresh_tier,
+            freshness_label=fresh_label,
+            days_since_verified=days_since_verified,
+            reasons=reasons,
             one_line=one_line,
         )
 
-    # 가격 경쟁력 점수(최대 40점)에 벤치마크 품질을 곱한다 — AI 추정 기반 절약률은
-    # 최대 18점, 참가격 통계는 30점, 실측(표본이 얇으면 34점)은 40점까지만 받는다.
-    # 근거가 약한 숫자가 실측과 똑같은 무게로 "신뢰도 높음" 점수를 만드는 일이
-    # 없게 하려는 것이다.
-    benchmark_weight = _benchmark_score_weight(benchmark_source, benchmark_sample_count)
-    score = 0.0
-    score += min(max(savings_rate, 0.0), 40.0) * benchmark_weight  # 가격 경쟁력, 최대 40점
-    score += min(dining_count * 5, 25)  # 영수증 인증, 최대 25점
-    score += min(discover_count * 1, 15)  # 실제 발견/방문, 최대 15점
-    score += min(recommend_count * 2, 10)  # 추천, 최대 10점
-    score += _FRESHNESS_SCORE_BONUS[fresh_tier]  # 데이터 최신성, -10~+10점
-    score = max(0, min(round(score), 100))
     grade = _grade_for_score(score)
 
     if tier == "high" and score >= 60:
