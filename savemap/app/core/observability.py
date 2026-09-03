@@ -15,6 +15,24 @@ def configure_logging() -> None:
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    _silence_http_client_url_logs()
+
+
+def _silence_http_client_url_logs() -> None:
+    """httpx는 요청마다 INFO로 "HTTP Request: POST <URL 전체>"를 남긴다. 그런데
+    외부 API 중 상당수가 인증키를 쿼리 파라미터로만 받는다(공공데이터포털
+    serviceKey, 기상청 serviceKey 등 — 헤더 인증을 아예 지원하지 않음). 그래서
+    이 로그가 그대로 켜져 있으면 운영 로그를 볼 수 있는 사람 누구나 인증키를
+    평문으로 가져갈 수 있다(2026-09-02 실제 Render 로그에서 Gemini 키가 그대로
+    노출된 것을 확인).
+
+    개별 호출부에서 키를 가리는 대신 여기서 한 번에 막는 이유: 앞으로 추가되는
+    연동이 같은 실수를 반복해도 자동으로 안전한 쪽에 있게 하기 위해서다.
+    WARNING 이상은 그대로 두므로 httpx가 실제로 문제를 보고할 때는 여전히
+    보인다. 요청 단위 관측이 필요하면 URL을 직접 마스킹해서 남기는 미들웨어를
+    따로 두는 게 맞지, 이 로거를 다시 INFO로 되돌리면 안 된다."""
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def configure_sentry() -> None:

@@ -356,7 +356,15 @@ class GeminiVisionClient:
             try:
                 resp = await client.post(
                     f"{GEMINI_API_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent",
-                    params={"key": self._key},
+                    # 키는 헤더로 보낸다 — 쿼리 파라미터(?key=...)로 보내면 URL에
+                    # 남아서, httpx 요청 로그·예외 메시지(httpx.HTTPStatusError는
+                    # 메시지에 URL 전체를 넣는다)·트레이스백을 통해 그대로 새어
+                    # 나간다. 실제로 그렇게 유출된 적이 있다(2026-09-02, Render
+                    # 운영 로그에서 Gemini 키 평문 확인 → 키 재발급). httpx 쪽
+                    # 로그는 observability._silence_http_client_url_logs에서도
+                    # 따로 막지만, 그건 URL을 남기는 다른 경로(예외/트레이스백)까지
+                    # 덮지 못하므로 키 자체를 URL에서 빼는 이 조치가 본질적이다.
+                    headers={"x-goog-api-key": self._key},
                     json=payload,
                 )
             except httpx.HTTPError:

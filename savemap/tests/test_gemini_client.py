@@ -441,3 +441,45 @@ def test_generate_pet_levelup_line_returns_stripped_text_on_success():
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_response)):
         result = asyncio.run(_client().generate_pet_levelup_line("산책 나온 강아지"))
     assert result == "신난다!"
+
+
+# --- 인증키 유출 방지(2026-09-02) --- 운영 로그에서 Gemini 키가 평문으로
+# 노출된 것을 확인하고(httpx가 요청 URL 전체를 INFO로 남기는데 키를 쿼리
+# 파라미터로 보내고 있었음) 키를 헤더로 옮겼다. 아래 두 테스트는 그 조치가
+# 나중에 조용히 되돌아가는 걸 막는다 — 키가 URL에 다시 들어가면 로그·예외
+# 메시지·트레이스백 세 경로로 동시에 새기 때문에 회귀 비용이 크다.
+
+
+def test_api_key_is_sent_as_header_not_in_url():
+    captured: dict = {}
+
+    async def fake_post(self, url, **kwargs):
+        captured["url"] = str(url)
+        captured["params"] = kwargs.get("params")
+        captured["headers"] = kwargs.get("headers") or {}
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            200,
+            request=request,
+            json={"candidates": [{"content": {"parts": [{"text": "ok"}]}}]},
+        )
+
+    with patch("httpx.AsyncClient.post", new=fake_post):
+        asyncio.run(_client()._ask_text("hello"))
+
+    assert captured["headers"].get("x-goog-api-key") == "test-key"
+    # 키가 URL이나 쿼리 파라미터 어디에도 실리면 안 된다.
+    assert "test-key" not in captured["url"]
+    assert "key" not in (captured["params"] or {})
+
+
+def test_http_client_url_logging_is_silenced():
+    """httpx의 INFO 요청 로그(URL 전체 포함)가 꺼져 있어야 한다 — 헤더 인증을
+    지원하지 않는 공공 API(serviceKey를 쿼리로만 받음)까지 한 번에 덮는 방어선."""
+    import logging
+
+    from app.core.observability import configure_logging
+
+    configure_logging()
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+    assert not logging.getLogger("httpcore").isEnabledFor(logging.INFO)
