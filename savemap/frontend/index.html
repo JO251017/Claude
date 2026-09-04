@@ -13,7 +13,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="쓸모 | 내 주변의 절약 기회" />
   <meta name="twitter:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
-  <link rel="stylesheet" href="style.css?v=20260901e" />
+  <link rel="stylesheet" href="style.css?v=20260901f" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -139,6 +139,10 @@
 
           <div id="report-confirm" class="card-form hidden">
             <img id="report-preview-img" class="report-preview-img" alt="제보 사진 미리보기" />
+            <!-- 사진 품질 사전 신호(2026-09-04) — AI가 "영수증/메뉴판/가격표로
+                 보기 어렵다"고 판단했을 때만 뜨는 부드러운 안내. 제출을 막지
+                 않는다 — 그냥 등록해도 된다(analyzeReportPhoto 참고). -->
+            <p id="report-quality-hint" class="warn-msg hidden"></p>
             <div class="form-group">
               <label for="r-place-name">장소명</label>
               <input type="text" id="r-place-name" placeholder="예: 늘푸른정육점" required />
@@ -710,6 +714,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260901e"></script>
+  <script src="app.js?v=20260901f"></script>
 </body>
 </html>

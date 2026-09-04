@@ -801,6 +801,18 @@ body {
   border-radius: var(--radius-sm);
 }
 
+/* 제보 사진 품질 사전 신호(2026-09-04) — error-msg와 같은 모양이지만 색만
+   경고 톤(호박색)으로 바꿨다. 실제로 막는 게 아니라 "확인해보시겠어요?"
+   정도의 부드러운 안내라 빨간색(error-msg)을 그대로 쓰면 과하다. */
+.warn-msg {
+  color: #b45309;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  background: rgba(217, 119, 6, 0.1);
+  border-radius: var(--radius-sm);
+}
+
 .location-fallback-notice {
   color: var(--ink-soft);
   text-align: center;

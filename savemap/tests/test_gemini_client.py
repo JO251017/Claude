@@ -593,3 +593,54 @@ def test_synonym_batch_single_name_makes_no_api_call():
     with patch("httpx.AsyncClient.post", new=counting_post):
         assert asyncio.run(_client().suggest_menu_synonyms_batch(["커트"])) == []
     assert called["n"] == 0
+
+
+# --- 제보 사진 품질 사전 신호(2026-09-04) --- extract_from_image 응답에
+# looks_usable/quality_note를 얹어서, 관련 없거나 흐린 사진을 제출 전에
+# 부드럽게 알려줄 수 있게 한다. **차단은 아니다** — 이 신호로 제보를 막지
+# 않는다(파이프라인은 그대로 즉시 게시).
+
+
+def _image_response(body_json_text: str):
+    async def fake_get(self, url, **kwargs):
+        return httpx.Response(
+            200, request=httpx.Request("GET", url),
+            content=b"fake-bytes", headers={"content-type": "image/jpeg"},
+        )
+
+    async def fake_post(self, url, **kwargs):
+        return httpx.Response(
+            200, request=httpx.Request("POST", url),
+            json={"candidates": [{"content": {"parts": [{"text": body_json_text}]}}]},
+        )
+
+    return fake_get, fake_post
+
+
+def test_extract_from_image_reads_quality_signal_when_unusable():
+    body = '{"title": null, "price": null, "category": null, "looks_usable": false, "quality_note": "사진이 흐려서 글자가 안 보여요"}'
+    get_fn, post_fn = _image_response(body)
+    with patch("httpx.AsyncClient.get", new=get_fn), patch("httpx.AsyncClient.post", new=post_fn):
+        result = asyncio.run(_client().extract_from_image("https://example.com/a.jpg"))
+    assert result.looks_usable is False
+    assert result.quality_note == "사진이 흐려서 글자가 안 보여요"
+
+
+def test_extract_from_image_quality_signal_defaults_to_none_when_absent():
+    """모델이 필드를 아예 안 주면 "모름"이어야 한다 — "나쁨"으로 잘못 해석해서
+    없는 경고를 보여주면 안 된다."""
+    body = '{"title": "아메리카노", "price": 4000, "category": "food"}'
+    get_fn, post_fn = _image_response(body)
+    with patch("httpx.AsyncClient.get", new=get_fn), patch("httpx.AsyncClient.post", new=post_fn):
+        result = asyncio.run(_client().extract_from_image("https://example.com/a.jpg"))
+    assert result.looks_usable is None
+    assert result.quality_note is None
+
+
+def test_extract_from_image_ignores_empty_quality_note():
+    body = '{"title": null, "price": null, "category": null, "looks_usable": true, "quality_note": ""}'
+    get_fn, post_fn = _image_response(body)
+    with patch("httpx.AsyncClient.get", new=get_fn), patch("httpx.AsyncClient.post", new=post_fn):
+        result = asyncio.run(_client().extract_from_image("https://example.com/a.jpg"))
+    assert result.looks_usable is True
+    assert result.quality_note is None

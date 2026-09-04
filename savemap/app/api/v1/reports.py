@@ -58,6 +58,8 @@ async def analyze_report_photo(
         lat=lat,
         lng=lng,
         location_text=ocr.location_text,
+        ai_looks_usable=ocr.looks_usable,
+        ai_quality_note=ocr.quality_note,
     )
 
 

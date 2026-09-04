@@ -87,10 +87,15 @@ _VALID_CATEGORIES = {c.value for c in Category}
 
 _EXTRACTION_PROMPT = (
     "이 이미지(영수증, 전단지, 매장 사진 등)에서 절약 정보를 추출해줘. "
+    "그리고 이 사진이 실제로 영수증·메뉴판·가격표·매장 전단지처럼 절약 정보의 "
+    "증거로 쓸 만한 사진인지도 같이 판단해줘 — 관련 없는 사진(인물 사진, 풍경, "
+    "화면 캡처, 글자를 알아볼 수 없을 만큼 흐린 사진 등)이면 그렇다고 표시해줘.\n"
     "반드시 아래 JSON 형식으로만 응답하고 다른 텍스트는 포함하지 마:\n"
     '{"title": "혜택/상품명", "price": 숫자 또는 null, '
     f'"category": {sorted(_VALID_CATEGORIES)} 중 하나, '
-    '"location_text": "이미지에서 보이는 가게 이름이나 주소가 있으면 그 텍스트, 없으면 null"}'
+    '"location_text": "이미지에서 보이는 가게 이름이나 주소가 있으면 그 텍스트, 없으면 null", '
+    '"looks_usable": true 또는 false, '
+    '"quality_note": "looks_usable이 false일 때만 한국어로 왜 그런지 한 문장, 아니면 null"}'
 )
 
 
@@ -287,6 +292,14 @@ class OcrResult:
     title: str | None
     category: Category | None
     location_text: str | None = None
+    # 사진 품질 사전 신호(2026-09-04) — 관련 없거나 못 알아볼 사진을 제출 전에
+    # 사용자에게 부드럽게 알려주기 위함이다. **차단하지 않는다**: 이미 이
+    # 서비스는 "제보 → 즉시 게시, 별도 승인 큐 없음"을 명시적으로 원칙으로
+    # 삼고 있다(pipeline.py 주석 참고) — 이 신호로 그 원칙을 뒤집지 않는다.
+    # looks_usable=None이면(모델이 필드를 아예 안 줬거나 파싱 실패) "모름"이지
+    # "나쁨"이 아니다 — 알 수 없을 땐 아무 경고도 띄우지 않는다.
+    looks_usable: bool | None = None
+    quality_note: str | None = None
 
 
 @dataclass
@@ -568,12 +581,16 @@ class GeminiVisionClient:
         category_value = parsed.get("category")
         category = Category(category_value) if category_value in _VALID_CATEGORIES else None
 
+        looks_usable = parsed.get("looks_usable")
+        quality_note = parsed.get("quality_note")
         return OcrResult(
             raw_text=raw_text,
             price=parsed.get("price"),
             title=parsed.get("title"),
             category=category,
             location_text=parsed.get("location_text"),
+            looks_usable=looks_usable if isinstance(looks_usable, bool) else None,
+            quality_note=quality_note if isinstance(quality_note, str) and quality_note else None,
         )
 
     async def estimate_typical_price(self, item_name: str, region: str | None = None) -> float | None:

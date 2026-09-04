@@ -53,3 +53,7 @@ class ReportAnalyzeResponse(BaseModel):
     # 제보 → 실제 게시(2026-08-18) — Gemini가 사진에서 읽은 가게 이름/주소 추정값.
     # 확인 화면의 "장소명" 입력을 미리 채워주는 용도(사용자가 다시 타이핑 안 해도 됨).
     location_text: str | None = None
+    # 사진 품질 사전 신호(2026-09-04) — false일 때만 프론트가 부드러운 경고를
+    # 보여준다("확인이 어려워요, 다시 찍어볼까요?"). 제출을 막지는 않는다.
+    ai_looks_usable: bool | None = None
+    ai_quality_note: str | None = None

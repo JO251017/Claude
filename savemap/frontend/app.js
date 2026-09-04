@@ -3420,6 +3420,17 @@ async function analyzeReportPhoto(file) {
         ? '현재 위치 자동 설정 완료'
         : '위치를 확인하지 못했어요 — 이번 제보는 지도에는 안 뜨고 기록만 남아요.';
 
+    // 사진 품질 사전 신호(2026-09-04) — AI가 "확인이 어렵다"고 봤을 때만 부드러운
+    // 안내를 보여준다. 제출은 그대로 가능하다(제보는 즉시 게시 원칙 — 별도 승인
+    // 큐를 만들지 않는다는 기존 설계를 이 신호로 뒤집지 않는다).
+    const qualityHint = document.getElementById('report-quality-hint');
+    if (data.ai_looks_usable === false) {
+      qualityHint.textContent = `⚠️ ${data.ai_quality_note || '사진이 흐리거나 절약 정보를 확인하기 어려워 보여요.'} 그래도 등록은 가능하지만, 더 잘 보이는 사진으로 다시 찍으면 확인이 빨라져요.`;
+      qualityHint.classList.remove('hidden');
+    } else {
+      qualityHint.classList.add('hidden');
+    }
+
     reportCaptureSection.classList.add('hidden');
     reportConfirmSection.classList.remove('hidden');
     reportCaptureStatus.textContent = '';
@@ -3432,6 +3443,7 @@ async function analyzeReportPhoto(file) {
 function resetReportForm() {
   reportConfirmSection.classList.add('hidden');
   reportCaptureSection.classList.remove('hidden');
+  document.getElementById('report-quality-hint').classList.add('hidden');
   reportPhotoInput.value = '';
   reportImageUrl = null;
   reportLat = null;
