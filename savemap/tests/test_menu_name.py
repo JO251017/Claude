@@ -89,3 +89,31 @@ def test_backfill_only_updates_rows_whose_normalized_name_is_stale():
 
     item.normalized_name = correct
     assert item.normalized_name == correct  # 재실행 시 더 건드릴 게 없어야 함
+
+
+# --- 표기 변형 통일(2026-09-03) --- 운영 DB에서 같은 것이 표기만 달라 갈라져
+# 있는 걸 확인하고 추가했다(커트/컷트가 남남, 짜장면/자장면이 남남). 병합 후
+# 3km 반경 실측 비교 가능 비율이 25.8% → 31.0%로 올랐다.
+
+
+def test_spelling_variants_merge_to_one_name():
+    assert normalize_menu_name("컷트") == normalize_menu_name("커트")
+    assert normalize_menu_name("자장면") == normalize_menu_name("짜장면")
+    assert normalize_menu_name("돈가스") == normalize_menu_name("돈까스")
+    assert normalize_menu_name("퍼머") == normalize_menu_name("파마")
+    assert normalize_menu_name("남자커트") == normalize_menu_name("남성커트")
+
+
+def test_variant_merge_runs_after_other_normalization_steps():
+    """괄호·크기 접미사를 떼고 난 뒤의 형태에도 통일이 걸려야 한다 —
+    "컷트(중)"까지 커트로 모이지 않으면 표를 붙인 의미가 절반으로 준다."""
+    assert normalize_menu_name("컷트(중)") == "커트"
+    assert normalize_menu_name("컷 트") == "커트"
+
+
+def test_cut_of_meat_variants_are_not_merged():
+    """부위·두께가 다르면 가격대도 다르다 — 표기 통일표(_SYNONYMS)에 삼겹살
+    계열을 넣지 않은 이유를 고정해둔다(기존 test_different_dishes_are_never_merged가
+    다루는 재료 차이와 별개 축)."""
+    assert normalize_menu_name("대패삼겹살") != normalize_menu_name("삼겹살")
+    assert normalize_menu_name("생삼겹살") != normalize_menu_name("대패삼겹살")
