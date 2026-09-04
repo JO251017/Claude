@@ -141,6 +141,7 @@ async def sync_menu_offer(
                 store_discount=store_discount,
                 benchmark_source=cmp.benchmark_source if cheaper else None,
                 benchmark_sample_count=cmp.sample_count,
+                benchmark_radius_km=cmp.benchmark_radius_km,
                 benchmark_synced_at=now,
                 menu_item_id=item.id,
             )
@@ -151,6 +152,7 @@ async def sync_menu_offer(
         existing_offer.store_discount = store_discount
         existing_offer.benchmark_source = cmp.benchmark_source if cheaper else None
         existing_offer.benchmark_sample_count = cmp.sample_count
+        existing_offer.benchmark_radius_km = cmp.benchmark_radius_km
         existing_offer.benchmark_synced_at = now
 
     await _record_price_history_if_changed(

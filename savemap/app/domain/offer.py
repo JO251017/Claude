@@ -32,6 +32,12 @@ class Offer(Base, TimestampMixin):
     # 계산 당시 이웃 매장 표본 수(region 기준일 때만 의미 있음) — "이웃 2곳"과 "이웃
     # 30곳"을 신뢰도 등급에서 구분하기 위해 굳혀 저장한다. 재동기화 전 구 데이터는 None.
     benchmark_sample_count: Mapped[int | None] = mapped_column(Integer)
+    # 표본을 실제로 모은 반경(km). 3km 안에서 이웃이 모자라면 10km까지 넓혀 잡는데
+    # (price_comparison.BENCHMARK_RADIUS_LADDER_KM), 그걸 "주변"이라고 부르면 사실과
+    # 다르므로 화면 문구를 반경에 따라 갈라야 한다. 그러려면 계산 당시 반경을 굳혀
+    # 둬야 한다 — 검색 시점에는 재계산하지 않기 때문이다. 구 데이터는 None(=문구를
+    # 기존 "주변"으로 유지).
+    benchmark_radius_km: Mapped[float | None] = mapped_column(Numeric(5, 2))
     # 마지막으로 이 오퍼의 벤치마크를 재계산한 시각. updated_at으로는 대체할 수 없다 —
     # 값이 안 바뀌면 SQLAlchemy가 UPDATE 자체를 안 내보내서 updated_at이 안 오르기
     # 때문에, "오래된 것만 재동기화" 같은 판단이 불가능해진다.

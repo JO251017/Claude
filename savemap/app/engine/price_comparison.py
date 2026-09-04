@@ -16,6 +16,18 @@ from app.sources.public_api.dine_out_price import get_regional_price, region_fro
 # 이웃 2곳까지는 비교 가능하다고 판단.
 MIN_RELIABLE_SAMPLE = 2
 
+# 실측 비교 반경 사다리(2026-09-04). 가까운 곳부터 보고, 표본이 모자랄 때만
+# 넓힌다 — 무조건 넓게 잡으면 커버리지는 늘지만 "주변 시세"라는 말이 무의미해진다
+# (10km 밖 매장 가격과 비교해놓고 "주변보다 싸다"고 하면 사실과 다르다).
+#
+# 운영 DB 무작위 400건 표본 실측: 3km에서 31.0%, 10km까지 넓히면 43.3%가 비교
+# 가능했다. 가까운 표본이 있으면 그걸 쓰고, 없을 때만 10km를 쓰되 실제로 쓴
+# 반경을 결과에 남겨서(benchmark_radius_km) 화면 문구가 "주변"인지 "같은 지역"인지
+# 정직하게 갈리게 한다.
+BENCHMARK_RADIUS_LADDER_KM = (3.0, 10.0)
+# 이 값을 넘는 반경으로 잡힌 비교는 "주변"이라 부르지 않는다.
+NEARBY_RADIUS_MAX_KM = 3.0
+
 
 @dataclass
 class MenuPriceComparison:
@@ -41,6 +53,10 @@ class MenuPriceComparison:
     # "gov" 기준일 때 어느 시점 조사분인지 ("2026-07"). 출처를 감춘 채 숫자만
     # 보여주지 않는다는 원칙에 따라 화면까지 그대로 전달한다.
     benchmark_period: str | None = None
+    # "region" 기준일 때 실제로 표본을 모은 반경(km). 3km 안에서 표본이 모자라
+    # 넓혀 잡았으면 그 사실을 화면 문구까지 그대로 전달한다 — 먼 곳 가격과
+    # 비교해놓고 "주변"이라고 말하지 않기 위해서다.
+    benchmark_radius_km: float | None = None
 
 
 def _region_prices_stmt(name: str, lat: float, lng: float, radius_km: float, exclude_place_id: int | None):
@@ -124,11 +140,21 @@ async def _government_stat(session: AsyncSession, menu_item: MenuItem):
 
 
 async def compare_menu_item(
-    session: AsyncSession, menu_item: MenuItem, lat: float, lng: float, radius_km: float = 3.0
+    session: AsyncSession, menu_item: MenuItem, lat: float, lng: float, radius_km: float | None = None
 ) -> MenuPriceComparison:
-    prices = await _region_prices(
-        session, menu_item.name, lat, lng, radius_km, exclude_place_id=menu_item.place_id
-    )
+    """radius_km를 주면 그 반경 하나만 본다(호출부가 명시적으로 정한 경우).
+    안 주면 BENCHMARK_RADIUS_LADDER_KM를 가까운 순서로 올라가며, 표본이
+    MIN_RELIABLE_SAMPLE에 도달하는 첫 반경에서 멈춘다."""
+    ladder = (radius_km,) if radius_km is not None else BENCHMARK_RADIUS_LADDER_KM
+    prices: list[float] = []
+    used_radius_km = ladder[0]
+    for candidate_radius in ladder:
+        prices = await _region_prices(
+            session, menu_item.name, lat, lng, candidate_radius, exclude_place_id=menu_item.place_id
+        )
+        used_radius_km = candidate_radius
+        if len(prices) >= MIN_RELIABLE_SAMPLE:
+            break
     sample_count = len(prices)
     reliable = sample_count >= MIN_RELIABLE_SAMPLE
 
@@ -142,8 +168,10 @@ async def compare_menu_item(
     benchmark_source = None
     benchmark_price = None
     benchmark_period = None
+    benchmark_radius_km = None
     if reliable and region_median is not None:
         benchmark_source, benchmark_price = "region", float(region_median)
+        benchmark_radius_km = used_radius_km
     else:
         gov_stat = await _government_stat(session, menu_item)
         if gov_stat is not None:
@@ -175,4 +203,5 @@ async def compare_menu_item(
         benchmark_source=benchmark_source,
         benchmark_price=benchmark_price,
         benchmark_period=benchmark_period,
+        benchmark_radius_km=benchmark_radius_km,
     )

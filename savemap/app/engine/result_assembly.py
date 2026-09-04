@@ -36,6 +36,7 @@ def build_search_result_item(
         last_verified_at=c.last_verified_at,
         benchmark_source=c.benchmark_source,
         benchmark_sample_count=c.benchmark_sample_count,
+        benchmark_radius_km=c.benchmark_radius_km,
     )
     # AI 활용 확대 안건 D(2026-08-31) — 관리자 배치가 미리 캐시해둔 한 줄 소개가
     # 있으면 그걸 쓰고, 없으면 savings_report.py의 결정론적 템플릿 문구를 그대로

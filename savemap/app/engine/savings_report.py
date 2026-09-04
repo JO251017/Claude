@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from app.engine.price_comparison import NEARBY_RADIUS_MAX_KM
 from app.engine.freshness import FRESHNESS_LABELS, freshness_tier
 
 # SaveMap은 메뉴를 보여주는 서비스가 아니라 "이 매장이 실제로 얼마나 절약되고,
@@ -54,6 +55,18 @@ BENCHMARK_LABELS = {
 
 
 _TIER_LABEL = {"high": "신뢰도 높음", "medium": "신뢰도 보통", "low": "데이터 부족"}
+
+
+def region_scope_label(benchmark_radius_km: float | None) -> str:
+    """실측 비교에 실제로 쓴 반경을 사용자에게 보일 말로 바꾼다(2026-09-04).
+
+    3km 안에서 표본을 못 구하면 10km까지 넓혀서 비교하는데(price_comparison의
+    BENCHMARK_RADIUS_LADDER_KM), 그걸 그대로 "주변"이라고 부르면 사실과 다르다 —
+    10km 밖 매장 가격과 비교해놓고 "주변보다 싸다"고 말하는 셈이다. 반경이
+    넓어졌으면 표현도 같이 넓힌다. 반경을 모르면(구 데이터) 기존 표현을 유지한다."""
+    if benchmark_radius_km is None:
+        return "주변"
+    return "주변" if benchmark_radius_km <= NEARBY_RADIUS_MAX_KM else "같은 지역"
 _TIER_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 # 가격 근거가 약할수록 절약률 점수 기여를 깎는다 — 그동안 AI 추정에서 나온
@@ -139,8 +152,11 @@ def build_savings_report(
     last_verified_at: datetime | None,
     benchmark_source: str | None,
     benchmark_sample_count: int | None = None,
-    region_label: str = "주변",
+    benchmark_radius_km: float | None = None,
+    region_label: str | None = None,
 ) -> SavingsReport:
+    # 호출부가 문구를 직접 지정하지 않으면 실제 비교 반경에서 도출한다.
+    region_label = region_label or region_scope_label(benchmark_radius_km)
     raw_tier = _confidence_tier(dining_count, discover_count, verification_count, recommend_count)
     tier = _cap_tier_for_benchmark(raw_tier, benchmark_source, savings_rate)
     stars = _stars_for(tier, benchmark_source, benchmark_sample_count, dining_count)
@@ -165,9 +181,9 @@ def build_savings_report(
         # 표본 2곳과 30곳을 같은 말("실측 데이터 반영")로 뭉개지 않는다 — 실제
         # 개수를 알면 그만큼 구체적으로, 모르면(재동기화 전 구 데이터) 기존 문구로.
         reasons.append(
-            f"주변 매장 {benchmark_sample_count}곳 실측가와 비교"
+            f"{region_label} 매장 {benchmark_sample_count}곳 실측가와 비교"
             if benchmark_sample_count is not None
-            else "주변 매장 실측 가격 데이터 반영"
+            else f"{region_label} 매장 실측 가격 데이터 반영"
         )
     elif benchmark_source == "gov":
         reasons.append("한국소비자원 참가격 시도 평균가 대비 비교")

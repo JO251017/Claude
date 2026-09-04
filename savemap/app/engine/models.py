@@ -42,6 +42,8 @@ class OfferCandidate:
     # 계산 당시 이웃 매장 표본 수(region 기준일 때만 의미 있음) — 신뢰도 등급이
     # "표본 2곳"과 "표본 30곳"을 구분하는 데 쓴다. 재동기화 전 구 데이터는 None.
     benchmark_sample_count: int | None = None
+    # 실측 비교 반경(km) — 화면 문구를 "주변"/"같은 지역"으로 가르는 데 쓴다.
+    benchmark_radius_km: float | None = None
     place_category_name: str | None = None
     place_kakao_id: str | None = None
     # 전국지역화폐가맹점표준데이터와 매칭돼 검증된 매장인지 — 가격/할인 계산과는

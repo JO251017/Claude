@@ -31,6 +31,9 @@ def build_candidate(offer: Offer, place: Place, distance_m: float) -> OfferCandi
         menu_item_id=offer.menu_item_id,
         benchmark_source=offer.benchmark_source,
         benchmark_sample_count=offer.benchmark_sample_count,
+        benchmark_radius_km=(
+            float(offer.benchmark_radius_km) if offer.benchmark_radius_km is not None else None
+        ),
         accepts_local_currency=place.accepts_local_currency,
         ai_one_line=offer.ai_one_line,
         source=offer.source,

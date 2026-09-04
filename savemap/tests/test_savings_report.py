@@ -236,3 +236,42 @@ def test_stars_are_always_within_the_five_valid_levels():
     for combo in combos:
         r = _strong_signals(**combo)
         assert r.confidence_stars in {0, 2, 3, 4, 5}
+
+
+# --- 실측 비교 반경에 따른 문구 분기(2026-09-04) --- 3km 안에서 이웃이 모자라면
+# 10km까지 넓혀 비교하는데(price_comparison.BENCHMARK_RADIUS_LADDER_KM), 그걸
+# 그대로 "주변"이라고 부르면 사실과 다르다. 커버리지를 넓히되 표현은 정직하게.
+
+
+def test_region_scope_label_splits_by_actual_radius():
+    from app.engine.savings_report import region_scope_label
+
+    assert region_scope_label(3.0) == "주변"
+    assert region_scope_label(10.0) == "같은 지역"
+    # 구 데이터(반경 미기록)는 기존 표현을 유지한다 — 없는 정보를 지어내지 않는다.
+    assert region_scope_label(None) == "주변"
+
+
+def _region_report(radius_km):
+    return build_savings_report(
+        savings_rate=20.0,
+        discover_count=0,
+        dining_count=0,
+        recommend_count=0,
+        verification_count=0,
+        last_verified_at=None,
+        benchmark_source="region",
+        benchmark_sample_count=3,
+        benchmark_radius_km=radius_km,
+    )
+
+
+def test_wide_radius_comparison_is_not_described_as_nearby():
+    wide = _region_report(10.0)
+    assert any("같은 지역 매장 3곳" in r for r in wide.reasons)
+    assert not any("주변 매장 3곳" in r for r in wide.reasons)
+
+
+def test_close_radius_comparison_keeps_nearby_wording():
+    near = _region_report(3.0)
+    assert any("주변 매장 3곳" in r for r in near.reasons)
