@@ -117,6 +117,29 @@
   </div>
   <progress id="synonym-progress" value="0" max="1" hidden></progress>
 
+  <h2>프랜차이즈 매칭 키워드 AI 제안 (커버리지 확대)</h2>
+  <p class="warn">프랜차이즈 브랜드는 상호명 키워드로 매장을 매칭해 공식 가격을
+  붙입니다(franchise_brand.match_keywords). 이 배치는 AI로 간판/지도앱에서 흔히
+  쓰이는 표기 변형(띄어쓰기, 영문 표기, 줄임말 등)을 찾아
+  suggested_match_keywords 컬럼에만 쌓습니다.
+  <b>여기서 자동으로 반영되는 건 없습니다</b> — 제안을 사람이 확인한 뒤
+  실제 match_keywords에 직접 옮겨야 적용됩니다(잘못 넓히면 엉뚱한 매장에
+  그 브랜드의 가격이 붙기 때문에, 동의어 후보보다도 더 보수적으로 다룹니다).</p>
+
+  <label for="franchise-kw-limit">한 번 호출당 훑을 브랜드 개수</label>
+  <input type="number" id="franchise-kw-limit" value="100" min="1" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="franchise-kw-dry-run" />
+    <label for="franchise-kw-dry-run">미리보기만 (dry_run — 찾기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="franchise-kw-run-btn">끝날 때까지 매칭 키워드 제안 탐색</button>
+    <button id="franchise-kw-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="franchise-kw-progress" value="0" max="1" hidden></progress>
+
   <div id="log"></div>
 
 <script>
@@ -429,6 +452,71 @@ async function runSynonymLoop() {
 
 document.getElementById('synonym-run-btn').addEventListener('click', runSynonymLoop);
 document.getElementById('synonym-stop-btn').addEventListener('click', () => { synonymStopRequested = true; });
+
+// --- 프랜차이즈 매칭 키워드 AI 제안(2026-09-04) --- 위 동의어 후보 루프와
+// 완전히 같은 패턴. offset/limit은 "제안 없는 브랜드 개수" 기준.
+let franchiseKwStopRequested = false;
+
+async function callFranchiseKeywordDiscovery(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/discover-franchise-keywords?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runFranchiseKeywordLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('franchise-kw-limit').value, 10) || 100;
+  const dryRun = document.getElementById('franchise-kw-dry-run').checked;
+
+  const runBtn = document.getElementById('franchise-kw-run-btn');
+  const stopBtn = document.getElementById('franchise-kw-stop-btn');
+  const progressEl = document.getElementById('franchise-kw-progress');
+  franchiseKwStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalSuggested = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (franchiseKwStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callFranchiseKeywordDiscovery(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalSuggested += result.suggested;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} suggested=${result.suggested}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} suggested=${totalSuggested}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n검토는 franchise_brand.suggested_match_keywords 컬럼에서 진행합니다(관리자가 직접 확인 후 match_keywords로 옮기세요).');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('franchise-kw-run-btn').addEventListener('click', runFranchiseKeywordLoop);
+document.getElementById('franchise-kw-stop-btn').addEventListener('click', () => { franchiseKwStopRequested = true; });
 </script>
 </body>
 </html>

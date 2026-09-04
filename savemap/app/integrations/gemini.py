@@ -202,6 +202,38 @@ def _menu_synonym_prompt(names: list[str]) -> str:
     )
 
 
+def _franchise_keyword_prompt(brands: list[tuple[str, str | None]]) -> str:
+    """프랜차이즈 브랜드 매칭 키워드 후보 탐색(2026-09-04) — 브랜드 공식명과
+    기존 match_keywords를 주고, 실제 간판/전단에서 흔히 쓰이는 표기 변형
+    (띄어쓰기, 영문 표기, 흔한 줄임말 등)을 추가로 제안해달라고 한다.
+
+    이 결과는 franchise_brand.match_keywords(실제 매칭에 쓰이는 컬럼)에
+    자동 반영되지 않고 suggested_match_keywords(검토 전용 컬럼)에만 쌓인다
+    (app/domain/franchise.py). 브랜드 매칭을 잘못 넓히면 전혀 다른 매장에
+    그 브랜드의 가격이 붙어버리므로, menu_synonym 후보보다도 더 보수적으로
+    다뤄야 한다 — 확신 없는 키워드는 아예 제안하지 말라고 명시한다."""
+    lines = []
+    for i, (name, existing) in enumerate(brands, start=1):
+        known = f" (기존 키워드: {existing})" if existing else ""
+        lines.append(f"{i}. {name}{known}")
+    listed = "\n".join(lines)
+    return (
+        "아래는 한국의 프랜차이즈 브랜드 이름 목록이야. 각 브랜드에 대해, 실제 "
+        "매장 간판이나 지도 앱에 표기될 때 흔히 쓰이는 **표기 변형**을 "
+        "추가로 제안해줘(띄어쓰기 차이, 영문 표기, 흔히 쓰는 줄임말 등).\n"
+        "이미 있는 기존 키워드와 중복되는 건 다시 제안하지 마.\n"
+        "절대 하지 말아야 할 것: 다른 브랜드와 헷갈릴 수 있는 애매한 단어나, "
+        "그 브랜드만의 고유한 표기가 아닌 일반명사는 제안하지 마 "
+        "(예: '커피', '치킨'처럼 흔한 단어는 안 됨). 확신이 없으면 아예 "
+        "포함하지 마 — 후보를 많이 내는 것보다 정확한 것만 내는 게 훨씬 중요해.\n"
+        "반드시 아래 JSON 배열 형식으로만 응답하고 다른 텍스트는 포함하지 마 "
+        "(목록의 번호를 그대로 인덱스로 써서, 브랜드당 최대 3개 키워드):\n"
+        '[{"index": 1, "keywords": ["표기1", "표기2"]}, ...]\n'
+        "제안할 게 없는 브랜드는 목록에서 아예 빼도 돼.\n\n"
+        f"브랜드 목록:\n{listed}\n"
+    )
+
+
 def _route_summary_prompt(
     stops: list[dict],
     budget: float,
@@ -696,6 +728,51 @@ class GeminiVisionClient:
             reason = entry.get("reason")
             results.append((names[vi - 1], names[ci - 1], reason if isinstance(reason, str) else None))
         return results
+
+    async def suggest_franchise_keywords_batch(
+        self, brands: list[tuple[str, str | None]]
+    ) -> dict[int, list[str]]:
+        """브랜드별 매칭 키워드 제안 후보를 찾는다(2026-09-04).
+
+        입력은 (브랜드명, 기존 match_keywords 또는 None) 튜플 리스트.
+        반환은 {입력 인덱스: [제안 키워드, ...]} — 응답에서 인덱스가 범위를
+        벗어나거나 keywords가 비었거나 형식이 이상한 항목은 버린다.
+
+        suggest_menu_synonyms_batch와 같은 이유로 여기서 최종 승인까지
+        하지 않는다: 브랜드 매칭을 잘못 넓히면 엉뚱한 매장에 그 브랜드의
+        가격이 그대로 붙어버려서, 사람이 검토해야만 하는 위험도가 더 높다.
+        호출부(discovery 배치)는 이 결과를 suggested_match_keywords 컬럼에만
+        쌓고, match_keywords(실제 매칭 컬럼)는 절대 건드리지 않는다.
+
+        fail-soft: 호출 자체가 실패하거나 응답이 이상하면 빈 dict."""
+        if not brands:
+            return {}
+        try:
+            raw_text = await self._ask_text(_franchise_keyword_prompt(brands))
+        except (OcrServiceError, ReportImageFetchError):
+            return {}
+        try:
+            parsed = json.loads(_strip_array_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return {}
+        if not isinstance(parsed, list):
+            return {}
+
+        result: dict[int, list[str]] = {}
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            index = entry.get("index")
+            keywords = entry.get("keywords")
+            if not isinstance(index, int) or not 1 <= index <= len(brands):
+                continue
+            if not isinstance(keywords, list):
+                continue
+            cleaned = [k.strip() for k in keywords if isinstance(k, str) and k.strip()]
+            if not cleaned:
+                continue
+            result[index - 1] = cleaned[:3]
+        return result
 
     async def summarize_route(
         self,

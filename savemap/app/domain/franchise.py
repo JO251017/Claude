@@ -20,6 +20,13 @@ class FranchiseBrand(Base, TimestampMixin):
     # 상호명 표기 흔들림을 흡수하기 위한 키워드 목록(파이프 구분: "스타벅스|starbucks").
     # 비워두면 브랜드명 자체를 키워드로 쓴다.
     match_keywords: Mapped[str | None] = mapped_column(String(512))
+    # AI 매칭 키워드 제안(2026-09-04, 파이프 구분) — match_keywords와 별개
+    # 컬럼이다: 여기에 뭐가 들어와도 실제 상호명 매칭(franchise_price.
+    # matches_brand)에는 전혀 쓰이지 않는다. 브랜드 매칭이 잘못되면 엉뚱한
+    # 매장에 엉뚱한 가격이 붙는다 — 동의어 후보(menu_synonym_candidate)보다도
+    # 더 위험해서, 사람이 검토해 직접 match_keywords로 옮겨야만 실제로
+    # 적용된다.
+    suggested_match_keywords: Mapped[str | None] = mapped_column(String(512))
     # 본사 공식 가격 안내 페이지. 가격의 출처를 밝히기 위해 저장하고, 생성되는
     # MenuItem.source_url에 그대로 넣는다 — 어디서 온 값인지 추적할 수 없는 가격은
     # 이 프로젝트에서 쓰지 않는다.

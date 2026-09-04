@@ -595,6 +595,68 @@ def test_synonym_batch_single_name_makes_no_api_call():
     assert called["n"] == 0
 
 
+# --- 프랜차이즈 매칭 키워드 제안 배치(2026-09-04) --- AI가 브랜드별 표기
+# 변형을 찾아주는 기능. 인덱스가 어긋나면 엉뚱한 브랜드에 키워드가 붙는다 —
+# 브랜드 매칭이 넓어지면 엉뚱한 매장에 그 브랜드 가격이 붙어버리므로 특히
+# 보수적으로 검증해야 한다.
+
+
+def test_franchise_keyword_batch_maps_index_back_to_brand():
+    body = '[{"index": 2, "keywords": ["이디야커피", "ediya"]}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(
+            _client().suggest_franchise_keywords_batch([("스타벅스", None), ("이디야", None)])
+        )
+    assert got == {1: ["이디야커피", "ediya"]}
+
+
+def test_franchise_keyword_batch_drops_out_of_range_index():
+    body = (
+        '[{"index": 9, "keywords": ["범위밖"]}, {"index": 1, "keywords": ["starbucks"]}]'
+    )
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().suggest_franchise_keywords_batch([("스타벅스", None)]))
+    assert got == {0: ["starbucks"]}
+
+
+def test_franchise_keyword_batch_drops_empty_keyword_list():
+    body = '[{"index": 1, "keywords": []}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().suggest_franchise_keywords_batch([("스타벅스", None)]))
+    assert got == {}
+
+
+def test_franchise_keyword_batch_caps_at_three_and_strips_blanks():
+    body = '[{"index": 1, "keywords": ["a", "  ", "b", "c", "d"]}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().suggest_franchise_keywords_batch([("스타벅스", None)]))
+    assert got == {0: ["a", "b", "c"]}
+
+
+def test_franchise_keyword_batch_empty_result_is_fine():
+    with patch("httpx.AsyncClient.post", new=_batch_response("[]")):
+        got = asyncio.run(_client().suggest_franchise_keywords_batch([("스타벅스", None)]))
+    assert got == {}
+
+
+def test_franchise_keyword_batch_bad_json_returns_empty_instead_of_raising():
+    with patch("httpx.AsyncClient.post", new=_batch_response("음... 잘 모르겠어요")):
+        got = asyncio.run(_client().suggest_franchise_keywords_batch([("스타벅스", None)]))
+    assert got == {}
+
+
+def test_franchise_keyword_batch_empty_input_makes_no_api_call():
+    called = {"n": 0}
+
+    async def counting_post(self, url, **kwargs):  # pragma: no cover - 불리면 안 됨
+        called["n"] += 1
+        raise AssertionError("빈 입력으로 API를 부르면 안 된다")
+
+    with patch("httpx.AsyncClient.post", new=counting_post):
+        assert asyncio.run(_client().suggest_franchise_keywords_batch([])) == {}
+    assert called["n"] == 0
+
+
 # --- 제보 사진 품질 사전 신호(2026-09-04) --- extract_from_image 응답에
 # looks_usable/quality_note를 얹어서, 관련 없거나 흐린 사진을 제출 전에
 # 부드럽게 알려줄 수 있게 한다. **차단은 아니다** — 이 신호로 제보를 막지

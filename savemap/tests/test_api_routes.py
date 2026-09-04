@@ -229,6 +229,14 @@ def test_admin_discover_menu_synonyms_rejects_without_key_before_touching_db(cli
     assert resp.status_code == 401
 
 
+def test_admin_discover_franchise_keywords_rejects_without_key_before_touching_db(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/maintenance/discover-franchise-keywords")
+    assert resp.status_code == 401
+
+
 def test_admin_local_currency_endpoints_reject_without_key(client, monkeypatch):
     from app.core.config import settings
 

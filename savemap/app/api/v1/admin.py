@@ -64,6 +64,7 @@ from app.sources.public_api.local_currency import (
 )
 from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
+from app.engine.franchise_keyword_discovery import discover_franchise_keywords
 from app.engine.menu_synonym_discovery import discover_menu_synonym_candidates
 from app.engine.offer_blurb_backfill import backfill_offer_blurbs
 from app.engine.typical_price_backfill import backfill_typical_prices
@@ -423,6 +424,23 @@ async def discover_menu_synonyms_endpoint(
     app/engine/menu_name.py를 직접 고쳐 커밋해야 실제로 적용된다. 이 배치는
     "검토할 후보를 모으는" 역할까지만 한다."""
     return await discover_menu_synonym_candidates(session, offset=offset, limit=limit, dry_run=dry_run)
+
+
+@router.post("/maintenance/discover-franchise-keywords")
+async def discover_franchise_keywords_endpoint(
+    offset: int = Query(default=0, ge=0, description="탐색 대상 브랜드 목록 기준 몇 번째부터"),
+    limit: int = Query(default=100, ge=1, le=500, description="한 번에 훑을 브랜드 개수"),
+    dry_run: bool = Query(default=False, description="true면 제안을 찾기만 하고 저장하지 않음"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """AI 기능 확대(2026-09-04) — 프랜차이즈 브랜드의 상호명 매칭 키워드
+    변형(띄어쓰기/영문 표기/줄임말)을 AI로 찾아 franchise_brand.
+    suggested_match_keywords 컬럼에 쌓는다. **여기서 실제 매칭 컬럼
+    (match_keywords)에 자동 반영되는 건 하나도 없다** — 브랜드 매칭이
+    잘못 넓혀지면 엉뚱한 매장에 그 브랜드의 공식 가격이 그대로 붙어버리므로,
+    제안은 사람이 검토한 뒤 match_keywords에 직접 옮겨야 실제로 적용된다."""
+    return await discover_franchise_keywords(session, offset=offset, limit=limit, dry_run=dry_run)
 
 
 @router.get("/places/stats")
