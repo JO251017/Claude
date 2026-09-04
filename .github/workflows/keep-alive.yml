@@ -1,0 +1,36 @@
+name: Keep Supabase/Render alive
+
+# Supabase 무료 플랜은 7일간 활동이 없으면 프로젝트를 일시정지한다. 살아있는 배포된
+# API(/health/deps)를 주기적으로 호출해서 실제 DB 쿼리(SELECT 1)가 발생하게 하면
+# 그게 곧 "사용 흔적"이 되어 정지를 막는다 — 비밀키 없이, 이미 공개된 헬스체크
+# 엔드포인트만으로 충분하다. Render 무료 웹서비스도 15분 무활동 후 슬립하므로,
+# 이 호출 자체가 깨우는 역할도 겸한다.
+#
+# schedule 트리거는 GitHub이 "기본 브랜치"에 있는 워크플로만 실행한다 — 이 브랜치가
+# 머지되기 전까지는 예약 실행되지 않는다. 그 전까지는 workflow_dispatch로 수동
+# 실행해서 같은 효과를 낼 수 있다.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1,4" # 매주 월/목 03:00 UTC — 7일 정지 기준보다 여유 있게
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping live API health check (wakes Render + queries Supabase)
+        run: |
+          set -e
+          echo "1) /health 호출 (Render 슬립 상태면 깨우는 용도, 실패해도 계속 진행)"
+          curl -sS --retry 3 --retry-delay 5 --max-time 60 \
+            "https://savemap-api.onrender.com/health" || true
+
+          echo "2) /health/deps 호출 (실제 DB SELECT 1 — 이게 Supabase 사용 흔적)"
+          response=$(curl -sS --retry 5 --retry-delay 15 --max-time 90 \
+            "https://savemap-api.onrender.com/health/deps")
+          echo "응답: $response"
+
+          echo "$response" | grep -q '"db": *"ok"' \
+            && echo "DB 연결 정상 — 사용 흔적 남김" \
+            || (echo "::warning::DB 상태가 ok가 아님 — 응답 확인 필요" && exit 1)

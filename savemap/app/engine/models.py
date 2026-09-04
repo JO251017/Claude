@@ -1,0 +1,60 @@
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from app.domain.enums import Category, Layer, PaymentMethodType, SourceType
+
+
+@dataclass
+class PaymentBenefit:
+    method_type: PaymentMethodType
+    rate: float = 0.0
+    amount: float = 0.0
+
+
+@dataclass
+class OfferCandidate:
+    offer_id: int
+    place_id: int
+    place_name: str
+    category: Category
+    layer: Layer
+    distance_m: float
+    base_price: float
+    lat: float
+    lng: float
+    store_discount: float = 0.0
+    payment_benefits: list[PaymentBenefit] = field(default_factory=list)
+    expires_at: datetime | None = None
+    trust_score: float = 0.5
+    verification_count: int = 0
+    last_verified_at: datetime | None = None
+    place_address: str | None = None
+    place_phone: str | None = None
+    discover_count: int = 0
+    dining_count: int = 0
+    recommend_count: int = 0
+    title: str | None = None
+    menu_item_id: int | None = None
+    # 절약액이 무엇과 비교해 나온 값인지("region"/"gov"/"ai"/None) — Offer에서 그대로
+    # 가져온다. AI 절약 리포트가 "실측 데이터 반영"을 AI 추정과 섞어서 말하지 않도록
+    # 검색 응답까지 그대로 들고 간다.
+    benchmark_source: str | None = None
+    # 계산 당시 이웃 매장 표본 수(region 기준일 때만 의미 있음) — 신뢰도 등급이
+    # "표본 2곳"과 "표본 30곳"을 구분하는 데 쓴다. 재동기화 전 구 데이터는 None.
+    benchmark_sample_count: int | None = None
+    # 실측 비교 반경(km) — 화면 문구를 "주변"/"같은 지역"으로 가르는 데 쓴다.
+    benchmark_radius_km: float | None = None
+    place_category_name: str | None = None
+    place_kakao_id: str | None = None
+    # 전국지역화폐가맹점표준데이터와 매칭돼 검증된 매장인지 — 가격/할인 계산과는
+    # 무관하다(이 데이터엔 금액이 없다). 검색 결과에 정보성 배지로만 노출된다.
+    accepts_local_currency: bool = False
+    # AI 활용 확대 안건 D(2026-08-31) — 관리자 배치가 미리 생성해 캐시해둔 매장
+    # 카드 한 줄 소개. Offer.ai_one_line을 그대로 옮긴다. None이면
+    # result_assembly.py가 savings_report.py의 결정론적 템플릿 문구로 폴백한다.
+    ai_one_line: str | None = None
+    # 데이터 품질 축(2026-09-01, §24~25) — "누가/무엇이 이 오퍼를 만들었는지"
+    # (S1_PUBLIC~S6_AI_DISCOVERY_WEB). benchmark_source("무엇과 비교했는지")와는
+    # 다른 축이다. Offer.source를 그대로 옮겨, ranker가 내부 신뢰도 보정에만
+    # 쓴다(사용자에게 숫자로 노출하지 않음).
+    source: SourceType | None = None

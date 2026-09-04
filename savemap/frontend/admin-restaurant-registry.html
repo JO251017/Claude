@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>쓸모 관리자 - 음식점/카페/술집 인허가 데이터 가져오기</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=text], select, textarea { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  .cats { display: flex; gap: 16px; margin-top: 6px; }
+  .cats label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 420px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+  <h1>음식점/카페/술집 인허가 데이터 가져오기</h1>
+  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용). 가격 정보는 없는 데이터라 위치·상호명만 저장됩니다.</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label>가져올 업종</label>
+  <div class="cats">
+    <label><input type="checkbox" class="cat-box" value="일반음식점" checked /> 일반음식점</label>
+    <label><input type="checkbox" class="cat-box" value="휴게음식점" checked /> 휴게음식점(카페)</label>
+    <label><input type="checkbox" class="cat-box" value="유흥주점" /> 유흥주점</label>
+  </div>
+
+  <label for="regions">지역 (한 줄에 하나, 도로명주소에 포함될 문자열 — 예: 평택시)</label>
+  <textarea id="regions" rows="4" placeholder="평택시">평택시</textarea>
+
+  <div>
+    <button id="run-btn">실제로 가져오기 시작</button>
+    <button id="verify-btn" style="background:#475569;">DB에 실제로 저장됐는지 확인</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+const PER_PAGE = 100; // API 상한
+
+async function callSync(category, region, page, key) {
+  const params = new URLSearchParams({ category, region, page: String(page), per_page: String(PER_PAGE) });
+  const resp = await fetch(`/v1/admin/sync/restaurant-registry?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'X-Admin-Key': key },
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+async function runAll() {
+  // 키는 시작할 때 한 번만 읽어서 끝까지 재사용한다 — 매 요청마다 새로 읽으면
+  // 긴 작업 도중 중간부터 401이 나는 문제가 있었다 (착한가격업소 임포트에서 겪음).
+  const key = document.getElementById('key').value;
+  if (!key) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+
+  const categories = Array.from(document.querySelectorAll('.cat-box:checked')).map((el) => el.value);
+  if (categories.length === 0) { alert('업종을 하나 이상 선택해주세요.'); return; }
+
+  const regionsRaw = document.getElementById('regions').value.trim();
+  const regions = regionsRaw.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (regions.length === 0) { alert('지역을 하나 이상 입력해주세요.'); return; }
+
+  document.getElementById('run-btn').disabled = true;
+  logEl.textContent = '';
+  log(`시작: 업종 ${categories.length}개 × 지역 ${regions.length}개`);
+
+  const totals = { fetched_rows: 0, parsed_rows: 0, geocoded: 0, places_created: 0, places_skipped_existing: 0, failed_rows: 0 };
+  outer:
+  for (const category of categories) {
+    for (const region of regions) {
+      log(`\n▶ [${category}] ${region} 처리 중...`);
+      let page = 1;
+      let hasMore = true;
+      let consecutiveFailures = 0;
+      while (hasMore) {
+        try {
+          const result = await callSync(category, region, page, key);
+          log(`  [${page}페이지] ${JSON.stringify(result)}`);
+          consecutiveFailures = 0;
+          for (const k of Object.keys(totals)) {
+            if (typeof result[k] === 'number') totals[k] += result[k];
+          }
+          hasMore = !!result.has_more;
+          page++;
+        } catch (err) {
+          log(`오류: ${err.message}`);
+          if (err.message.includes('HTTP 401')) {
+            log('\n키 인증 실패라 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
+            break outer;
+          }
+          consecutiveFailures++;
+          // 연달아 3번 실패하면 API 설정 자체가 잘못됐을 가능성이 높다(필드명/키 오류 등) —
+          // 그런 경우 계속 재시도해봐야 매번 똑같이 실패하면서 API 호출 한도만 낭비하므로,
+          // 페이지 500까지 무의미하게 도는 대신 이 구간을 바로 포기하고 사용자가 원인을
+          // 확인하게 한다 (실제로 겪은 문제: 잘못된 필드명으로 280페이지 이상 전부 실패).
+          if (consecutiveFailures >= 3) {
+            log(`  같은 구간에서 ${consecutiveFailures}번 연속 실패 — API 설정 문제일 가능성이 높아 이 구간을 중단합니다. (다음 지역/업종으로 넘어갑니다)`);
+            break;
+          }
+          log(`  이 페이지(${page})는 건너뛰고 다음으로 계속합니다...`);
+          page++;
+          if (page > 500) { log('  페이지가 너무 많아 이 구간은 중단합니다.'); break; }
+        }
+      }
+    }
+  }
+  log(`\n=== 전체 합계 ===\n${JSON.stringify(totals, null, 2)}`);
+
+  document.getElementById('run-btn').disabled = false;
+}
+
+document.getElementById('run-btn').addEventListener('click', () => {
+  if (confirm('실제로 DB에 저장합니다. 계속할까요?')) runAll();
+});
+
+async function verifyStored() {
+  const key = document.getElementById('key').value;
+  if (!key) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+  // 지역 칸의 첫 줄만 필터로 쓴다 — 여러 지역을 한 번에 돌렸어도 대표로 하나만 확인.
+  const region = document.getElementById('regions').value.trim().split('\n')[0]?.trim() || '';
+
+  logEl.textContent = '';
+  log(`DB 확인 중... (지역 필터: ${region || '전체'})`);
+  try {
+    const params = new URLSearchParams(region ? { region } : {});
+    const resp = await fetch(`/v1/admin/places/stats?${params.toString()}`, {
+      headers: { 'X-Admin-Key': key },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+    log(`\n총 저장된 Place 수: ${data.total_places}건`);
+    log(`\n업종별 분포:\n${JSON.stringify(data.by_category, null, 2)}`);
+    log(`\n최근 생성된 샘플 5건:\n${JSON.stringify(data.recent_samples, null, 2)}`);
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+}
+
+document.getElementById('verify-btn').addEventListener('click', verifyStored);
+</script>
+</body>
+</html>

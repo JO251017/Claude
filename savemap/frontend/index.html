@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <!-- 사용자 노출 브랜드명(2026-08-31, "쓸모" 브랜드 전환) — 내부 기술 식별자
+       (SAVEMAP_CONFIG, localStorage 키, DB/celery/서비스명 등)는 그대로 두고
+       title/description처럼 사람이 실제로 보는 문구만 바꾼다. -->
+  <title>쓸모 | 내 주변의 절약 기회</title>
+  <meta name="description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <meta property="og:title" content="쓸모 | 내 주변의 절약 기회" />
+  <meta property="og:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="쓸모 | 내 주변의 절약 기회" />
+  <meta name="twitter:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
+  <link rel="stylesheet" href="style.css?v=20260904a" />
+  <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- MAP: 어디서 아낄 수 있는가 -->
+    <section id="screen-map" class="screen active">
+      <div id="map" class="map-fullscreen"></div>
+
+      <!-- 날씨 다이나믹 이펙트(2026-08-28, 사용자 지시 — "포켓몬고는 맵에 비가
+           내리던데 그렇게 해봐"). 지도 위에 겹치는 레이어 2개 — 틴트(하늘 어두워지는
+           느낌)와 캔버스(빗줄기/눈 파티클). 둘 다 pointer-events:none이라 지도
+           드래그/클릭을 절대 막지 않는다. weather가 rain/snow가 아니면(맑음/조회
+           실패/키 미설정) app.js가 그대로 꺼둔다. -->
+      <div class="weather-fx-tint" id="weather-fx-tint"></div>
+      <canvas class="weather-fx-canvas" id="weather-fx-canvas"></canvas>
+
+      <div class="floating-topbar">
+        <div class="topbar-row">
+          <!-- SaveMap 로고 pill 삭제, 그 자리에 주소 검색을 배치(1번 항목, 2026-08-13).
+               "내 위치" 아이콘 버튼도 이 안으로 통합해서 좌상단 자리 다툼을 없앴다
+               (사용자 확정: "내 위치를 검색창 안 아이콘 버튼으로 통합"). -->
+          <div class="address-search-pill glass">
+            <button type="button" id="use-location-btn" class="address-search-locate-btn" aria-label="내 위치로 찾기" title="내 위치로 찾기">
+              <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+              <span id="use-location-label" class="sr-only">내 위치</span>
+            </button>
+            <input type="text" id="address-search-input" class="address-search-input" placeholder="주소로 찾기" enterkeyhint="search" />
+          </div>
+          <!-- 기존엔 아래쪽에 큰 배너 카드였던 AI 절약 플랜 진입 버튼을 오른쪽 끝단
+               작은 알약형 버튼으로 옮김 — 아이콘 없이 텍스트만(사용자 지시,
+               2026-08-13). topbar-row가 justify-content:space-between이라
+               xp-badge(RPG, 현재 hidden)가 없는 지금은 이 버튼이 자동으로 오른쪽
+               끝에 붙는다. 클릭 동작(openRoutePlanSheet)은 그대로다. -->
+          <button type="button" id="ai-route-cta" class="brand-pill glass ai-recommend-pill">AI 추천</button>
+          <!-- 제보 진입점(2026-08-18, "제보/인증 마찰 줄이기") — 예전엔 이 폼 자체가
+               hidden 처리된 COMMUNITY 탭 안에만 있어서 사용자가 아예 접근할 방법이
+               없었다(#report-overlay로 옮기면서 COMMUNITY의 report-capture/confirm
+               마크업은 제거함, 아래 참고). 지도 어디서든 바로 새 절약 정보를 올릴 수
+               있게 여기 노출한다. -->
+          <button type="button" id="report-fab-btn" class="report-fab-btn glass" aria-label="절약 정보 제보하기" title="절약 정보 제보하기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </button>
+          <!-- RPG 요소(레벨/칭호) 잠시 비활성화 — 기본 베이스 구조 완성 후 다시 켠다
+               (사용자 지시, 2026-08-12). hidden만 떼면 바로 복구된다. -->
+          <div class="xp-badge glass hidden" id="savings-badge">
+            <div class="xp-ring" id="savings-ring">
+              <div class="xp-ring-inner" id="savings-level">Lv.1</div>
+            </div>
+            <div class="xp-text">
+              <span class="xp-title" id="savings-title">절약 초보</span>
+              <span class="xp-sub" id="savings-sub">₩0 절약</span>
+            </div>
+          </div>
+        </div>
+        <p id="address-search-error" class="address-search-error hidden"></p>
+      </div>
+
+      <!-- 거리 반경을 드롭다운으로 고르는 대신, 손가락으로 지도를 줌인/줌아웃하면
+           그 줌 레벨에 맞는 반경(km)을 지도 옆에 계속 보여준다(7번 항목,
+           2026-08-13). zoom_changed에서 값을 갱신한다. -->
+      <div class="zoom-radius-badge" id="zoom-radius-badge">🔍 3km</div>
+      <!-- 날씨 기반 추천(2026-08-27, 사용자 지시 — 기상청 초단기실황). 검색 응답에
+           weather가 없으면(키 미설정/조회 실패) hidden 유지 — 지어낸 날씨를 보여주지
+           않는다. -->
+      <div class="weather-badge hidden" id="weather-badge"></div>
+
+      <button type="button" id="research-btn" class="research-btn hidden">
+        <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L21 9"/><path d="M21 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L3 15"/><path d="M3 20v-5h5"/></svg></span>
+        이 지역에서 재검색
+      </button>
+
+      <input type="hidden" id="s-lat" value="36.9925" />
+      <input type="hidden" id="s-lng" value="127.1130" />
+
+      <div class="bottom-sheet" id="bottom-sheet">
+        <button type="button" class="sheet-handle-btn" id="sheet-toggle" aria-label="목록 펼치기/접기">
+          <span class="sheet-handle"></span>
+          <span id="sheet-count" class="sheet-count">주변 절약 기회를 찾는 중...</span>
+        </button>
+        <div id="search-results" class="sheet-body"></div>
+      </div>
+
+      <!-- 절약 정보 상세 (예상 절약 확인 + 절약 인증) -->
+      <div id="offer-detail-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="detail-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="detail-content"></div>
+        </div>
+      </div>
+
+      <!-- AI 절약 플랜: 예산을 넣으면 실제 후보 중에서 예산 안에 드는 코스를 짜서
+           "오늘 이 코스로 총 OO원 절약"을 구체적으로 보여준다. -->
+      <div id="route-plan-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="route-plan-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="route-plan-content"></div>
+        </div>
+      </div>
+
+      <!-- 절약 정보 제보(2026-08-18) — COMMUNITY 탭(hidden)에 갇혀 있던 폼을
+           그대로 옮겨왔다(같은 id, 같은 JS 로직). 사진 한 장 → AI가 가격/카테고리/
+           장소명을 자동으로 채워주고, 사용자가 확인 후 등록하면 즉시 실제
+           Place/Offer로 지도에 뜬다(ReportPipeline.ingest, source=S4_REPORT) —
+           예전엔 등록해도 지도에 영원히 안 뜨는 죽은 기능이었다. -->
+      <div id="report-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="report-overlay-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <h1 class="report-overlay-title">절약 정보 제보</h1>
+          <p class="subtitle">사진 한 장이면 AI가 가격·장소를 자동으로 채워드려요. 등록하는 즉시 지도에 반영돼요.</p>
+
+          <div id="report-capture" class="card-form">
+            <label for="r-photo-input" class="photo-capture-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a1 1 0 0 0 .86-.5l.6-1a1 1 0 0 1 .86-.5h4.96a1 1 0 0 1 .86.5l.6 1a1 1 0 0 0 .86.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>사진 찍기 / 갤러리에서 선택</span>
+            </label>
+            <input type="file" id="r-photo-input" accept="image/*" capture="environment" class="hidden" />
+            <div id="report-capture-status" class="subtitle"></div>
+          </div>
+
+          <div id="report-confirm" class="card-form hidden">
+            <img id="report-preview-img" class="report-preview-img" alt="제보 사진 미리보기" />
+            <!-- 사진 품질 사전 신호(2026-09-04) — AI가 "영수증/메뉴판/가격표로
+                 보기 어렵다"고 판단했을 때만 뜨는 부드러운 안내. 제출을 막지
+                 않는다 — 그냥 등록해도 된다(analyzeReportPhoto 참고). -->
+            <p id="report-quality-hint" class="warn-msg hidden"></p>
+            <div class="form-group">
+              <label for="r-place-name">장소명</label>
+              <input type="text" id="r-place-name" placeholder="예: 늘푸른정육점" required />
+            </div>
+            <div class="form-group">
+              <label for="r-title">혜택 내용</label>
+              <input type="text" id="r-title" placeholder="예: 삼겹살 20% 할인" required />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="r-price">할인가/실제 가격 (원, 선택)</label>
+                <input type="text" id="r-price" />
+              </div>
+              <div class="form-group">
+                <label for="r-regular-price">정가 (원, 선택)</label>
+                <input type="text" id="r-regular-price" />
+              </div>
+            </div>
+            <!-- 정가를 알면 절약액을 실제로 계산해서 보여줄 수 있다는 걸 미리
+                 알려준다 — 왜 이 필드가 따로 있는지 설명 없이는 "할인 가격"과
+                 헷갈리기 쉽다. -->
+            <p class="subtitle report-price-hint">정가를 알려주시면 절약액을 계산해서 보여드려요. 몰라도 등록은 가능해요.</p>
+            <div class="form-group">
+              <label for="r-category">카테고리</label>
+              <select id="r-category">
+                <option value="">AI 추정</option>
+                <option value="free">무료</option>
+                <option value="discount">할인</option>
+                <option value="closing_soon">마감임박</option>
+                <option value="free_parking">무료주차</option>
+                <option value="local_benefit">지역혜택</option>
+              </select>
+            </div>
+            <p class="subtitle" id="report-location-status">현재 위치 자동 설정</p>
+            <div class="form-row">
+              <button type="button" id="report-cancel-btn" class="btn-secondary">다시 찍기</button>
+              <button type="button" id="report-confirm-btn" class="btn-primary">등록하기</button>
+            </div>
+          </div>
+
+          <div id="report-result"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXCHANGE: 절약 자산 교환 — SaveMap 구조 재설계 제안서 §07에 따라 재도입
+         (사용자 지시, 2026-08-13). offer_id/place_id FK 연결(마이그레이션 0014) +
+         오퍼 상세 "저장하기" 버튼으로 발견→저장 흐름만 연결했다. 실제 사용자 간
+         거래(교환 요청)는 계속 범위 밖 — assetCard()의 "교환 요청 (준비 중)"
+         버튼은 그대로 비활성 유지. 다시 hidden 처리(사용자 지시, 2026-08-18) —
+         백엔드/API/데이터는 그대로 두고 화면 노출만 COMMUNITY와 같은 패턴으로
+         닫는다. -->
+    <section id="screen-exchange" class="screen hidden">
+      <header class="screen-header">
+        <h1>절약 교환소</h1>
+        <p class="subtitle">내가 사용하지 않는 절약 기회를 다른 사람이 필요한 절약 기회로 바꿔보세요.</p>
+      </header>
+      <div class="screen-body">
+        <div id="exchange-login" class="card-form">
+          <p class="subtitle">내 절약 자산을 등록하려면 로그인이 필요해요. 둘러보는 건 로그인 없이도 가능합니다.</p>
+          <button type="button" class="btn-primary" data-goto="my">MY에서 로그인하기</button>
+        </div>
+
+        <div id="exchange-authed" class="hidden">
+          <div class="stats-grid">
+            <div class="stat-tile"><span id="exchange-my-count">0</span><label>보유 자산</label></div>
+            <div class="stat-tile"><span id="exchange-my-value">₩0</span><label>예상 절약 가치</label></div>
+          </div>
+
+          <h2>내 절약 자산 등록</h2>
+          <form id="asset-form" class="card-form">
+            <div class="form-group">
+              <label for="a-category">카테고리</label>
+              <select id="a-category">
+                <option value="cafe">카페</option>
+                <option value="food">음식</option>
+                <option value="shopping">쇼핑</option>
+                <option value="transport">교통</option>
+                <option value="culture">문화</option>
+                <option value="etc">기타</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="a-title">자산명</label>
+              <input type="text" id="a-title" placeholder="예: 아메리카노 쿠폰" required />
+            </div>
+            <div class="form-group">
+              <label for="a-condition">사용 조건 (선택)</label>
+              <input type="text" id="a-condition" placeholder="예: 아메리카노 1잔" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="a-value">예상 절약 가치 (원)</label>
+                <input type="text" id="a-value" placeholder="4500" />
+              </div>
+              <div class="form-group">
+                <label for="a-expires">사용 기한 (선택)</label>
+                <input type="date" id="a-expires" />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">등록하기</button>
+          </form>
+
+          <div class="list-section-header">
+            <h2>내 절약 자산</h2>
+            <button type="button" id="load-my-assets-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="my-assets-list"></div>
+        </div>
+
+        <div class="list-section-header">
+          <h2>교환 가능한 절약 자산</h2>
+          <button type="button" id="load-assets-btn" class="btn-text">새로고침</button>
+        </div>
+        <div id="assets-list"></div>
+      </div>
+    </section>
+
+    <!-- MY: 나는 얼마나 아꼈는가 -->
+    <section id="screen-my" class="screen">
+      <header class="screen-header">
+        <h1>MY</h1>
+        <p class="subtitle">나만의 절약 탐험가</p>
+      </header>
+      <div class="screen-body">
+        <div id="my-login" class="card-form">
+          <p class="subtitle" id="auth-mode-label">로그인하고 나만의 절약 탐험가를 시작하세요.</p>
+          <div class="form-group">
+            <label for="auth-email">이메일</label>
+            <input type="email" id="auth-email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="auth-password">비밀번호</label>
+            <input type="password" id="auth-password" autocomplete="current-password" minlength="6" required />
+          </div>
+          <div class="form-row">
+            <button type="button" id="auth-login-btn" class="btn-primary">로그인</button>
+            <button type="button" id="auth-signup-btn" class="btn-secondary">회원가입</button>
+          </div>
+          <div id="auth-msg"></div>
+        </div>
+
+        <div id="my-authed" class="hidden">
+          <div class="list-section-header">
+            <span id="auth-user-email" class="subtitle"></span>
+            <button type="button" id="auth-logout-btn" class="btn-text">로그아웃</button>
+          </div>
+
+          <!-- 아바타(다마고치식 성장, 2-4, 2026-08-13) — 예전엔 절약금액 레벨 기반
+               RPG 블록이었고 기본 베이스 완성 전까지 hidden이었다. 사용자 지시:
+               "다마고치 키우기 같은 형식 — 맵에서 가게 인증이나 추천기능을 통해
+               아바타가 성장하는 구조". 이제 발견/방문/추천(칭호 3종, 2-2)의 실제
+               누적 카운트 합계로 성장 단계가 정해진다 — 지어낸 별도 점수 없음.
+               hidden을 떼고 노출한다. -->
+          <div class="character-card glass">
+            <div class="character-rpg-block">
+              <!-- 원형 테두리/링 제거하고 자유롭게 돌아다니게(사용자 지시,
+                   2026-08-18) — 이전엔 원형 배경(.character-avatar)과 그 둘레의
+                   성장 링(conic-gradient)이 캐릭터를 가둔 모양이었다. 이제
+                   .character-stage가 캐릭터가 좌우로 걸어다니는 "무대"고,
+                   #character-avatar는 그 안에서 position:absolute + left로
+                   위치가 바뀐다(roamAvatarToRandomSpot(), app.js — 잠깐
+                   없앴다가 "돌아다녀도 되는데 움직임을 자연스럽게" 정정을
+                   받아 되살렸다, 2026-08-27). 성장 진행도는 더 이상 링이
+                   아니라 아래 saving-bar 하나로만 보여준다. -->
+              <div class="character-stage" id="character-stage">
+                <div class="avatar-title-badge" id="my-title">씨앗</div>
+                <!-- 연속 방문 스트릭(2026-08-30, "재미 개선 — 연속 방문 스트릭",
+                     "절약활동을 통해 펫을 키우는 재미를 연결시켜") — 발견/인증/
+                     추천 중 하나라도 한 날을 "활동한 날"로 센다. streak_days가
+                     0이면(아직 한 번도 스트릭이 없음) 숨긴다 — 없는 걸 0일로
+                     보여주면 오히려 초라해 보인다. -->
+                <div class="avatar-streak-badge hidden" id="avatar-streak-badge"></div>
+                <!-- 무대 꾸미기(2026-08-27: "아바타 있는 공간을 강아지 용품들로
+                     채워") — 실제 동선(roamAvatarToRandomSpot)이나 클릭을
+                     방해하면 안 되므로 전부 pointer-events:none, 구석에 고정
+                     배치. 아바타보다 먼저 그려서(DOM 순서) 항상 아바타가
+                     소품들 앞으로 지나간다. -->
+                <div class="stage-prop stage-prop--bowl" aria-hidden="true">
+                  <svg viewBox="0 0 28 20">
+                    <ellipse cx="14" cy="14" rx="12" ry="5" fill="#c9d0d8" stroke="#2b2119" stroke-width="1.6"/>
+                    <ellipse cx="14" cy="11" rx="9" ry="3.2" fill="#8a95a3" stroke="#2b2119" stroke-width="1.4"/>
+                    <circle cx="10" cy="10.5" r="1.1" fill="#c98a4b"/>
+                    <circle cx="14" cy="9.8" r="1.1" fill="#c98a4b"/>
+                    <circle cx="18" cy="10.6" r="1.1" fill="#c98a4b"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--bone" aria-hidden="true">
+                  <svg viewBox="0 0 32 18">
+                    <rect x="8" y="7" width="16" height="4" rx="2" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="6" cy="6" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="6" cy="12" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="26" cy="6" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                    <circle cx="26" cy="12" r="3.6" fill="#fdfaf3" stroke="#2b2119" stroke-width="1.6"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--ball" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="#f5b942" stroke="#2b2119" stroke-width="1.6"/>
+                    <path d="M3 9 Q12 15 21 9" fill="none" stroke="#2b2119" stroke-width="1.3" opacity="0.55"/>
+                    <path d="M3 15 Q12 9 21 15" fill="none" stroke="#2b2119" stroke-width="1.3" opacity="0.55"/>
+                  </svg>
+                </div>
+                <div class="stage-prop stage-prop--paws" aria-hidden="true">
+                  <svg viewBox="0 0 60 20">
+                    <g fill="#c9c2b3">
+                      <ellipse cx="8" cy="14" rx="3" ry="2.2"/>
+                      <circle cx="4" cy="10" r="1.1"/><circle cx="7" cy="8.5" r="1.1"/><circle cx="10" cy="9" r="1.1"/>
+                      <ellipse cx="28" cy="8" rx="3" ry="2.2"/>
+                      <circle cx="24" cy="4" r="1.1"/><circle cx="27" cy="2.5" r="1.1"/><circle cx="30" cy="3" r="1.1"/>
+                      <ellipse cx="48" cy="14" rx="3" ry="2.2"/>
+                      <circle cx="44" cy="10" r="1.1"/><circle cx="47" cy="8.5" r="1.1"/><circle cx="50" cy="9" r="1.1"/>
+                    </g>
+                  </svg>
+                </div>
+                <!-- 촘촘한 픽셀 렌더러(42×48, 2026-08-27)로 바뀌면서 손으로
+                     맞춘 정적 자리표시자 SVG는 유지 비용이 커져 없앴다 —
+                     app.js가 ensureAvatarSpriteLoopStarted()에서 페이지 로드
+                     즉시(동기적으로) renderAvatarSpriteFrame()을 한 번 부르므로
+                     빈 화면이 보일 틈이 사실상 없다.
+                     구조: character-avatar(위치+숨쉬기) > avatar-ground-shadow
+                     (땅그림자, 홉 중 크기/진하기만 JS가 바꿈) + avatar-hop-rig
+                     (실제 그림, 홉 중 점프높이/찌그러짐을 JS가 바꿈) +
+                     avatar-decos(성장 장식, 절대좌표라 홉 흔들림과 분리) —
+                     "캐릭터가 진짜 입체감있게 움직이듯이" 요청(2026-08-27)에
+                     맞춰 세 겹으로 나눴다. -->
+                <div class="character-avatar" id="character-avatar">
+                  <div class="avatar-ground-shadow" id="avatar-ground-shadow"></div>
+                  <div class="avatar-hop-rig" id="avatar-hop-rig"></div>
+                  <div class="avatar-decos" id="avatar-decos"></div>
+                  <!-- 펫 AI 반응(2026-09-01, AI MVP §D) — 발견/방문/추천/제보/
+                       인증/스트릭/레벨업 성공 직후 짧은 말풍선. character-avatar의
+                       자식이라 아바타가 돌아다녀도(roam/hop) 같이 따라간다. 새
+                       채팅 UI가 아니라 잠깐 떴다 사라지는 말풍선 하나뿐
+                       (showPetSpeech, app.js) — "과도한 채팅 UI는 만들지
+                       않는다"는 원칙 그대로. -->
+                  <div class="pet-speech-bubble hidden" id="pet-speech-bubble"></div>
+                </div>
+              </div>
+              <div class="character-level" id="my-level-badge">성장 1/9단계</div>
+              <!-- 레이아웃 재정렬(디자인 스킬 적용, 2026-08-18) — 이 바는 절약금액이
+                   아니라 아바타 성장(발견+방문+추천 합산) 진행도다. 예전엔 아바타와
+                   무관한 절약금액 통계(오늘/주간/한달/연간) 세 칸 밑에 떨어져 있어서
+                   "펫 + 그 펫의 성장 진행도"가 한눈에 안 읽혔다. 아바타 바로 아래로
+                   옮겨서 하나의 성장 모듈로 묶는다. -->
+              <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
+              <div class="saving-next" id="my-next-level-text">다음 성장까지 10</div>
+              <!-- 성장치 얻는 법 범례(2026-09-04, "절약활동을 통해서 펫 성장하는
+                   루프를 더 강하게 연결하고 느껴지도록") — 지금까지는 성장 바가
+                   왜 그만큼 찼는지 어디에도 설명이 없었다. 값은
+                   app/gamification/service.py의 GROWTH_WEIGHT를 그대로 미러링한
+                   정적 상수(서버가 실제로 계산하는 값과 항상 같아야 하므로 그쪽이
+                   바뀌면 여기도 같이 바꿔야 한다) — API 호출 없이 고정 문구로만
+                   보여준다. -->
+              <div class="growth-legend" id="growth-legend">
+                <span class="growth-legend-chip">🧭 발견 <b>+5</b></span>
+                <span class="growth-legend-chip">👍 추천 <b>+15</b></span>
+                <span class="growth-legend-chip">🐾 방문 <b>+30</b></span>
+                <span class="growth-legend-chip">💰 구매인증 <b>+50</b></span>
+                <span class="growth-legend-chip">🧾 영수증인증 <b>+100</b></span>
+              </div>
+              <!-- 아바타 옷장(MY탭 개편, 2026-08-27: "아바타 옷장 이런게 안보임
+                   추가할 것") — 예전엔 목줄/리본 색 스와치가 카드 안에 바로
+                   나열돼 있었다. 실제 "옷장"처럼 별도 화면으로 분리해서 카드는
+                   깔끔하게 두고, 꾸미기는 이 버튼을 눌러야 보이게 했다. -->
+              <button type="button" id="avatar-closet-btn" class="avatar-closet-btn">
+                <span aria-hidden="true">👕</span> 옷장
+              </button>
+            </div>
+            <!-- 절약 요약 재구조화(2-1, 2026-08-13) — 예전엔 all-time 누적 절약
+                 하나만 보여줬다. "오늘 얼마나 아꼈는지"가 매일 다시 켜고 싶어지는
+                 이유가 되도록 오늘 누적을 메인 숫자로 올리고, 그 아래 주간/한달/
+                 연간을 나란히 보여준다(사용자가 준 구조 그대로). 성장 모듈과는
+                 시각적으로 분리된 별도 블록이라는 걸 top divider로 표시한다(아래
+                 .saving-amount CSS). -->
+            <div class="saving-amount">
+              오늘 누적 절약<br />
+              <span id="my-today-saved">₩0</span>
+            </div>
+            <div class="saving-period-row">
+              <div class="saving-period-tile">
+                <span id="my-weekly-saved">₩0</span>
+                <label>주간 절약</label>
+              </div>
+              <div class="saving-period-tile">
+                <span id="my-monthly-saved">₩0</span>
+                <label>한달 절약</label>
+              </div>
+              <div class="saving-period-tile">
+                <span id="my-yearly-saved">₩0</span>
+                <label>연간 절약</label>
+              </div>
+            </div>
+            <!-- AI 활용 확대 안건 C(2026-08-31) — 개인화 절약 다이제스트. 위 숫자
+                 타일들은 그대로 두고, 그 아래 한 줄로 "이번 주 활동을 이렇게
+                 하셨어요"를 자연스러운 문장으로 보여준다. 로딩 실패/활동 없음이면
+                 hidden 유지(지어낸 문구를 보여주지 않는다) — app.js loadMyProfile
+                 참고. -->
+            <p id="my-digest" class="my-digest hidden"></p>
+
+            <!-- 절약 통계(2026-09-04, "마이탭에서 절약을 얼마나 했는지도 통계로
+                 나타내") — 오늘/주간/한달/연간 누적 숫자만으로는 "요즘 꾸준히
+                 하고 있나" 흐름이 안 보인다. 최근 7일 미니 막대 차트 하나로
+                 최소 구현(§ 과도한 세분화 금지) — app.js renderSavingTrend가
+                 daily_saved(서버, UTC 일 단위 zero-fill)로 막대를 그린다. 활동이
+                 하나도 없으면(전부 0) 차트 대신 안내 문구만 보여준다. -->
+            <div class="saving-trend" id="saving-trend">
+              <h3 class="saving-trend-title">최근 7일 절약 추이</h3>
+              <div class="saving-trend-bars" id="saving-trend-bars"></div>
+              <p class="saving-trend-empty hidden" id="saving-trend-empty">아직 이번 주 절약 기록이 없어요.</p>
+            </div>
+          </div>
+
+          <!-- 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 기반 레벨/캐릭터와
+               독립된 축이라 hidden 처리하지 않고 먼저 노출한다. 셋 다 "실제 현장
+               행동을 더 하면 칭호가 오른다"는 같은 유도 구조라 나란히 묶었다. -->
+          <!-- 셋 다 클릭하면 칭호 선택 시트가 열린다(2026-08-27) — "칭호는
+               클릭하면 여러개 보이게" 요청에 맞춰, 아바타 머리 위 배지뿐 아니라
+               이 타일들도 같은 진입점으로 만들었다. -->
+          <div class="section-caption">
+            <h3>나의 칭호</h3>
+            <span class="section-caption-hint">탭해서 이름표 바꾸기</span>
+          </div>
+          <div class="title-badge-row">
+            <button type="button" class="title-badge-tile glass" id="title-badge-explorer">
+              <span class="title-badge-icon" aria-hidden="true">🧭</span>
+              <span class="title-badge-name" id="my-explorer-title">동네 초보</span>
+              <span class="title-badge-progress" id="my-explorer-count">0곳</span>
+            </button>
+            <button type="button" class="title-badge-tile glass" id="title-badge-visit">
+              <span class="title-badge-icon" aria-hidden="true">🔥</span>
+              <span class="title-badge-name" id="my-visit-title">방문 새내기</span>
+              <span class="title-badge-progress" id="my-visit-count">0회</span>
+            </button>
+            <button type="button" class="title-badge-tile glass" id="title-badge-recommend">
+              <span class="title-badge-icon" aria-hidden="true">👍</span>
+              <span class="title-badge-name" id="my-recommend-title">추천 새내기</span>
+              <span class="title-badge-progress" id="my-recommend-count">0회</span>
+            </button>
+          </div>
+
+          <!-- my-asset-count 타일은 계속 hidden이라(EXCHANGE 탭 자체가 hidden,
+               아래 주석 참고) 실제로는 항상 이 한 칸만 보인다 — 2칸 그리드로
+               두면 옆에 빈 칸처럼 보여서(2026-08-27 정리) stats-grid--single로
+               한 칸만 있을 때 전용 레이아웃을 쓴다. -->
+          <div class="stats-grid stats-grid--single">
+            <div class="stat-tile"><span id="my-cert-count">0</span><label>절약 인증</label></div>
+            <!-- EXCHANGE 재도입과 같이 노출했다가 다시 hidden 처리(사용자 지시,
+                 2026-08-18) — EXCHANGE 탭 자체가 hidden이라 이 통계만 남겨두면
+                 이동할 곳 없는 숫자가 된다. -->
+            <div class="stat-tile hidden"><span id="my-asset-count">0</span><label>내 절약 자산</label></div>
+          </div>
+
+          <div id="my-badges" class="badge-row hidden"></div>
+
+          <div class="list-section-header"><h2>바로가기</h2></div>
+          <button type="button" class="btn-secondary hidden" data-goto="exchange">내 절약 자산 보기</button>
+          <!-- 사업자 인증된 사용자에게만 노출(2-3, 2026-08-13) — 기본은 숨김, loadMyProfile()이
+               /users/me/merchant-status를 확인해서 조건부로 hidden을 뗀다. 서버도
+               require_merchant_verified로 실제 접근을 막으므로 이 hidden은 UX용일 뿐이다. -->
+          <button type="button" id="merchant-console-btn" class="btn-secondary hidden" data-goto="merchant">사업자 콘솔</button>
+        </div>
+      </div>
+
+      <!-- 아바타 옷장(2026-08-27) — .detail-overlay/.detail-sheet(다른 화면의
+           상세/AI 절약 플랜 시트와 동일한 패턴)을 그대로 재사용해 앱 전체
+           상호작용 언어를 하나로 맞춘다. 목줄/리본은 "슬롯" 단위로 잠금해제되고
+           (해당 단계 도달 시) 그 안에서 색만 고르는 구조라, 잠긴 슬롯은 섹션
+           전체를 흐리게 하고 안내 문구만 보여준다. -->
+      <div id="avatar-closet-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="avatar-closet-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="avatar-closet-content">
+            <h2 class="closet-title">👕 아바타 옷장</h2>
+            <div class="closet-preview" id="closet-avatar-preview"></div>
+            <div class="closet-section" id="closet-section-collar">
+              <div class="closet-section-header">
+                <span>목줄</span>
+                <span class="closet-lock-hint" id="closet-collar-hint"></span>
+              </div>
+              <div class="avatar-swatch-row" id="avatar-swatch-collar"></div>
+            </div>
+            <div class="closet-section" id="closet-section-bandana">
+              <div class="closet-section-header">
+                <span>리본</span>
+                <span class="closet-lock-hint" id="closet-bandana-hint"></span>
+              </div>
+              <div class="avatar-swatch-row" id="avatar-swatch-bandana"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 칭호 선택(2026-08-27: "칭호는 클릭하면 여러개 보이게... 선택하면
+           체크되는걸로") — 아바타 머리 위 배지(#my-title)를 누르면 열린다.
+           성장 단계 이름 + 탐험가/방문/추천 칭호 중 현재 실제로 획득한 것만
+           고를 수 있다(아직 못 딴 칭호를 보여주면 지어낸 성취처럼 보일 수
+           있어 목록에서 제외). -->
+      <div id="avatar-title-overlay" class="detail-overlay hidden">
+        <div class="detail-sheet glass">
+          <button type="button" id="avatar-title-close-btn" class="detail-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div id="avatar-title-content">
+            <h2 class="closet-title">🏷️ 칭호 선택</h2>
+            <div class="title-picker-list" id="title-picker-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMMUNITY: 우리 지역 사람들은 어떤 절약 기회를 알고 있는가 — 기본 틀(검색/
+         AI 절약 플랜/MY)부터 다진 후 다시 켠다(사용자 지시, 2026-08-13). EXCHANGE는
+         구조 재설계 제안서 §07에 따라 먼저 재도입됐고(2026-08-13), COMMUNITY는
+         아직 이 패턴 그대로 — 하단 네비 진입점만 hidden 처리, 백엔드
+         (app/api/v1/reports.py 등)와 이 화면 자체는 그대로 남겨둔다. data-goto로
+         이 화면에 들어오는 다른 진입점은 없다(확인 완료). hidden만 떼면 바로
+         복구된다.
+         제보 폼(사진→AI분석→등록) 자체는 여기 갇혀 있으면 아무도 못 써서(2026-08-18,
+         "제보/인증 마찰 줄이기") #screen-map의 #report-overlay로 옮겼다 — MAP
+         화면 어디서든 report-fab-btn으로 바로 접근 가능. 여기 COMMUNITY엔 "최근
+         제보" 피드만 남는다(진짜 커뮤니티 기능이라 계속 hidden 범위). -->
+    <section id="screen-community" class="screen hidden">
+      <header class="screen-header">
+        <h1>COMMUNITY</h1>
+        <p class="subtitle">제보와 검증으로 우리 지역 절약 데이터를 함께 만들어요</p>
+      </header>
+      <div class="screen-body">
+        <div class="list-section-header">
+          <h2>최근 제보</h2>
+          <button type="button" id="load-recent-reports-btn" class="btn-text">새로고침</button>
+        </div>
+        <div id="recent-reports-list"></div>
+      </div>
+    </section>
+
+    <!-- 사업자 콘솔 (MY에서 진입, 하단 탭에는 노출하지 않음) -->
+    <section id="screen-merchant" class="screen">
+      <header class="screen-header">
+        <h1>사업자 콘솔</h1>
+        <p class="subtitle">매장과 혜택을 직접 등록·관리하세요</p>
+      </header>
+      <div class="screen-body">
+        <div id="merchant-guard" class="card-form">
+          <p class="subtitle">사업자 콘솔은 로그인 후 이용할 수 있어요.</p>
+          <button type="button" class="btn-primary" data-goto="my">MY에서 로그인하기</button>
+        </div>
+
+        <div id="merchant-authed" class="hidden">
+          <h2>매장 + 메뉴 등록</h2>
+          <p class="subtitle">매장 정보와 첫 메뉴 가격을 한 번에 등록하세요. 메뉴 가격이 있어야 손님에게 절약 정보로 보여요.</p>
+          <form id="place-form" class="card-form">
+            <div class="form-group">
+              <label for="p-name">매장명</label>
+              <input type="text" id="p-name" required />
+            </div>
+            <div class="form-group">
+              <label for="p-address">주소</label>
+              <input type="text" id="p-address" />
+            </div>
+            <div class="form-group">
+              <label for="p-phone">전화번호 (선택)</label>
+              <input type="text" id="p-phone" placeholder="예: 031-000-0000" />
+            </div>
+            <div class="form-group">
+              <button type="button" id="p-use-location-btn" class="btn-secondary">현재 위치로 매장 위치 설정</button>
+              <p class="subtitle" id="p-location-status">매장에서 이 버튼을 눌러 위치를 자동으로 설정하세요.</p>
+              <input type="hidden" id="p-lat" />
+              <input type="hidden" id="p-lng" />
+              <input type="hidden" id="p-kakao-place-id" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="p-menu-name">메뉴명</label>
+                <input type="text" id="p-menu-name" placeholder="예: 아메리카노" required />
+              </div>
+              <div class="form-group">
+                <label for="p-menu-price">가격 (원)</label>
+                <input type="text" id="p-menu-price" placeholder="3500" required />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">매장 + 메뉴 등록</button>
+          </form>
+
+          <h2>혜택 등록</h2>
+          <form id="offer-form" class="card-form">
+            <div class="form-group">
+              <label for="o-place-id">매장 선택</label>
+              <select id="o-place-id" required>
+                <option value="">매장을 먼저 등록해주세요</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="o-title">혜택 제목</label>
+              <input type="text" id="o-title" required />
+            </div>
+            <div class="form-group">
+              <label for="o-category">카테고리</label>
+              <select id="o-category">
+                <option value="discount">할인</option>
+                <option value="free">무료</option>
+                <option value="closing_soon">마감임박</option>
+                <option value="free_parking">무료주차</option>
+                <option value="local_benefit">지역혜택</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="o-base-price">원가</label>
+                <input type="text" id="o-base-price" />
+              </div>
+              <div class="form-group">
+                <label for="o-discount">할인액</label>
+                <input type="text" id="o-discount" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="o-ttl">타임세일 (초, 비우면 상시할인)</label>
+              <input type="text" id="o-ttl" placeholder="예: 3600" />
+            </div>
+            <button type="submit" class="btn-primary">혜택 등록</button>
+          </form>
+
+          <h2>메뉴 추가 등록</h2>
+          <p class="subtitle">이미 등록한 매장에 메뉴를 더 추가하려면 여기서 매장을 선택하세요.</p>
+
+          <div class="card-form">
+            <div class="form-group">
+              <label for="mi-photo-place-id">매장 선택</label>
+              <select id="mi-photo-place-id" required>
+                <option value="">매장을 먼저 등록해주세요</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="mi-photo-input">메뉴판 사진으로 한 번에 등록 (AI 자동 인식)</label>
+              <input type="file" id="mi-photo-input" accept="image/*" capture="environment" />
+            </div>
+            <p id="mi-photo-status" class="subtitle"></p>
+            <div id="mi-photo-results"></div>
+          </div>
+
+          <form id="menu-item-form" class="card-form">
+            <p class="subtitle">직접 하나씩 입력할 수도 있어요.</p>
+            <div class="form-group">
+              <label for="mi-place-id">매장 선택</label>
+              <select id="mi-place-id" required>
+                <option value="">매장을 먼저 등록해주세요</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mi-name">메뉴명</label>
+                <input type="text" id="mi-name" placeholder="예: 아메리카노" required />
+              </div>
+              <div class="form-group">
+                <label for="mi-price">가격 (원)</label>
+                <input type="text" id="mi-price" placeholder="3500" required />
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">메뉴 등록</button>
+          </form>
+
+          <div class="list-section-header">
+            <h2>내 매장 목록</h2>
+            <button type="button" id="load-places-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="places-list"></div>
+
+          <div class="list-section-header">
+            <h2>내 혜택 목록</h2>
+            <button type="button" id="load-offers-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="offers-list"></div>
+
+          <div class="list-section-header">
+            <h2>내 메뉴 목록</h2>
+            <button type="button" id="load-menu-items-btn" class="btn-text">새로고침</button>
+          </div>
+          <div id="menu-items-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-screen="map">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg></span><span class="nav-label">MAP</span>
+      </button>
+      <button class="nav-btn hidden" data-screen="exchange">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg></span><span class="nav-label">EXCHANGE</span>
+      </button>
+      <!-- 성장치 피드백을 전역으로 노출(2026-09-04, "절약활동을 통해서 펫 성장하는
+           루프를 더 강하게 연결하고 느껴지도록") — 예전엔 +N 성장치/레벨업 축하가
+           character-stage(MY 탭 전용, display:none일 땐 안 보임)에만 렌더돼서
+           지도 화면에서 발견/방문/추천/인증해도 사용자가 못 봤다. bottom-nav는
+           모든 화면에서 항상 보이므로, 여기 MY 버튼에 (1) 성장치가 오른 순간
+           떠오르는 +N 팝업과 (2) 레벨업했는데 아직 MY탭을 안 열어봤을 때 붙는
+           골드 링을 추가한다(app.js spawnNavGrowthDelta/markNavGrowthUnseen,
+           switchScreen이 MY탭 진입 시 링을 뗀다). -->
+      <button class="nav-btn" data-screen="my" id="nav-btn-my">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg></span><span class="nav-label">MY</span>
+        <span class="nav-growth-ring" id="nav-growth-ring" aria-hidden="true"></span>
+      </button>
+      <button class="nav-btn hidden" data-screen="community">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg></span><span class="nav-label">COMMUNITY</span>
+      </button>
+    </nav>
+  </div>
+
+  <script src="app.js?v=20260904a"></script>
+</body>
+</html>

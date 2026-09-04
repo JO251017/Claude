@@ -1,0 +1,210 @@
+from fastapi import HTTPException, status
+
+
+class SaveMapError(HTTPException):
+    code: str = "SM0000"
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(status_code=self.http_status, detail={"code": self.code, "message": detail or self.message})
+
+    http_status: int = status.HTTP_400_BAD_REQUEST
+    # 실제로는 아래 모든 서브클래스가 각자 message를 재정의해서 이 기본값이
+    # 사용자에게 노출될 일은 없지만(도달 불가), 혹시를 대비해 브랜드 문자열은
+    # 여기도 통일해둔다(2026-08-31, "쓸모" 브랜드 전환) — SaveMapError라는
+    # 클래스명 자체는 내부 식별자라 그대로 둔다.
+    message: str = "쓸모 오류"
+
+
+class MissingCoordinatesError(SaveMapError):
+    code = "SM4001"
+    http_status = status.HTTP_400_BAD_REQUEST
+    message = "위도/경도가 필요합니다"
+
+
+class RadiusOutOfRangeError(SaveMapError):
+    code = "SM4002"
+    http_status = status.HTTP_400_BAD_REQUEST
+    message = "검색 반경이 허용 범위를 벗어났습니다"
+
+
+class BudgetOutOfRangeError(SaveMapError):
+    code = "SM4003"
+    http_status = status.HTTP_400_BAD_REQUEST
+    message = "예산이 허용 범위를 벗어났습니다"
+
+
+class MissingReportImageError(SaveMapError):
+    code = "SM4221"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "제보는 이미지가 반드시 있어야 합니다"
+
+
+class ReportImageFetchError(SaveMapError):
+    code = "SM4222"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "사진을 불러올 수 없습니다. 이미지 주소를 다시 확인해주세요"
+
+
+class OcrServiceError(SaveMapError):
+    code = "SM5033"
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "사진 분석 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요"
+
+
+class AuthenticationRequiredError(SaveMapError):
+    code = "SM4011"
+    http_status = status.HTTP_401_UNAUTHORIZED
+    message = "로그인이 필요한 기능입니다"
+
+
+class UnverifiedPaymentMethodError(SaveMapError):
+    code = "SM4031"
+    http_status = status.HTTP_403_FORBIDDEN
+    message = "인증되지 않은 결제수단입니다"
+
+
+class MerchantNotVerifiedError(SaveMapError):
+    code = "SM4032"
+    http_status = status.HTTP_403_FORBIDDEN
+    message = "사업자 인증이 필요한 기능입니다"
+
+
+class PartnerCircuitOpenError(SaveMapError):
+    code = "SM5031"
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "파트너 API 일시 차단 중입니다 (캐시 응답으로 폴백)"
+
+
+class PlaceNotFoundError(SaveMapError):
+    code = "SM4041"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "매장을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class OfferNotFoundError(SaveMapError):
+    code = "SM4042"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "혜택을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class OfferPublicNotFoundError(SaveMapError):
+    code = "SM4043"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "혜택을 찾을 수 없습니다"
+
+
+class CertificationNotSupportedError(SaveMapError):
+    code = "SM4223"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "이 혜택은 절약 인증을 지원하지 않습니다 (가격 정보 없음)"
+
+
+class AssetNotFoundError(SaveMapError):
+    code = "SM4044"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "절약 자산을 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class ImageUploadError(SaveMapError):
+    code = "SM5034"
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    message = "사진 업로드에 실패했습니다. 잠시 후 다시 시도해주세요"
+
+
+class InvalidImageError(SaveMapError):
+    code = "SM4224"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "올바른 이미지 파일이 아닙니다"
+
+
+class TooFarFromStoreError(SaveMapError):
+    code = "SM4225"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "매장에서 너무 멀리 떨어져 있습니다 (50m 이내에서만 방문 인증이 가능합니다)"
+
+
+class LowGpsAccuracyError(SaveMapError):
+    code = "SM4226"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "GPS 정확도가 낮아 위치를 확인할 수 없습니다. 실외에서 다시 시도해주세요"
+
+
+class PlacePublicNotFoundError(SaveMapError):
+    code = "SM4045"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "매장을 찾을 수 없습니다"
+
+
+class MenuItemNotFoundError(SaveMapError):
+    code = "SM4046"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "메뉴를 찾을 수 없거나 소유하고 있지 않습니다"
+
+
+class InvalidCsvError(SaveMapError):
+    code = "SM4225"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "올바른 CSV 파일이 아닙니다"
+
+
+class PriceDiscoveryJobNotFoundError(SaveMapError):
+    code = "SM4047"
+    http_status = status.HTTP_404_NOT_FOUND
+    message = "가격 발견 작업을 찾을 수 없습니다"
+
+
+class PriceDiscoveryJobNotReviewableError(SaveMapError):
+    code = "SM4228"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "검토 대기 상태(manual_review)인 작업만 승인/거절할 수 있습니다"
+
+
+class AiSavingPlanDisabledError(SaveMapError):
+    """settings.ai_saving_plan_enabled=False일 때 /route/suggest가 던진다. 500이나
+    404가 아니라 "이 기능은 지금 꺼져 있다"는 걸 명확히 구분하는 응답이 필요해서
+    403을 쓴다(권한이 없는 게 아니라 기능 자체가 비활성 상태라는 의미). detail에
+    enabled:false를 같이 실어서, 프론트가 백엔드를 직접 두드려도 코드 필드만 보고
+    "복구 가능한 상태"임을 구분할 수 있게 한다."""
+
+    code = "SM4033"
+    http_status = status.HTTP_403_FORBIDDEN
+    message = "AI 절약 플랜은 현재 준비 중입니다. 실제 가격 데이터가 충분히 축적되면 다시 제공할 예정입니다."
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(detail)
+        self.detail["enabled"] = False
+
+
+# PlaceMenuAlreadyRegisteredError(SM4227)는 2026-08-18(사용자 지시: "사장님
+# 등록은 비활성화하고 사용자가 메뉴 등록하는 구조로 바꿔")로 제거됨 — 매장당
+# 최초 1건 제한 대신 항목 단위 갱신(같은 가격=무시, 다른 가격=AI 검토)으로
+# 바뀌면서 이 에러 자체가 더 이상 발생하지 않는다. app/sources/community_menu/
+# service.py의 submit_menu_report_batch 참고.
+
+
+# --- 방문 GPS 인증(2026-09-01, 사용자 확정 공식 기준) ---
+# 발견하기(LowGpsAccuracyError, 100m)와는 별도의 더 엄격한 기준(30m)을 쓴다 —
+# 두 행동의 요구 정확도가 다르다는 사용자 지시를 그대로 반영, 기존 발견하기
+# 임계값/에러는 건드리지 않는다.
+class LowGpsAccuracyVisitError(SaveMapError):
+    code = "SM4229"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "현재 위치가 정확하지 않아요. 잠시 기다려 주세요"
+
+
+class StaleLocationReadingError(SaveMapError):
+    """client_timestamp가 미래이거나 너무 오래된(재전송/캐시값) 위치 측정 —
+    서버가 클라이언트 값을 그대로 신뢰하지 않는다는 원칙의 일부."""
+
+    code = "SM4230"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "위치 정보가 오래됐어요. 다시 시도해주세요"
+
+
+class InvalidVisitReadingsError(SaveMapError):
+    """readings가 정확히 2개가 아니거나, 두 측정 timestamp 간격이 너무 짧아
+    (동일 캐시 좌표 재사용 의심) 서로 다른 시점의 측정으로 인정할 수 없을 때."""
+
+    code = "SM4231"
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    message = "위치를 다시 확인해주세요"

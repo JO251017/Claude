@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>쓸모 관리자 - 오퍼 유지보수</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  h2 { font-size: 1rem; margin-top: 36px; border-top: 1px solid #e2e8f0; padding-top: 24px; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=text], input[type=number] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  button.secondary { background: #64748b; margin-left: 8px; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 480px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row label { margin: 0; font-weight: 500; }
+  progress { width: 100%; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1>오퍼 일괄 재동기화 (가격 이력·신선도 백필)</h1>
+  <p class="warn">기존에 적재된 오퍼(착한가격업소/지역화폐 등 공공데이터, 사장님 등록분 포함)는
+  price_history/신선도 기능이 배포되기 전부터 있던 데이터라 아직 이력이 한 번도 안 쌓였습니다.
+  이 페이지는 이미 있는 관리자 API(POST /admin/maintenance/resync-offers)를 끝까지 반복
+  호출해서, 전체 오퍼를 다시 계산하고 baseline 가격 이력을 남깁니다 — 멱등이라 여러 번 돌려도
+  안전하고, 먼저 "미리보기(dry_run)"로 영향 범위만 볼 수도 있습니다.</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label for="region">지역 필터 (비우면 전체, 예: 평택시)</label>
+  <input type="text" id="region" />
+
+  <label for="page-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="page-limit" value="500" min="50" max="2000" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="dry-run" />
+    <label for="dry-run">미리보기만 (dry_run — 실제로 저장하지 않고 영향 범위만 확인)</label>
+  </div>
+
+  <div>
+    <button id="verify-btn" class="secondary">검증만 하기 (가격 이력/신선도 현황 조회)</button>
+  </div>
+
+  <div>
+    <button id="run-btn">끝날 때까지 전체 재동기화 실행</button>
+    <button id="stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="progress" value="0" max="1" hidden></progress>
+
+  <h2>매장 카드 AI 한 줄 소개 생성 (안건 D)</h2>
+  <p class="warn">절약을 주장하는(할인액이 있는) 오퍼 중 아직 한 줄 소개가 없는 것에
+  대해 AI가 실제 사실(업종/비교 기준/비교 매장 수)만 근거로 자연스러운 문장을 만들어
+  캐시합니다. 새 숫자를 지어내면 그 결과는 저장하지 않고 건너뜁니다(다음 실행 때
+  재시도). 건당 실제 AI 호출이 있어 재동기화보다 느립니다 — 한 번에 너무 크게 잡지
+  마세요.</p>
+
+  <label for="blurb-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="blurb-limit" value="50" min="10" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="blurb-dry-run" />
+    <label for="blurb-dry-run">미리보기만 (dry_run — 생성만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="blurb-run-btn">끝날 때까지 한 줄 소개 생성</button>
+    <button id="blurb-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="blurb-progress" value="0" max="1" hidden></progress>
+
+  <h2>AI 통상가 백필 (절약 기회 점수 활성화)</h2>
+  <p class="warn">주변 이웃 매장도 없고(region) 참가격 품목도 아닌(gov) 메뉴는
+  ai_typical_price가 채워져야만 절약 기회 점수가 계산됩니다. 아직 안 채워진
+  메뉴에 AI 통상가(지역 반영)를 채웁니다. 같은 (메뉴명, 지역) 조합은 API를 다시
+  부르지 않고 복사합니다(reused_from_cache). <b>채운 뒤엔 위 "전체 재동기화"를
+  다시 돌려야</b> 실제 오퍼에 반영됩니다(이 배치는 메뉴 통상가만 채우고, 오퍼
+  벤치마크 재계산은 재동기화가 담당).</p>
+
+  <label for="typical-price-limit">한 번 호출당 처리 건수</label>
+  <input type="number" id="typical-price-limit" value="50" min="10" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="typical-price-dry-run" />
+    <label for="typical-price-dry-run">미리보기만 (dry_run — 채우기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="typical-price-run-btn">끝날 때까지 통상가 백필</button>
+    <button id="typical-price-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="typical-price-progress" value="0" max="1" hidden></progress>
+
+  <h2>메뉴명 동의어 후보 AI 탐색 (커버리지 확대)</h2>
+  <p class="warn">"커트/컷트", "짜장면/자장면"처럼 표기만 다른 메뉴명이 서로 다른
+  메뉴로 갈려서, 주변에 같은 메뉴를 파는 매장이 있어도 못 찾고 무료로 되는 실측
+  비교(benchmark_source=region)를 버리는 경우가 있었습니다. 이 배치는 AI로 후보를
+  넓게 찾아 검토 대기 목록(menu_synonym_candidate 테이블)에만 쌓습니다.
+  <b>여기서 자동으로 반영되는 건 없습니다</b> — 후보를 사람이 확인한 뒤
+  app/engine/menu_name.py의 _SYNONYMS에 직접 추가해야 실제로 적용됩니다
+  (잘못 합치면 다른 메뉴끼리 비교해 없는 절약률을 만들어내기 때문).</p>
+
+  <label for="synonym-limit">한 번 호출당 훑을 메뉴명 개수</label>
+  <input type="number" id="synonym-limit" value="300" min="60" max="1000" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="synonym-dry-run" />
+    <label for="synonym-dry-run">미리보기만 (dry_run — 찾기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="synonym-run-btn">끝날 때까지 동의어 후보 탐색</button>
+    <button id="synonym-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="synonym-progress" value="0" max="1" hidden></progress>
+
+  <h2>프랜차이즈 매칭 키워드 AI 제안 (커버리지 확대)</h2>
+  <p class="warn">프랜차이즈 브랜드는 상호명 키워드로 매장을 매칭해 공식 가격을
+  붙입니다(franchise_brand.match_keywords). 이 배치는 AI로 간판/지도앱에서 흔히
+  쓰이는 표기 변형(띄어쓰기, 영문 표기, 줄임말 등)을 찾아
+  suggested_match_keywords 컬럼에만 쌓습니다.
+  <b>여기서 자동으로 반영되는 건 없습니다</b> — 제안을 사람이 확인한 뒤
+  실제 match_keywords에 직접 옮겨야 적용됩니다(잘못 넓히면 엉뚱한 매장에
+  그 브랜드의 가격이 붙기 때문에, 동의어 후보보다도 더 보수적으로 다룹니다).</p>
+
+  <label for="franchise-kw-limit">한 번 호출당 훑을 브랜드 개수</label>
+  <input type="number" id="franchise-kw-limit" value="100" min="1" max="500" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="franchise-kw-dry-run" />
+    <label for="franchise-kw-dry-run">미리보기만 (dry_run — 찾기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="franchise-kw-run-btn">끝날 때까지 매칭 키워드 제안 탐색</button>
+    <button id="franchise-kw-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="franchise-kw-progress" value="0" max="1" hidden></progress>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += (typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)) + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function getKey() {
+  const key = document.getElementById('key').value;
+  if (!key) alert('ADMIN_SYNC_KEY를 입력해주세요.');
+  return key;
+}
+
+async function callResync(key, { region, offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  if (region) params.region = region;
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/resync-offers?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function verifyOnly() {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  const qs = region ? `?region=${encodeURIComponent(region)}` : '';
+  try {
+    const resp = await fetch(`/v1/admin/places/stats${qs}`, { headers: { 'X-Admin-Key': key } });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+    log('--- 검증 결과 ---');
+    log(`전체 매장: ${data.total_places}`);
+    log(`가격 보유 매장: ${data.price_coverage.places_with_price} (${data.price_coverage.coverage_pct}%)`);
+    log(`가격 이력(price_history) 총 행: ${data.price_history.total_rows}, 현재 유효 행: ${data.price_history.current_rows}`);
+    log(`신선도 분포(현재 유효 행 기준): ${JSON.stringify(data.price_history.freshness_breakdown)}`);
+  } catch (err) {
+    log(`오류: ${err.message}`);
+  }
+}
+
+document.getElementById('verify-btn').addEventListener('click', verifyOnly);
+
+let stopRequested = false;
+
+async function runLoop() {
+  const key = getKey();
+  if (!key) return;
+  const region = document.getElementById('region').value.trim();
+  const limit = parseInt(document.getElementById('page-limit').value, 10) || 500;
+  const dryRun = document.getElementById('dry-run').checked;
+
+  const runBtn = document.getElementById('run-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const progressEl = document.getElementById('progress');
+  stopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max'); // 전체 건수를 모르니 처음엔 진행 중(indeterminate) 표시
+  logEl.textContent = '';
+  log(`시작 (region=${region || '전체'}, limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalResynced = 0, totalChanged = 0, totalSkipped = 0;
+  const totalTransitions = {};
+  let round = 1;
+
+  // 안전장치: 최대 500라운드(=limit 500 기준 최대 25만 건)까지만 — 그 이상이면
+  // 뭔가 끝나지 않는 상태라는 뜻이라 무한루프를 막는다.
+  for (; round <= 500; round++) {
+    if (stopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callResync(key, { region, offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('네트워크/서버 오류일 수 있습니다 — 위 offset부터 다시 시작하려면 아무 필드나 건드리지 말고 그냥 다시 눌러주세요 (재시도해도 안전, 멱등).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalResynced += result.resynced;
+    totalChanged += result.changed;
+    totalSkipped += result.skipped_no_geom;
+    for (const [k, v] of Object.entries(result.benchmark_transitions || {})) {
+      totalTransitions[k] = (totalTransitions[k] || 0) + v;
+    }
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} resynced=${result.resynced} changed=${result.changed} skipped_no_geom=${result.skipped_no_geom}${(result.failed || []).length ? ` failed=${result.failed.length}` : ''}`);
+    if (result.failed && result.failed.length) {
+      log(`   실패 상세(최대 5건): ${JSON.stringify(result.failed.slice(0, 5))}`);
+    }
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} resynced=${totalResynced} changed=${totalChanged}(벤치마크 소스가 바뀐 건) skipped_no_geom=${totalSkipped}`);
+      log(`전이 요약: ${JSON.stringify(totalTransitions, null, 2)}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 아무것도 저장되지 않았습니다 — 결과가 괜찮으면 미리보기 체크를 끄고 다시 실행하세요.)');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('run-btn').addEventListener('click', runLoop);
+document.getElementById('stop-btn').addEventListener('click', () => { stopRequested = true; });
+
+// --- 안건 D: 매장 카드 AI 한 줄 소개 생성 --- 위 재동기화 루프와 완전히 같은
+// 패턴(next_offset이 done:true 나올 때까지 이어서 호출)이라 별도 상태
+// 변수(blurbStopRequested)만 두고 로직은 그대로 재사용한다.
+let blurbStopRequested = false;
+
+async function callBlurbBackfill(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/backfill-offer-blurbs?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runBlurbLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('blurb-limit').value, 10) || 50;
+  const dryRun = document.getElementById('blurb-dry-run').checked;
+
+  const runBtn = document.getElementById('blurb-run-btn');
+  const stopBtn = document.getElementById('blurb-stop-btn');
+  const progressEl = document.getElementById('blurb-progress');
+  blurbStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalGenerated = 0, totalRejected = 0, totalFailed = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (blurbStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callBlurbBackfill(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalGenerated += result.generated;
+    totalRejected += result.rejected_hallucination;
+    totalFailed += result.failed;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} generated=${result.generated} rejected_hallucination=${result.rejected_hallucination} failed=${result.failed}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} generated=${totalGenerated} rejected_hallucination=${totalRejected}(숫자를 지어내서 버림) failed=${totalFailed}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('blurb-run-btn').addEventListener('click', runBlurbLoop);
+document.getElementById('blurb-stop-btn').addEventListener('click', () => { blurbStopRequested = true; });
+
+// --- AI 통상가 백필 (절약 기회 점수 활성화, 2026-09-01) --- 위 두 루프와
+// 완전히 같은 패턴.
+let typicalPriceStopRequested = false;
+
+async function callTypicalPriceBackfill(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/backfill-typical-prices?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runTypicalPriceLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('typical-price-limit').value, 10) || 50;
+  const dryRun = document.getElementById('typical-price-dry-run').checked;
+
+  const runBtn = document.getElementById('typical-price-run-btn');
+  const stopBtn = document.getElementById('typical-price-stop-btn');
+  const progressEl = document.getElementById('typical-price-progress');
+  typicalPriceStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalEstimated = 0, totalReused = 0, totalFailed = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (typicalPriceStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callTypicalPriceBackfill(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalEstimated += result.estimated;
+    totalReused += result.reused_from_cache;
+    totalFailed += result.failed;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} estimated=${result.estimated} reused_from_cache=${result.reused_from_cache} failed=${result.failed}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} estimated=${totalEstimated} reused_from_cache=${totalReused} failed=${totalFailed}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n채워졌습니다 — 이제 위 "끝날 때까지 전체 재동기화 실행"을 다시 돌려서 오퍼에 반영하세요.');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('typical-price-run-btn').addEventListener('click', runTypicalPriceLoop);
+document.getElementById('typical-price-stop-btn').addEventListener('click', () => { typicalPriceStopRequested = true; });
+
+// --- 메뉴명 동의어 후보 AI 탐색(2026-09-04) --- 위 세 루프와 완전히 같은 패턴.
+// offset/limit은 "메뉴명 개수" 기준이라 다른 배치들과 단위가 다르지만, 호출
+// 방식(next_offset 이어받기, done까지 반복)은 동일하다.
+let synonymStopRequested = false;
+
+async function callSynonymDiscovery(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/discover-menu-synonyms?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runSynonymLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('synonym-limit').value, 10) || 300;
+  const dryRun = document.getElementById('synonym-dry-run').checked;
+
+  const runBtn = document.getElementById('synonym-run-btn');
+  const stopBtn = document.getElementById('synonym-stop-btn');
+  const progressEl = document.getElementById('synonym-progress');
+  synonymStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalFound = 0, totalSaved = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (synonymStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callSynonymDiscovery(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalFound += result.found;
+    totalSaved += result.saved;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} found=${result.found} saved(new)=${result.saved}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} found=${totalFound} saved(new)=${totalSaved}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n검토는 데이터베이스의 menu_synonym_candidate 테이블에서 진행합니다(관리자가 직접 확인).');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('synonym-run-btn').addEventListener('click', runSynonymLoop);
+document.getElementById('synonym-stop-btn').addEventListener('click', () => { synonymStopRequested = true; });
+
+// --- 프랜차이즈 매칭 키워드 AI 제안(2026-09-04) --- 위 동의어 후보 루프와
+// 완전히 같은 패턴. offset/limit은 "제안 없는 브랜드 개수" 기준.
+let franchiseKwStopRequested = false;
+
+async function callFranchiseKeywordDiscovery(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/discover-franchise-keywords?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runFranchiseKeywordLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('franchise-kw-limit').value, 10) || 100;
+  const dryRun = document.getElementById('franchise-kw-dry-run').checked;
+
+  const runBtn = document.getElementById('franchise-kw-run-btn');
+  const stopBtn = document.getElementById('franchise-kw-stop-btn');
+  const progressEl = document.getElementById('franchise-kw-progress');
+  franchiseKwStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalSuggested = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (franchiseKwStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callFranchiseKeywordDiscovery(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalSuggested += result.suggested;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} suggested=${result.suggested}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} suggested=${totalSuggested}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n검토는 franchise_brand.suggested_match_keywords 컬럼에서 진행합니다(관리자가 직접 확인 후 match_keywords로 옮기세요).');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('franchise-kw-run-btn').addEventListener('click', runFranchiseKeywordLoop);
+document.getElementById('franchise-kw-stop-btn').addEventListener('click', () => { franchiseKwStopRequested = true; });
+</script>
+</body>
+</html>

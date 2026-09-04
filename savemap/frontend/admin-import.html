@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>쓸모 관리자 - 착한가격업소 가져오기</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1e293b; }
+  h1 { font-size: 1.2rem; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 0.9rem; }
+  input[type=password], input[type=file], input[type=text] { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 6px; background: #0d9488; color: white; font-weight: 700; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: default; }
+  button.secondary { background: #64748b; margin-left: 8px; }
+  #log { margin-top: 20px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.82rem; white-space: pre-wrap; max-height: 420px; overflow-y: auto; }
+  .warn { color: #b45309; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+  <h1>착한가격업소 데이터 가져오기</h1>
+  <p class="warn">관리자 전용 페이지입니다. ADMIN_SYNC_KEY는 이 페이지 밖으로 저장/전송되지 않습니다 (요청 헤더로만 사용).
+  파일은 처음 한 번만 업로드되고, 이후 지역별 호출은 서버에 캐시된 파싱 결과만 재사용합니다 — 매번 다시 올리지 않습니다.</p>
+
+  <label for="key">ADMIN_SYNC_KEY</label>
+  <input type="password" id="key" autocomplete="off" />
+
+  <label for="file">착한가격업소 파일 (.xls 또는 .csv)</label>
+  <input type="file" id="file" accept=".xls,.xlsx,.csv" />
+
+  <label for="regions">지역별로 나눠서 실행 (한 줄에 하나, 비우면 전체를 한 번에)</label>
+  <textarea id="regions" rows="6" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">서울특별시
+경기도
+부산광역시
+전남
+광주
+경상남도
+경상북도
+강원
+충청남도
+대전광역시
+대구광역시
+인천광역시
+전북
+충청북도
+제주
+울산광역시
+세종특별자치시</textarea>
+
+  <div>
+    <button id="dryrun-btn">미리보기 (dry_run, DB에 저장 안 함)</button>
+    <button id="run-btn" class="secondary">실제로 가져오기 시작</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg) {
+  logEl.textContent += msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// 서울처럼 지역 하나가 커도(1,989건) 이 크기 단위로 더 쪼개서 여러 번 호출한다 —
+// 지역만으로 나누는 걸로는 배포 환경(Render) 타임아웃(502)을 못 피했다. 이제 파일
+// 재업로드/재파싱은 없앴으니(아래 ensureUploaded), 이 크기는 순전히 지오코딩+DB
+// 저장 시간(요청 하나당 처리 시간)만 좌우한다.
+const CHUNK_SIZE = 200;
+
+// 파일은 최초 1번만 /import/good-price-file로 업로드해서 서버 메모리에 파싱 결과를
+// 캐시해두고(import_id), 이후 지역×offset 조합은 그 import_id만 참조하는
+// /import/good-price-run을 호출한다 — 예전엔 청크마다(17MB 파일 기준 수십~수백 번)
+// 파일 전체를 다시 업로드하고 다시 파싱해서 체감상 매우 느렸다(실제로 겪은 문제,
+// 2026-08-11). 같은 파일이면 재업로드하지 않도록 시그니처로 캐시한다.
+let currentImportId = null;
+let currentFileSignature = null;
+
+async function ensureUploaded(file, key, force = false) {
+  const sig = `${file.name}|${file.size}|${file.lastModified}`;
+  if (!force && currentImportId && currentFileSignature === sig) return currentImportId;
+
+  log(force ? '파일 재업로드 중... (서버 캐시가 만료된 것 같습니다)' : '파일 업로드 중... (한 번만 업로드합니다)');
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('/v1/admin/import/good-price-file', {
+    method: 'POST',
+    headers: { 'X-Admin-Key': key },
+    body: form,
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  log(`업로드 완료: 원본 ${data.raw_rows}행 → 사용 가능 ${data.usable_rows}행 (지오코딩 필요 ${data.needs_geocoding}건)`);
+  currentImportId = data.import_id;
+  currentFileSignature = sig;
+  return currentImportId;
+}
+
+async function callImportRun(importId, region, dryRun, key, offset) {
+  const params = new URLSearchParams({ import_id: importId });
+  if (region) params.set('region', region);
+  if (dryRun) params.set('dry_run', 'true');
+  else {
+    params.set('offset', String(offset || 0));
+    params.set('limit', String(CHUNK_SIZE));
+  }
+  const resp = await fetch(`/v1/admin/import/good-price-run?${params.toString()}`, {
+    method: 'POST',
+    headers: { 'X-Admin-Key': key },
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+async function runAll(dryRun) {
+  const fileInput = document.getElementById('file');
+  const file = fileInput.files[0];
+  if (!file) { alert('파일을 선택해주세요.'); return; }
+  // 입력창 값은 시작할 때 딱 한 번만 읽어서 끝까지 재사용한다 — 매 요청마다 새로
+  // 읽으면, 긴 작업 도중 브라우저가 비밀번호 칸을 비우는 경우(자동완성/보안 정책 등)
+  // 중간부터 401이 나는 문제가 있었다.
+  const key = document.getElementById('key').value;
+  if (!key) { alert('ADMIN_SYNC_KEY를 입력해주세요.'); return; }
+
+  const regionsRaw = document.getElementById('regions').value.trim();
+  const regions = regionsRaw ? regionsRaw.split('\n').map((s) => s.trim()).filter(Boolean) : [null];
+
+  document.getElementById('dryrun-btn').disabled = true;
+  document.getElementById('run-btn').disabled = true;
+  logEl.textContent = '';
+
+  let importId;
+  try {
+    importId = await ensureUploaded(file, key);
+  } catch (err) {
+    log(`업로드 오류: ${err.message}`);
+    document.getElementById('dryrun-btn').disabled = false;
+    document.getElementById('run-btn').disabled = false;
+    return;
+  }
+
+  log(`시작: ${regions.length}개 구간 (${dryRun ? '미리보기 모드' : `실제 저장, ${CHUNK_SIZE}건씩 나눠서`})`);
+
+  const totals = { usable_rows: 0, places_created: 0, menu_items_created: 0, menu_items_updated: 0, failed_rows: 0 };
+  outer:
+  for (const region of regions) {
+    log(`\n▶ ${region || '전체'} 처리 중...`);
+    if (dryRun) {
+      try {
+        const result = await callImportRun(importId, region, dryRun, key, 0);
+        log(JSON.stringify(result, null, 2));
+      } catch (err) {
+        log(`오류: ${err.message}`);
+      }
+      continue;
+    }
+
+    // 실제 저장 모드: done=true가 될 때까지 같은 region을 offset만 바꿔가며 반복 호출
+    let offset = 0;
+    let done = false;
+    let pageNum = 1;
+    while (!done) {
+      try {
+        const result = await callImportRun(importId, region, dryRun, key, offset);
+        log(`  [${pageNum}페이지, offset ${offset}] ${JSON.stringify(result)}`);
+        for (const k of Object.keys(totals)) {
+          if (typeof result[k] === 'number') totals[k] += result[k];
+        }
+        offset = result.next_offset;
+        done = result.done;
+        pageNum++;
+      } catch (err) {
+        log(`오류: ${err.message}`);
+        if (err.message.includes('HTTP 401')) {
+          log('\n키 인증 실패라 중단합니다. ADMIN_SYNC_KEY를 확인하고 다시 시작해주세요.');
+          break outer;
+        }
+        if (err.message.includes('import_id')) {
+          // 서버(Render 무료 플랜)가 오래 쉬다가 재시작되면 메모리 캐시가 날아간다 —
+          // 그럴 땐 같은 파일을 다시 올려서(재업로드) 같은 offset부터 이어간다.
+          try {
+            importId = await ensureUploaded(file, key, true);
+            continue;
+          } catch (e2) {
+            log(`재업로드 실패: ${e2.message}`);
+            break outer;
+          }
+        }
+        log(`  이 페이지(offset ${offset})는 건너뛰고 다음 묶음으로 계속합니다...`);
+        offset += CHUNK_SIZE; // 이 페이지는 포기하고 다음 구간으로 넘어가 전체가 멈추지 않게 함
+      }
+    }
+  }
+  log(`\n=== 전체 합계 ===\n${JSON.stringify(totals, null, 2)}`);
+
+  document.getElementById('dryrun-btn').disabled = false;
+  document.getElementById('run-btn').disabled = false;
+}
+
+document.getElementById('dryrun-btn').addEventListener('click', () => runAll(true));
+document.getElementById('run-btn').addEventListener('click', () => {
+  if (confirm('실제로 DB에 저장합니다. 계속할까요?')) runAll(false);
+});
+</script>
+</body>
+</html>
