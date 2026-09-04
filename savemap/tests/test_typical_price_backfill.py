@@ -52,15 +52,23 @@ def _place(address="충남 아산시"):
 
 
 class _FakeClient:
-    def __init__(self, price=9000.0, raise_exc=None):
+    """배치 추정(2026-09-04)으로 바뀐 인터페이스를 흉내낸다 — 호출 수를 줄이려고
+    (메뉴명, 지역) 묶음을 한 번에 넘기고 {인덱스: 가격}을 돌려받는다.
+    prices=None이면 모든 항목을 같은 price로, dict면 인덱스별로 답한다
+    (빈 dict = 전부 추정 실패)."""
+
+    def __init__(self, price=9000.0, raise_exc=None, prices=None):
         self._price = price
         self._raise_exc = raise_exc
-        self.estimate_typical_price = AsyncMock(side_effect=self._call)
+        self._prices = prices
+        self.estimate_typical_prices_batch = AsyncMock(side_effect=self._call)
 
-    async def _call(self, item_name, region=None):
+    async def _call(self, items):
         if self._raise_exc:
             raise self._raise_exc
-        return self._price
+        if self._prices is not None:
+            return dict(self._prices)
+        return {i: self._price for i in range(len(items))}
 
 
 # --- backfill_typical_prices: 배치/캐시/페이지네이션 ---
@@ -79,7 +87,7 @@ def test_estimates_and_saves_price():
     assert item.ai_typical_price == 9000.0
     assert session.commits == 1
     assert session.rollbacks == 0
-    client.estimate_typical_price.assert_awaited_once_with("김치찌개", "충남")
+    client.estimate_typical_prices_batch.assert_awaited_once_with([("김치찌개", "충남")])
 
 
 def test_reuses_existing_estimate_for_same_name_and_region_without_calling_api():
@@ -95,7 +103,7 @@ def test_reuses_existing_estimate_for_same_name_and_region_without_calling_api()
     assert result["reused_from_cache"] == 1
     assert result["estimated"] == 0
     assert item.ai_typical_price == 8500.0
-    client.estimate_typical_price.assert_not_awaited()
+    client.estimate_typical_prices_batch.assert_not_awaited()
 
 
 def test_different_region_does_not_reuse_cache():
@@ -124,19 +132,13 @@ def test_dry_run_does_not_commit():
     assert item.ai_typical_price is None  # dry_run이라 실제로는 안 붙음
 
 
-def test_estimation_failure_is_counted_and_does_not_block_others():
+def test_partial_batch_response_only_fills_answered_items():
+    """배치 응답에 일부 항목이 빠져도(모델이 null을 주거나 아예 누락) 나머지는
+    정상 저장돼야 한다 — 빠진 자리를 임의의 값으로 채우면 안 된다."""
     item1, item2 = _item(id_=1), _item(id_=2, name="제육볶음", normalized_name="제육볶음")
     session = _FakeSession([(item1, _place()), (item2, _place())])
-    call_count = {"n": 0}
-
-    async def flaky(item_name, region=None):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            raise RuntimeError("boom")
-        return 12000.0
-
-    client = _FakeClient()
-    client.estimate_typical_price = AsyncMock(side_effect=flaky)
+    # 0번(김치찌개)은 응답에 없고 1번(제육볶음)만 값이 왔다.
+    client = _FakeClient(prices={1: 12000.0})
     result = asyncio.run(backfill_typical_prices(session, limit=10, client=client))
 
     assert result["failed"] == 1
@@ -145,9 +147,23 @@ def test_estimation_failure_is_counted_and_does_not_block_others():
     assert item2.ai_typical_price == 12000.0
 
 
+def test_batch_call_failure_does_not_crash_and_counts_all_as_failed():
+    """묶음 호출 자체가 터져도(네트워크/한도) 예외가 밖으로 나가면 안 된다 —
+    관리자 페이지의 반복 호출 루프가 통째로 멈춘다."""
+    item1, item2 = _item(id_=1), _item(id_=2, name="제육볶음", normalized_name="제육볶음")
+    session = _FakeSession([(item1, _place()), (item2, _place())])
+    client = _FakeClient(raise_exc=RuntimeError("boom"))
+    result = asyncio.run(backfill_typical_prices(session, limit=10, client=client))
+
+    assert result["failed"] == 2
+    assert result["estimated"] == 0
+    assert item1.ai_typical_price is None
+    assert item2.ai_typical_price is None
+
+
 def test_none_response_counts_as_failed():
     session = _FakeSession([(_item(), _place())])
-    client = _FakeClient(price=None)
+    client = _FakeClient(prices={})  # 모델이 null로 답해 아무 인덱스도 안 온 경우
     result = asyncio.run(backfill_typical_prices(session, limit=10, client=client))
     assert result["failed"] == 1
     assert result["estimated"] == 0

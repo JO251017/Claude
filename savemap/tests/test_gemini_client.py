@@ -483,3 +483,66 @@ def test_http_client_url_logging_is_silenced():
     configure_logging()
     assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
     assert not logging.getLogger("httpcore").isEnabledFor(logging.INFO)
+
+
+# --- 통상가 배치 추정(2026-09-04) --- 호출 수를 줄이려고 여러 메뉴를 한 번에
+# 묻는다. 응답 정렬이 어긋나면 엉뚱한 메뉴에 엉뚱한 가격이 붙어 틀린 절약률을
+# 만들어내므로, 번호 대조가 실제로 걸리는지 고정해둔다.
+
+
+def _batch_response(text: str):
+    async def fake_post(self, url, **kwargs):
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            200, request=request,
+            json={"candidates": [{"content": {"parts": [{"text": text}]}}]},
+        )
+
+    return fake_post
+
+
+def test_batch_estimate_maps_prices_by_index():
+    body = '[{"index": 1, "typical_price": 8000}, {"index": 2, "typical_price": 12000}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(
+            _client().estimate_typical_prices_batch([("김치찌개", "충남"), ("삼겹살", "충남")])
+        )
+    assert got == {0: 8000.0, 1: 12000.0}
+
+
+def test_batch_estimate_drops_out_of_range_index():
+    """입력이 2개인데 5번이 오면 응답이 어긋난 것이다 — 억지로 맞추지 않고 버린다."""
+    body = '[{"index": 5, "typical_price": 9000}, {"index": 1, "typical_price": 7000}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().estimate_typical_prices_batch([("a", None), ("b", None)]))
+    assert got == {0: 7000.0}
+
+
+def test_batch_estimate_skips_null_and_nonpositive_prices():
+    body = (
+        '[{"index": 1, "typical_price": null}, {"index": 2, "typical_price": 0},'
+        ' {"index": 3, "typical_price": 5000}]'
+    )
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(
+            _client().estimate_typical_prices_batch([("a", None), ("b", None), ("c", None)])
+        )
+    assert got == {2: 5000.0}
+
+
+def test_batch_estimate_returns_empty_on_bad_json_instead_of_raising():
+    with patch("httpx.AsyncClient.post", new=_batch_response("설명하자면 8000원쯤입니다")):
+        got = asyncio.run(_client().estimate_typical_prices_batch([("a", None)]))
+    assert got == {}
+
+
+def test_batch_estimate_empty_input_makes_no_api_call():
+    called = {"n": 0}
+
+    async def counting_post(self, url, **kwargs):  # pragma: no cover - 불리면 안 됨
+        called["n"] += 1
+        raise AssertionError("빈 입력으로 API를 부르면 안 된다")
+
+    with patch("httpx.AsyncClient.post", new=counting_post):
+        assert asyncio.run(_client().estimate_typical_prices_batch([])) == {}
+    assert called["n"] == 0

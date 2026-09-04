@@ -29,6 +29,10 @@ from app.sources.public_api.dine_out_price import region_from_address
 
 logger = logging.getLogger(__name__)
 
+# 한 번의 API 호출에 묶어 보낼 (메뉴명, 지역) 조합 수. 너무 크게 잡으면 응답이
+# 길어져 잘리거나 정렬이 어긋날 위험이 커지고, 너무 작으면 묶는 의미가 없다.
+_BATCH_SIZE = 40
+
 
 class _CacheKey(NamedTuple):
     normalized_name: str
@@ -80,33 +84,56 @@ async def backfill_typical_prices(
         }
 
     cache = await _load_existing_estimates(session)
+
+    # 이번 페이지에서 각 행이 어떤 (메뉴명, 지역) 조합인지 먼저 정리한다.
+    keyed_rows = [
+        (item, _CacheKey(item.normalized_name or normalize_menu_name(item.name),
+                         region_from_address(place.address)))
+        for item, place in rows
+    ]
+
+    # 캐시에 없는 조합만 모아서 한 번에 묶어 물어본다(2026-09-04). 예전엔 행마다
+    # API를 한 번씩 불렀는데, 고유 메뉴명이 2,881개라 무료 한도로는 며칠이
+    # 걸렸다. 같은 조합은 여기서 이미 한 번으로 합쳐지고, 남은 것들도
+    # _BATCH_SIZE개씩 묶여서 호출 수가 수십분의 1로 준다.
+    pending = [key for _, key in keyed_rows if key not in cache]
+    unique_pending = list(dict.fromkeys(pending))  # 순서 유지 중복 제거
+
     estimated = 0
-    reused = 0
-    failed = 0
-
-    for item, place in rows:
-        name = item.normalized_name or normalize_menu_name(item.name)
-        region = region_from_address(place.address)
-        key = _CacheKey(name, region)
-
-        if key in cache:
-            price = cache[key]
-            reused += 1
-        else:
-            try:
-                price = await client.estimate_typical_price(item.name, region)
-            except Exception as exc:  # noqa: BLE001 - 행 하나 실패가 나머지 수십 건을 막으면 안 됨
-                logger.warning("통상가 추정 실패 (menu_item_id=%s): %s", item.id, exc)
-                failed += 1
-                continue
+    failed_keys: set[_CacheKey] = set()
+    for start in range(0, len(unique_pending), _BATCH_SIZE):
+        chunk = unique_pending[start : start + _BATCH_SIZE]
+        try:
+            prices = await client.estimate_typical_prices_batch(
+                [(key.normalized_name, key.region) for key in chunk]
+            )
+        except Exception as exc:  # noqa: BLE001 - 한 묶음 실패가 나머지 묶음을 막으면 안 됨
+            logger.warning("통상가 배치 추정 실패 (%d건): %s", len(chunk), exc)
+            failed_keys.update(chunk)
+            continue
+        for i, key in enumerate(chunk):
+            price = prices.get(i)
             if price is None:
-                failed += 1
+                # 응답에 없거나 null이면 추정 실패로 둔다 — 지어내지 않는다.
+                failed_keys.add(key)
                 continue
             cache[key] = price
             estimated += 1
 
+    reused = 0
+    failed = 0
+    for item, key in keyed_rows:
+        price = cache.get(key)
+        if price is None:
+            failed += 1
+            continue
+        if key not in failed_keys and key in cache:
+            reused += 1
         if not dry_run:
             item.ai_typical_price = price
+    # estimated는 "이번에 새로 추정한 고유 조합 수"라 위에서 이미 셌다 —
+    # reused에서 그만큼 빼야 "캐시 재사용" 숫자가 실제 의미를 갖는다.
+    reused = max(reused - estimated, 0)
 
     item_ids = [item.id for item, _ in rows]
     if dry_run:

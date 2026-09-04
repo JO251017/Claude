@@ -142,6 +142,35 @@ def _typical_price_prompt(item_name: str, region: str | None = None) -> str:
     )
 
 
+def _typical_price_batch_prompt(items: list[tuple[str, str | None]]) -> str:
+    """여러 메뉴의 통상가를 한 번의 호출로 묻는다(2026-09-04).
+
+    왜: 메뉴 하나에 호출 하나면 고유 메뉴명 2,881개에 2,881번을 불러야 하는데,
+    무료 한도에서는 이걸 다 돌리는 데 며칠이 걸린다. 50개씩 묶으면 60번이면
+    끝난다 — 추정 품질은 그대로고 호출 수만 줄어든다.
+
+    응답 정렬이 어긋나면 엉뚱한 메뉴에 엉뚱한 가격이 붙는다(이건 틀린 절약률을
+    만들어내는 것과 같아서 조용히 넘어가면 안 되는 사고다). 그래서 번호를 매겨
+    보내고 번호를 그대로 돌려받게 한 뒤, 호출부에서 번호로 맞춘다."""
+    lines = []
+    for i, (name, region) in enumerate(items, start=1):
+        where = f" (지역: {region})" if region else ""
+        lines.append(f"{i}. {name}{where}")
+    listed = "\n".join(lines)
+    return (
+        "아래는 한국의 동네 식당·카페·미용실 등에서 파는 항목 목록이야. "
+        "각 항목이 일반적으로 얼마에 판매될지 통상 가격을 짐작해줘. "
+        "특정 매장의 실제 조사값이 아니라 참고용 짐작이라는 걸 감안하고, "
+        "지역이 적혀 있으면 그 지역 기준으로 짐작해줘.\n"
+        "합리적으로 짐작할 수 있으면 원 단위 숫자로, 이름이 너무 모호하거나 "
+        "짐작이 무의미하면 null로 답해. 모르면 억지로 채우지 말고 null로 둬.\n"
+        "반드시 아래 JSON 배열 형식으로만, 입력과 같은 개수·같은 번호로 응답하고 "
+        "다른 텍스트는 포함하지 마:\n"
+        '[{"index": 1, "typical_price": 숫자 또는 null}, ...]\n\n'
+        f"항목 목록:\n{listed}\n"
+    )
+
+
 def _route_summary_prompt(
     stops: list[dict],
     budget: float,
@@ -542,6 +571,49 @@ class GeminiVisionClient:
         if not isinstance(price, (int, float)) or price <= 0:
             return None
         return float(price)
+
+    async def estimate_typical_prices_batch(
+        self, items: list[tuple[str, str | None]]
+    ) -> dict[int, float]:
+        """여러 (메뉴명, 지역)의 통상가를 한 번의 호출로 추정한다.
+
+        반환은 {입력 리스트의 인덱스: 가격}이다 — 짐작이 안 되거나(null) 값이
+        이상하거나 응답에서 빠진 항목은 아예 키가 없다. 호출부는 "키가 없으면
+        추정 실패"로만 다루면 되고, 없는 값을 채워 넣으면 안 된다.
+
+        estimate_typical_price와 같은 fail-soft 원칙 — 호출 자체가 실패하거나
+        응답이 JSON이 아니면 예외를 던지지 않고 빈 dict를 돌려준다. 그러면
+        호출부(백필 배치)는 이번 묶음만 건너뛰고 다음 묶음으로 넘어간다."""
+        if not items:
+            return {}
+        try:
+            raw_text = await self._ask_text(_typical_price_batch_prompt(items))
+        except (OcrServiceError, ReportImageFetchError):
+            return {}
+
+        try:
+            # 응답이 JSON "배열"이라 _strip_code_fence(객체용)를 쓰면 안 된다 —
+            # 그건 첫 {...}만 뽑아내서 배열의 바깥 대괄호를 벗겨버린다.
+            parsed = json.loads(_strip_array_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return {}
+        if not isinstance(parsed, list):
+            return {}
+
+        result: dict[int, float] = {}
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            index = entry.get("index")
+            price = entry.get("typical_price")
+            # 번호가 입력 범위 밖이면 버린다 — 응답이 어긋난 상태에서 억지로
+            # 맞추면 엉뚱한 메뉴에 가격이 붙는다.
+            if not isinstance(index, int) or not 1 <= index <= len(items):
+                continue
+            if not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
+                continue
+            result[index - 1] = float(price)
+        return result
 
     async def summarize_route(
         self,
