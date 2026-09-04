@@ -1,5 +1,7 @@
 import asyncio
 
+from datetime import datetime, timezone
+
 from app.gamification.service import (
     EXPLORER_TITLE_THRESHOLDS,
     GROWTH_WEIGHT,
@@ -9,6 +11,7 @@ from app.gamification.service import (
     compute_growth_score,
     compute_recommend_title,
     compute_visit_title,
+    get_daily_saved_series,
     get_discovered_place_count,
     get_growth_score,
     get_recommended_place_count,
@@ -241,3 +244,31 @@ def test_get_growth_score_combines_query_results_with_passed_in_counts():
         get_growth_score(session, "user-1", discovered_place_count=10, recommend_count=3)
     )
     assert score == compute_growth_score(10, 4, 3, 1, 2)
+
+
+# --- MY탭 절약 통계: 최근 7일 추이(2026-09-04, "마이탭에서 절약을 얼마나
+# 했는지도 통계로 나타내") — 단일 execute 호출(하루당 조건부 합계 하나씩,
+# get_savings_summary의 _sum_since와 같은 패턴)이라 _FakeSummarySession을
+# 그대로 재사용한다.
+def test_get_daily_saved_series_zero_fills_and_orders_oldest_to_newest():
+    # 7일치 응답, 마지막(오늘) 칸만 값이 있고 나머지는 0(zero-fill 확인).
+    session = _FakeSummarySession(rows=[(0, 0, 0, 0, 0, 1000, 2500)])
+    points = asyncio.run(get_daily_saved_series(session, "user-1", days=7))
+    assert len(points) == 7
+    assert [p.amount for p in points] == [0, 0, 0, 0, 0, 1000.0, 2500.0]
+    # 마지막 칸의 날짜가 "오늘"(UTC 자정 기준 — get_savings_summary.today_saved와
+    # 같은 경계)이어야 today_saved와 차트의 오늘 막대가 서로 다른 날을 가리키지 않는다.
+    assert points[-1].date == datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def test_get_daily_saved_series_respects_days_param():
+    session = _FakeSummarySession(rows=[(500, 700, 900)])
+    points = asyncio.run(get_daily_saved_series(session, "user-1", days=3))
+    assert len(points) == 3
+    assert points[-1].amount == 900.0
+
+
+def test_get_daily_saved_series_all_zero_when_no_activity():
+    session = _FakeSummarySession(rows=[(0,) * 7])
+    points = asyncio.run(get_daily_saved_series(session, "user-1", days=7))
+    assert all(p.amount == 0 for p in points)

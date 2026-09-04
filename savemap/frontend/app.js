@@ -1050,6 +1050,32 @@ function spawnGrowthDeltaText(delta) {
   setTimeout(() => span.remove(), 1300);
 }
 
+// 성장치 피드백을 어디서든 체감시킨다(2026-09-04, "절약활동을 통해서 펫 성장하는
+// 루프를 더 강하게 연결하고 느껴지도록 개선해") — spawnGrowthDeltaText/
+// celebrateGrowthStageUp은 character-stage(MY 탭 전용)에만 그려서, 지도 화면 등
+// 다른 탭에 있을 땐 성장 연출이 전부 안 보이는 화면에서 일어났다. bottom-nav는
+// switchScreen과 무관하게 항상 렌더되므로, 여기 두 함수가 그 자리에 같은 정보를
+// 한 번 더 띄운다 — 사용자가 지금 어느 화면에 있든 "방금 이만큼 컸다"가 보인다.
+function spawnNavGrowthDelta(delta) {
+  const navBtn = document.getElementById('nav-btn-my');
+  if (!navBtn || delta <= 0) return;
+  const span = document.createElement('span');
+  span.className = 'nav-growth-delta';
+  span.textContent = `+${delta}`;
+  navBtn.appendChild(span);
+  setTimeout(() => span.remove(), 1400);
+}
+
+// 레벨업했는데 사용자가 아직 MY탭을 열어보지 않았으면 MY 버튼에 골드 링을 붙여
+// 둔다 — switchScreen이 MY탭으로 전환되는 순간 뗀다(아래 clearNavGrowthRing).
+function markNavGrowthUnseen() {
+  document.getElementById('nav-growth-ring')?.classList.add('nav-growth-ring--show');
+}
+
+function clearNavGrowthRing() {
+  document.getElementById('nav-growth-ring')?.classList.remove('nav-growth-ring--show');
+}
+
 // 성장치가 쌓여서 실제로 단계 번호가 올라간 순간 — 일반 반응(triggerAvatarGrowthFeedback)
 // 보다 훨씬 크게 튀고 반짝임도 더 많이 터뜨려서 "그냥 숫자가 아니라 진짜 컸다"를
 // 분명히 보여준다.
@@ -1107,6 +1133,53 @@ function escapeHtml(str) {
 
 function formatWon(amount) {
   return `₩${Math.round(amount || 0).toLocaleString()}`;
+}
+
+// 절약 통계 — 최근 7일 추이 미니 막대차트(2026-09-04, "마이탭에서 절약을 얼마나
+// 했는지도 통계로 나타내"). 좁은 막대 위 라벨이라 formatWon 그대로 쓰면 넘치므로
+// 여기서만 압축 표기(만원 단위)를 쓴다.
+function formatWonCompact(amount) {
+  if (amount >= 10000) {
+    const man = amount / 10000;
+    return `${Number.isInteger(man) ? man : man.toFixed(1)}만`;
+  }
+  return amount > 0 ? Math.round(amount).toLocaleString() : '';
+}
+
+const WEEKDAY_LABELS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+// dailySaved: [{date:"YYYY-MM-DD", amount}, ...] 오늘 포함 최근 7일, 서버가 이미
+// 활동 없는 날도 0으로 채워서 준다(zero-fill) — 프론트는 최댓값 대비 막대 높이
+// 비율만 계산한다. 7일 내내 0원이면(막 시작한 사용자 포함) 막대 7개가 전부
+// 바닥에 붙은 모양이 "차트가 비었다"보다 "고장났다"로 보이기 쉬워서, 그 경우엔
+// 막대 대신 안내 문구로 바꾼다.
+function renderSavingTrend(dailySaved) {
+  const container = document.getElementById('saving-trend-bars');
+  const empty = document.getElementById('saving-trend-empty');
+  if (!container || !empty || !Array.isArray(dailySaved) || !dailySaved.length) return;
+  const maxAmount = Math.max(...dailySaved.map((d) => d.amount || 0), 0);
+  container.classList.toggle('hidden', maxAmount <= 0);
+  empty.classList.toggle('hidden', maxAmount > 0);
+  if (maxAmount <= 0) {
+    container.innerHTML = '';
+    return;
+  }
+  const todayStr = dailySaved[dailySaved.length - 1].date;
+  container.innerHTML = dailySaved
+    .map((point) => {
+      const isToday = point.date === todayStr;
+      const heightPct = Math.max(4, Math.round(((point.amount || 0) / maxAmount) * 100));
+      const weekday = WEEKDAY_LABELS_KO[new Date(`${point.date}T00:00:00Z`).getUTCDay()];
+      return `
+        <div class="saving-trend-col${isToday ? ' saving-trend-col--today' : ''}">
+          <span class="saving-trend-amount">${escapeHtml(formatWonCompact(point.amount || 0))}</span>
+          <div class="saving-trend-bar-track">
+            <div class="saving-trend-bar${isToday ? ' saving-trend-bar--today' : ''}" style="height:${heightPct}%"></div>
+          </div>
+          <span class="saving-trend-label">${isToday ? '오늘' : weekday}</span>
+        </div>`;
+    })
+    .join('');
 }
 
 // --- 절약 토스트(5번 항목, 2026-08-13) ---
@@ -1265,7 +1338,11 @@ function switchScreen(name) {
   // MY 탭은 display:none이었다가 막 보이는 순간이라 그전까지 roamAvatarToRandomSpot()이
   // 재던 clientWidth가 0이었을 수 있다(화면이 안 보이면 폭도 0) — 진짜로 보이는
   // 시점에 한 번 더 굴려서 처음 봤을 때부터 자리가 잡혀 있게 한다.
-  if (name === 'my') roamAvatarToRandomSpot();
+  if (name === 'my') {
+    roamAvatarToRandomSpot();
+    // MY탭을 열어봤으니 "확인 안 한 레벨업" 링을 뗀다.
+    clearNavGrowthRing();
+  }
   // 날씨 이펙트 캔버스도 안 보이는 동안은 rAF를 꺼서 배터리를 안 축낸다(2026-08-28).
   if (name === 'map') {
     resumeWeatherFxIfNeeded();
@@ -1368,8 +1445,10 @@ async function loadMyProfile() {
 
     if (growthDelta > 0) {
       spawnGrowthDeltaText(growthDelta);
+      spawnNavGrowthDelta(growthDelta);
       if (previousStageIndex !== null && growth.stageIndex > previousStageIndex) {
         celebrateGrowthStageUp(growth);
+        markNavGrowthUnseen();
       }
     }
     lastKnownGrowthScore = growthScore;
@@ -1404,6 +1483,7 @@ async function loadMyProfile() {
     document.getElementById('my-monthly-saved').textContent = formatWon(s.monthly_saved);
     document.getElementById('my-yearly-saved').textContent = formatWon(s.yearly_saved);
     document.getElementById('my-cert-count').textContent = s.certification_count;
+    renderSavingTrend(s.daily_saved);
 
     // 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 레벨과 독립된 축이라
     // 별도 필드(explorer_*/visit_*/recommend_*)로 채운다. 셋 다 같은 문구 패턴
@@ -2150,7 +2230,14 @@ async function confirmVisit(place, btn) {
     btn.classList.add('hidden');
     triggerAvatarGrowthFeedback('visit');
     showPetSpeech(petSpeechFor('visit'));
-    showSavingsToast(`🐾 방문 완료! +${data.xp_awarded} 성장치`);
+    // "성장치" 숫자는 여기 안 넣는다 — data.xp_awarded는 XP_REWARD(app/domain/
+    // enums.py, 내부 활동 지표, 방문=6)에서 온 값이라 실제 펫 성장에 쓰이는
+    // GROWTH_WEIGHT(방문=30, app/gamification/service.py)와 스케일이 달라서
+    // 그대로 붙이면 숫자가 안 맞아 보인다(2026-09-04 발견). 정확한 성장치는
+    // 바로 아래 loadMyProfile()이 growthScore 실제 증가분으로
+    // spawnGrowthDeltaText/spawnNavGrowthDelta를 통해 보여준다 — discover/
+    // recommend 토스트와 같은 패턴으로 통일.
+    showSavingsToast('🐾 방문 완료!');
     loadMyProfile();
   } catch (err) {
     statusEl.innerHTML = `<p class="error-msg">${escapeHtml(err.message)}</p>`;

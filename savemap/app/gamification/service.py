@@ -169,6 +169,56 @@ async def get_savings_summary(session: AsyncSession, user_id: str) -> SavingsSum
     return summary
 
 
+# --- MY탭 통계: 최근 7일 절약 추이(2026-09-04, "마이탭에서 절약을 얼마나 했는지도
+# 통계로 나타내") — today_saved/weekly_saved 등 누적 숫자만 있고, "요즘 꾸준히
+# 하고 있나" 흐름을 눈으로 보여주는 게 없었다. 미니 바차트 하나로 최소 구현한다
+# (§ MVP 단순화 — 카테고리별/시간대별 세분화는 이번 범위 밖).
+_DAILY_TREND_DAYS = 7
+
+
+@dataclass
+class DailySavedPoint:
+    date: str  # "YYYY-MM-DD", UTC 일 단위 — today_saved/weekly_saved와 같은 자정 기준
+    amount: float
+
+
+async def get_daily_saved_series(
+    session: AsyncSession, user_id: str, *, days: int = _DAILY_TREND_DAYS
+) -> list[DailySavedPoint]:
+    """오늘 포함 최근 days일을 하루 단위로 합산한다. 활동 없는 날도 0으로
+    채워서(zero-fill) 프론트가 "빈 날"을 따로 계산하지 않게 한다. get_savings_summary와
+    다른 날짜 경계를 쓰면 오늘 누적 숫자와 차트의 오늘 막대가 서로 안 맞아 보이므로
+    같은 UTC 자정 기준(_sum_since 패턴)을 그대로 따른다."""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    range_start = today_start - timedelta(days=days - 1)
+    day_starts = [range_start + timedelta(days=i) for i in range(days)]
+
+    def _sum_between(start: datetime, end: datetime):
+        return func.coalesce(
+            func.sum(
+                case(
+                    (
+                        (SavingsCertification.created_at >= start) & (SavingsCertification.created_at < end),
+                        SavingsCertification.amount,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        )
+
+    row = (
+        await session.execute(
+            select(*(_sum_between(d, d + timedelta(days=1)) for d in day_starts)).where(
+                SavingsCertification.user_id == user_id
+            )
+        )
+    ).one()
+
+    return [DailySavedPoint(date=d.strftime("%Y-%m-%d"), amount=float(amount)) for d, amount in zip(day_starts, row)]
+
+
 class LeaderboardService:
     async def weekly_top(self, region: str, limit: int = 10) -> list[dict]:
         raise NotImplementedError("길드·랭킹보드는 후속 단계에서 구현")

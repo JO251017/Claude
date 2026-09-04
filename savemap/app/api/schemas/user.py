@@ -1,6 +1,14 @@
 from pydantic import BaseModel
 
 
+class DailySavedPointResponse(BaseModel):
+    """MY탭 절약 추이 미니 차트 한 칸(2026-09-04). date는 "YYYY-MM-DD"(UTC 일 기준,
+    SavingsSummaryResponse.today_saved와 같은 자정 경계)."""
+
+    date: str
+    amount: float
+
+
 class MerchantStatusResponse(BaseModel):
     """MY 탭 "사업자 콘솔" 바로가기를 조건부로 보여줄지 판단하는 용도(2-3, 2026-08-13)."""
 
@@ -52,6 +60,9 @@ class SavingsSummaryResponse(BaseModel):
     # 가중치 1로 직접 더했다(app.js:1124). 이제 서버가 가중치를 적용해 계산한
     # 값을 그대로 내려준다 — "실제 행동으로만 증가한다"를 서버가 보장하기 위함.
     growth_score: int = 0
+    # 절약 통계(2026-09-04, "마이탭에서 절약을 얼마나 했는지도 통계로 나타내") —
+    # 최근 7일 일별 절약액 추이. 활동 없는 날도 0으로 채워져 있다(zero-fill).
+    daily_saved: list[DailySavedPointResponse] = []
 
 
 class DigestResponse(BaseModel):

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequireUserDep, SessionDep
 from app.api.schemas.user import (
+    DailySavedPointResponse,
     DigestResponse,
     MerchantStatusResponse,
     PetReactionResponse,
@@ -12,6 +13,7 @@ from app.engine.savings_digest import get_or_create_digest
 from app.gamification.pet_reactions import get_or_create_levelup_message
 from app.gamification.service import (
     compute_visit_title,
+    get_daily_saved_series,
     get_explorer_summary,
     get_growth_score,
     get_recommend_summary,
@@ -53,6 +55,7 @@ async def my_savings_summary(
         discovered_place_count=explorer.discovered_place_count,
         recommend_count=recommend.recommend_count,
     )
+    daily_saved = await get_daily_saved_series(session, user_id)
     return SavingsSummaryResponse(
         total_saved=summary.total_saved,
         level=summary.level,
@@ -81,6 +84,7 @@ async def my_savings_summary(
         streak_active_today=streak.did_activity_today,
         streak_at_risk=streak.at_risk,
         growth_score=growth_score,
+        daily_saved=[DailySavedPointResponse(date=p.date, amount=p.amount) for p in daily_saved],
     )
 
 

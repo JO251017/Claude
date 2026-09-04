@@ -13,7 +13,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="쓸모 | 내 주변의 절약 기회" />
   <meta name="twitter:description" content="내 주변의 실제 가격과 혜택을 비교하고, 지금 아낄 수 있는 절약 기회를 찾아보세요." />
-  <link rel="stylesheet" href="style.css?v=20260901f" />
+  <link rel="stylesheet" href="style.css?v=20260904a" />
   <!-- 카카오 JavaScript 키: 도메인 화이트리스트로 보호되는 공개용 키라 REST/Admin 키와 달리 프론트엔드에 직접 노출해도 안전 -->
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=50e1560f6d62535164d7343df957449e&libraries=services"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -390,6 +390,20 @@
                    옮겨서 하나의 성장 모듈로 묶는다. -->
               <div class="saving-bar-track"><div class="saving-bar-fill" id="my-saving-bar"></div></div>
               <div class="saving-next" id="my-next-level-text">다음 성장까지 10</div>
+              <!-- 성장치 얻는 법 범례(2026-09-04, "절약활동을 통해서 펫 성장하는
+                   루프를 더 강하게 연결하고 느껴지도록") — 지금까지는 성장 바가
+                   왜 그만큼 찼는지 어디에도 설명이 없었다. 값은
+                   app/gamification/service.py의 GROWTH_WEIGHT를 그대로 미러링한
+                   정적 상수(서버가 실제로 계산하는 값과 항상 같아야 하므로 그쪽이
+                   바뀌면 여기도 같이 바꿔야 한다) — API 호출 없이 고정 문구로만
+                   보여준다. -->
+              <div class="growth-legend" id="growth-legend">
+                <span class="growth-legend-chip">🧭 발견 <b>+5</b></span>
+                <span class="growth-legend-chip">👍 추천 <b>+15</b></span>
+                <span class="growth-legend-chip">🐾 방문 <b>+30</b></span>
+                <span class="growth-legend-chip">💰 구매인증 <b>+50</b></span>
+                <span class="growth-legend-chip">🧾 영수증인증 <b>+100</b></span>
+              </div>
               <!-- 아바타 옷장(MY탭 개편, 2026-08-27: "아바타 옷장 이런게 안보임
                    추가할 것") — 예전엔 목줄/리본 색 스와치가 카드 안에 바로
                    나열돼 있었다. 실제 "옷장"처럼 별도 화면으로 분리해서 카드는
@@ -428,6 +442,18 @@
                  hidden 유지(지어낸 문구를 보여주지 않는다) — app.js loadMyProfile
                  참고. -->
             <p id="my-digest" class="my-digest hidden"></p>
+
+            <!-- 절약 통계(2026-09-04, "마이탭에서 절약을 얼마나 했는지도 통계로
+                 나타내") — 오늘/주간/한달/연간 누적 숫자만으로는 "요즘 꾸준히
+                 하고 있나" 흐름이 안 보인다. 최근 7일 미니 막대 차트 하나로
+                 최소 구현(§ 과도한 세분화 금지) — app.js renderSavingTrend가
+                 daily_saved(서버, UTC 일 단위 zero-fill)로 막대를 그린다. 활동이
+                 하나도 없으면(전부 0) 차트 대신 안내 문구만 보여준다. -->
+            <div class="saving-trend" id="saving-trend">
+              <h3 class="saving-trend-title">최근 7일 절약 추이</h3>
+              <div class="saving-trend-bars" id="saving-trend-bars"></div>
+              <p class="saving-trend-empty hidden" id="saving-trend-empty">아직 이번 주 절약 기록이 없어요.</p>
+            </div>
           </div>
 
           <!-- 칭호 3종(발견/방문/추천, 2-2, 2026-08-13) — 절약금액 기반 레벨/캐릭터와
@@ -705,8 +731,17 @@
       <button class="nav-btn hidden" data-screen="exchange">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg></span><span class="nav-label">EXCHANGE</span>
       </button>
-      <button class="nav-btn" data-screen="my">
+      <!-- 성장치 피드백을 전역으로 노출(2026-09-04, "절약활동을 통해서 펫 성장하는
+           루프를 더 강하게 연결하고 느껴지도록") — 예전엔 +N 성장치/레벨업 축하가
+           character-stage(MY 탭 전용, display:none일 땐 안 보임)에만 렌더돼서
+           지도 화면에서 발견/방문/추천/인증해도 사용자가 못 봤다. bottom-nav는
+           모든 화면에서 항상 보이므로, 여기 MY 버튼에 (1) 성장치가 오른 순간
+           떠오르는 +N 팝업과 (2) 레벨업했는데 아직 MY탭을 안 열어봤을 때 붙는
+           골드 링을 추가한다(app.js spawnNavGrowthDelta/markNavGrowthUnseen,
+           switchScreen이 MY탭 진입 시 링을 뗀다). -->
+      <button class="nav-btn" data-screen="my" id="nav-btn-my">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></svg></span><span class="nav-label">MY</span>
+        <span class="nav-growth-ring" id="nav-growth-ring" aria-hidden="true"></span>
       </button>
       <button class="nav-btn hidden" data-screen="community">
         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><path d="M15 14.5c2.5 0 4.5 2 4.5 5.5"/></svg></span><span class="nav-label">COMMUNITY</span>
@@ -714,6 +749,6 @@
     </nav>
   </div>
 
-  <script src="app.js?v=20260901f"></script>
+  <script src="app.js?v=20260904a"></script>
 </body>
 </html>
