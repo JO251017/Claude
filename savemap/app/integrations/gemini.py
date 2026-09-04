@@ -171,6 +171,32 @@ def _typical_price_batch_prompt(items: list[tuple[str, str | None]]) -> str:
     )
 
 
+def _menu_synonym_prompt(names: list[str]) -> str:
+    """메뉴명 동의어 후보 탐색(2026-09-04) — 운영 DB에 실제로 존재하는
+    normalized_name 목록 일부를 주고, "같은 것을 표기만 다르게 적은 쌍"만
+    찾아달라고 한다. 재료·부위·조리법이 달라 보이면 절대 짝짓지 말라고
+    명시한다 — 이 프롬프트의 결과는 곧바로 정규화 규칙에 반영되지 않고
+    menu_synonym_candidate 테이블에 후보로만 쌓여서, 사람이 검토한 것만
+    _SYNONYMS에 들어간다(app/engine/menu_name.py)."""
+    numbered = "\n".join(f"{i}. {name}" for i, name in enumerate(names, start=1))
+    return (
+        "아래는 한국 동네 식당·카페·미용실 등의 메뉴/시술 이름 목록이야. "
+        "이 목록 안에서 **완전히 같은 항목을 표기만 다르게 적은 쌍**만 찾아줘.\n"
+        "예: '커트'와 '컷트', '짜장면'과 '자장면', '돈가스'와 '돈까스'.\n"
+        "절대 짝짓지 말아야 할 경우: 재료·부위·크기·조리법이 다르면 값(가격)도 "
+        "다를 수 있으니 표기 차이로 보이더라도 짝짓지 마. "
+        "예: '삼겹살'과 '대패삼겹살'(부위/두께 다름), '칼국수'와 '바지락칼국수'"
+        "(재료 다름), '냉면'과 '밀면'(다른 음식)은 절대 같은 쌍이 아니야.\n"
+        "확신이 없으면 아예 포함하지 마 — 후보를 많이 내는 것보다 정확한 것만 "
+        "내는 게 훨씬 중요해.\n"
+        "반드시 아래 JSON 배열 형식으로만 응답하고 다른 텍스트는 포함하지 마 "
+        "(변형→표준 방향으로, 목록의 번호를 그대로 인덱스로 써서):\n"
+        '[{"variant_index": 3, "canonical_index": 1, "reason": "표기 차이 한 줄 설명"}, ...]\n'
+        "찾은 쌍이 하나도 없으면 빈 배열 []로 답해.\n\n"
+        f"목록:\n{numbered}\n"
+    )
+
+
 def _route_summary_prompt(
     stops: list[dict],
     budget: float,
@@ -614,6 +640,45 @@ class GeminiVisionClient:
                 continue
             result[index - 1] = float(price)
         return result
+
+    async def suggest_menu_synonyms_batch(
+        self, names: list[str]
+    ) -> list[tuple[str, str, str | None]]:
+        """이름 목록 안에서 "표기만 다른 같은 메뉴" 쌍 후보를 찾는다(2026-09-04).
+
+        반환은 (variant, canonical, reason) 튜플 리스트다 — variant/canonical은
+        입력 names의 실제 문자열이고, 인덱스가 범위를 벗어나거나 자기 자신과
+        짝지어진 항목, 같은 이름을 반복해 응답한 항목은 버린다. 호출부(discovery
+        배치)가 이걸 그대로 DB에 저장하지 않고 검토 대상으로만 쌓는다 —
+        여기서 최종 필터링을 다 하지 않는 이유는, 진짜 위험한 실수(다른 음식을
+        합치는 것)는 사람이 봐야 걸러지기 때문이다.
+
+        fail-soft: 호출 자체가 실패하거나 응답이 이상하면 빈 리스트."""
+        if len(names) < 2:
+            return []
+        try:
+            raw_text = await self._ask_text(_menu_synonym_prompt(names))
+        except (OcrServiceError, ReportImageFetchError):
+            return []
+        try:
+            parsed = json.loads(_strip_array_fence(raw_text))
+        except (json.JSONDecodeError, IndexError):
+            return []
+        if not isinstance(parsed, list):
+            return []
+
+        results: list[tuple[str, str, str | None]] = []
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            vi, ci = entry.get("variant_index"), entry.get("canonical_index")
+            if not isinstance(vi, int) or not isinstance(ci, int):
+                continue
+            if not (1 <= vi <= len(names)) or not (1 <= ci <= len(names)) or vi == ci:
+                continue
+            reason = entry.get("reason")
+            results.append((names[vi - 1], names[ci - 1], reason if isinstance(reason, str) else None))
+        return results
 
     async def summarize_route(
         self,

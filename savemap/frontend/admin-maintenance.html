@@ -94,6 +94,29 @@
   </div>
   <progress id="typical-price-progress" value="0" max="1" hidden></progress>
 
+  <h2>메뉴명 동의어 후보 AI 탐색 (커버리지 확대)</h2>
+  <p class="warn">"커트/컷트", "짜장면/자장면"처럼 표기만 다른 메뉴명이 서로 다른
+  메뉴로 갈려서, 주변에 같은 메뉴를 파는 매장이 있어도 못 찾고 무료로 되는 실측
+  비교(benchmark_source=region)를 버리는 경우가 있었습니다. 이 배치는 AI로 후보를
+  넓게 찾아 검토 대기 목록(menu_synonym_candidate 테이블)에만 쌓습니다.
+  <b>여기서 자동으로 반영되는 건 없습니다</b> — 후보를 사람이 확인한 뒤
+  app/engine/menu_name.py의 _SYNONYMS에 직접 추가해야 실제로 적용됩니다
+  (잘못 합치면 다른 메뉴끼리 비교해 없는 절약률을 만들어내기 때문).</p>
+
+  <label for="synonym-limit">한 번 호출당 훑을 메뉴명 개수</label>
+  <input type="number" id="synonym-limit" value="300" min="60" max="1000" />
+
+  <div class="row" style="margin-top: 14px;">
+    <input type="checkbox" id="synonym-dry-run" />
+    <label for="synonym-dry-run">미리보기만 (dry_run — 찾기만 하고 저장하지 않음)</label>
+  </div>
+
+  <div>
+    <button id="synonym-run-btn">끝날 때까지 동의어 후보 탐색</button>
+    <button id="synonym-stop-btn" class="secondary" disabled>중단</button>
+  </div>
+  <progress id="synonym-progress" value="0" max="1" hidden></progress>
+
   <div id="log"></div>
 
 <script>
@@ -339,6 +362,73 @@ async function runTypicalPriceLoop() {
 
 document.getElementById('typical-price-run-btn').addEventListener('click', runTypicalPriceLoop);
 document.getElementById('typical-price-stop-btn').addEventListener('click', () => { typicalPriceStopRequested = true; });
+
+// --- 메뉴명 동의어 후보 AI 탐색(2026-09-04) --- 위 세 루프와 완전히 같은 패턴.
+// offset/limit은 "메뉴명 개수" 기준이라 다른 배치들과 단위가 다르지만, 호출
+// 방식(next_offset 이어받기, done까지 반복)은 동일하다.
+let synonymStopRequested = false;
+
+async function callSynonymDiscovery(key, { offset, limit, dryRun }) {
+  const params = { offset, limit, dry_run: dryRun };
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+  const url = `/v1/admin/maintenance/discover-menu-synonyms?${qs.toString()}`;
+  const resp = await fetch(url, { method: 'POST', headers: { 'X-Admin-Key': key } });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function runSynonymLoop() {
+  const key = getKey();
+  if (!key) return;
+  const limit = parseInt(document.getElementById('synonym-limit').value, 10) || 300;
+  const dryRun = document.getElementById('synonym-dry-run').checked;
+
+  const runBtn = document.getElementById('synonym-run-btn');
+  const stopBtn = document.getElementById('synonym-stop-btn');
+  const progressEl = document.getElementById('synonym-progress');
+  synonymStopRequested = false;
+  runBtn.disabled = true;
+  stopBtn.disabled = false;
+  progressEl.hidden = false;
+  progressEl.removeAttribute('max');
+  logEl.textContent = '';
+  log(`시작 (limit=${limit}, dry_run=${dryRun})`);
+
+  let offset = 0;
+  let totalScanned = 0, totalFound = 0, totalSaved = 0;
+  let round = 1;
+
+  for (; round <= 500; round++) {
+    if (synonymStopRequested) { log('\n사용자가 중단했습니다.'); break; }
+    let result;
+    try {
+      result = await callSynonymDiscovery(key, { offset, limit, dryRun });
+    } catch (err) {
+      log(`\n오류(offset=${offset}): ${err.message}`);
+      log('위 offset부터 다시 시작하려면 그냥 다시 눌러주세요(재시도해도 안전).');
+      break;
+    }
+    totalScanned += result.scanned;
+    totalFound += result.found;
+    totalSaved += result.saved;
+    log(`▶ ${round}회차 offset=${offset} → scanned=${result.scanned} found=${result.found} saved(new)=${result.saved}`);
+    if (result.done) {
+      log(`\n✅ 전체 완료 — 누적 scanned=${totalScanned} found=${totalFound} saved(new)=${totalSaved}`);
+      if (dryRun) log('\n(dry_run이라 실제로는 저장되지 않았습니다.)');
+      else log('\n검토는 데이터베이스의 menu_synonym_candidate 테이블에서 진행합니다(관리자가 직접 확인).');
+      break;
+    }
+    offset = result.next_offset;
+  }
+
+  runBtn.disabled = false;
+  stopBtn.disabled = true;
+  progressEl.hidden = true;
+}
+
+document.getElementById('synonym-run-btn').addEventListener('click', runSynonymLoop);
+document.getElementById('synonym-stop-btn').addEventListener('click', () => { synonymStopRequested = true; });
 </script>
 </body>
 </html>

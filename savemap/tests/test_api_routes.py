@@ -221,6 +221,14 @@ def test_admin_backfill_typical_prices_rejects_without_key_before_touching_db(cl
     assert resp.status_code == 401
 
 
+def test_admin_discover_menu_synonyms_rejects_without_key_before_touching_db(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "admin_sync_key", "real-secret")
+    resp = client.post("/v1/admin/maintenance/discover-menu-synonyms")
+    assert resp.status_code == 401
+
+
 def test_admin_local_currency_endpoints_reject_without_key(client, monkeypatch):
     from app.core.config import settings
 

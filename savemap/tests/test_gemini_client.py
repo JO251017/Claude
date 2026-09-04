@@ -546,3 +546,50 @@ def test_batch_estimate_empty_input_makes_no_api_call():
     with patch("httpx.AsyncClient.post", new=counting_post):
         assert asyncio.run(_client().estimate_typical_prices_batch([])) == {}
     assert called["n"] == 0
+
+
+# --- 메뉴명 동의어 후보 배치(2026-09-04) --- AI가 "표기만 다른 쌍"을 찾아주는
+# 기능. 인덱스 응답을 실제 문자열로 되돌리는 지점이 특히 중요하다 — 여기가
+# 어긋나면 엉뚱한 메뉴 쌍이 후보로 잘못 쌓인다.
+
+
+def test_synonym_batch_maps_indexes_back_to_names():
+    body = '[{"variant_index": 2, "canonical_index": 1, "reason": "표기 차이"}]'
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().suggest_menu_synonyms_batch(["커트", "컷트"]))
+    assert got == [("컷트", "커트", "표기 차이")]
+
+
+def test_synonym_batch_drops_self_pair_and_out_of_range():
+    body = (
+        '[{"variant_index": 1, "canonical_index": 1, "reason": "자기 자신"},'
+        ' {"variant_index": 9, "canonical_index": 1, "reason": "범위 밖"},'
+        ' {"variant_index": 2, "canonical_index": 1, "reason": "정상"}]'
+    )
+    with patch("httpx.AsyncClient.post", new=_batch_response(body)):
+        got = asyncio.run(_client().suggest_menu_synonyms_batch(["커트", "컷트"]))
+    assert got == [("컷트", "커트", "정상")]
+
+
+def test_synonym_batch_empty_result_is_fine():
+    with patch("httpx.AsyncClient.post", new=_batch_response("[]")):
+        got = asyncio.run(_client().suggest_menu_synonyms_batch(["커트", "컷트"]))
+    assert got == []
+
+
+def test_synonym_batch_bad_json_returns_empty_instead_of_raising():
+    with patch("httpx.AsyncClient.post", new=_batch_response("음... 잘 모르겠어요")):
+        got = asyncio.run(_client().suggest_menu_synonyms_batch(["커트", "컷트"]))
+    assert got == []
+
+
+def test_synonym_batch_single_name_makes_no_api_call():
+    called = {"n": 0}
+
+    async def counting_post(self, url, **kwargs):  # pragma: no cover - 불리면 안 됨
+        called["n"] += 1
+        raise AssertionError("이름 1개로는 짝을 지을 수 없다")
+
+    with patch("httpx.AsyncClient.post", new=counting_post):
+        assert asyncio.run(_client().suggest_menu_synonyms_batch(["커트"])) == []
+    assert called["n"] == 0

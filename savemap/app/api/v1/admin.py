@@ -64,6 +64,7 @@ from app.sources.public_api.local_currency import (
 )
 from app.domain.enums import SourceType
 from app.engine.menu_name import normalize_menu_name
+from app.engine.menu_synonym_discovery import discover_menu_synonym_candidates
 from app.engine.offer_blurb_backfill import backfill_offer_blurbs
 from app.engine.typical_price_backfill import backfill_typical_prices
 from app.engine.offer_resync import resync_offers
@@ -405,6 +406,23 @@ async def backfill_typical_prices_endpoint(
     기존 "오퍼 일괄 재동기화"를 다시 돌리면 compare_menu_item이 재평가되어
     ai 벤치마크가 오퍼에 자동으로 붙는다(새 발행 경로 없음)."""
     return await backfill_typical_prices(session, offset=offset, limit=limit, dry_run=dry_run)
+
+
+@router.post("/maintenance/discover-menu-synonyms")
+async def discover_menu_synonyms_endpoint(
+    offset: int = Query(default=0, ge=0, description="탐색 대상 메뉴명 목록 기준 몇 번째부터"),
+    limit: int = Query(default=300, ge=20, le=1000, description="한 번에 훑을 메뉴명 개수(내부에서 60개씩 묶어 호출)"),
+    dry_run: bool = Query(default=False, description="true면 후보를 찾기만 하고 저장하지 않음"),
+    _admin: None = RequireAdminDep,
+    session: AsyncSession = SessionDep,
+) -> dict:
+    """AI 기능 확대(2026-09-04) — "표기만 다른 같은 메뉴" 후보를 AI로 넓게
+    찾아 menu_synonym_candidate 테이블에 쌓는다. **여기서 실제 정규화 규칙
+    (_SYNONYMS)에 자동 반영되는 건 하나도 없다** — 잘못 합치면 값이 다른
+    메뉴끼리 비교해 없는 절약률을 만들어내므로, 후보는 사람이 검토한 뒤
+    app/engine/menu_name.py를 직접 고쳐 커밋해야 실제로 적용된다. 이 배치는
+    "검토할 후보를 모으는" 역할까지만 한다."""
+    return await discover_menu_synonym_candidates(session, offset=offset, limit=limit, dry_run=dry_run)
 
 
 @router.get("/places/stats")

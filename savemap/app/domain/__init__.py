@@ -1,6 +1,7 @@
 from app.domain.base import Base
 from app.domain.franchise import FranchiseBrand, FranchisePrice
 from app.domain.menu_item import MenuItem
+from app.domain.menu_synonym import MenuSynonymCandidate
 from app.domain.merchant_verification import MerchantVerification
 from app.domain.offer import Offer, OfferPaymentBenefit
 from app.domain.offer_verification import OfferVerification
@@ -45,4 +46,5 @@ __all__ = [
     "DiscoveryJobStatus",
     "UserDigest",
     "PetStageMessage",
+    "MenuSynonymCandidate",
 ]

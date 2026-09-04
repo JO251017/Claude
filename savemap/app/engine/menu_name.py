@@ -73,6 +73,13 @@ _SYNONYMS: dict[str, str] = {
 }
 
 
+def get_known_synonym_pairs() -> set[str]:
+    """_SYNONYMS에 이미 키(변형)나 값(표준형)으로 등장하는 문자열 전체.
+    동의어 후보 탐색 배치(menu_synonym_discovery)가 이미 코드에 반영된 것을
+    다시 AI에게 묻지 않기 위해 쓴다."""
+    return set(_SYNONYMS.keys()) | set(_SYNONYMS.values())
+
+
 def normalize_menu_name(name: str) -> str:
     """비교용 정규화 이름. 같은 메뉴의 표기 차이만 없앤다.
 
