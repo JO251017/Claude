@@ -1,0 +1,714 @@
+<style>
+  :root {
+    --paper: #ffffff;
+    --paper-2: #f4f4f6;
+    --paper-edge: #e6e6ea;
+    --glass: rgba(255, 255, 255, 0.55);
+    --glass-strong: rgba(255, 255, 255, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --ink: #3a3a3e;
+    --ink-soft: #6c6c72;
+    --ink-faint: #9a9aa1;
+    --accent: #8e8e95;      /* liquid glass — soft neutral gray */
+    --accent-strong: #57575c;
+    --accent-2: #b3aca0;    /* warm-gray glint — stands in for gold/brass */
+    --heat: #cdbfae;        /* warm-neutral gray — warmth, heating wire */
+    --cold: #b3c1cd;        /* cool-neutral gray — frost, cold air */
+    --line: rgba(58, 58, 62, 0.1);
+    --line-strong: rgba(58, 58, 62, 0.2);
+    --shadow: 0 1px 0 rgba(58,58,62,0.03), 0 18px 34px -20px rgba(58,58,62,0.22);
+    --shadow-lift: 0 2px 0 rgba(58,58,62,0.04), 0 26px 46px -20px rgba(58,58,62,0.28);
+
+    --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Noto Serif KR", serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1c1c1e; --paper-2: #232326; --paper-edge: #2c2c30;
+      --glass: rgba(255,255,255,0.07); --glass-strong: rgba(255,255,255,0.12); --glass-border: rgba(255,255,255,0.14);
+      --ink: #f2f2f4; --ink-soft: #c6c6cc; --ink-faint: #8b8b92;
+      --accent: #b7b7bd; --accent-strong: #e2e2e6; --accent-2: #cdc4b6;
+      --heat: #d9c8b6; --cold: #b9c8d6;
+      --line: rgba(242,242,244,0.1); --line-strong: rgba(242,242,244,0.2);
+      --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 20px 38px -18px rgba(0,0,0,0.55);
+      --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 28px 48px -20px rgba(0,0,0,0.62);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1c1c1e; --paper-2: #232326; --paper-edge: #2c2c30;
+    --glass: rgba(255,255,255,0.07); --glass-strong: rgba(255,255,255,0.12); --glass-border: rgba(255,255,255,0.14);
+    --ink: #f2f2f4; --ink-soft: #c6c6cc; --ink-faint: #8b8b92;
+    --accent: #b7b7bd; --accent-strong: #e2e2e6; --accent-2: #cdc4b6;
+    --heat: #d9c8b6; --cold: #b9c8d6;
+    --line: rgba(242,242,244,0.1); --line-strong: rgba(242,242,244,0.2);
+    --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 20px 38px -18px rgba(0,0,0,0.55);
+    --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 28px 48px -20px rgba(0,0,0,0.62);
+  }
+  :root[data-theme="light"] {
+    --paper: #ffffff; --paper-2: #f4f4f6; --paper-edge: #e6e6ea;
+    --glass: rgba(255,255,255,0.55); --glass-strong: rgba(255,255,255,0.75); --glass-border: rgba(255,255,255,0.65);
+    --ink: #3a3a3e; --ink-soft: #6c6c72; --ink-faint: #9a9aa1;
+    --accent: #8e8e95; --accent-strong: #57575c; --accent-2: #b3aca0;
+    --heat: #cdbfae; --cold: #b3c1cd;
+    --line: rgba(58, 58, 62, 0.1); --line-strong: rgba(58, 58, 62, 0.2);
+    --shadow: 0 1px 0 rgba(58,58,62,0.03), 0 18px 34px -20px rgba(58,58,62,0.22);
+    --shadow-lift: 0 2px 0 rgba(58,58,62,0.04), 0 26px 46px -20px rgba(58,58,62,0.28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background:
+      radial-gradient(ellipse at 15% -10%, rgba(58,58,62,0.035), transparent 45%),
+      radial-gradient(ellipse at 85% 110%, rgba(58,58,62,0.025), transparent 50%),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    position: relative; z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 40px;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line-strong);
+    margin-bottom: 40px;
+  }
+  .masthead-left { max-width: 620px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1.title {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.15;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .masthead-left p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 58ch;
+  }
+  .masthead-right {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .masthead-right .stamp {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--accent-2);
+    color: var(--accent-2);
+    letter-spacing: 0.06em;
+    border-radius: 3px;
+    transform: rotate(-2deg);
+  }
+
+  /* ---------- Stage (single click-through card) ---------- */
+  .stage-wrap { margin-bottom: 58px; }
+  .stage-hint {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    margin: 0 0 16px;
+  }
+
+  .progress {
+    display: flex;
+    gap: 5px;
+    max-width: 320px;
+    margin: 0 auto 18px;
+  }
+  .seg {
+    flex: 1;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+  .seg i {
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--line-strong);
+    transition: background 0.2s ease;
+  }
+  .seg.done i, .seg.current i { background: var(--accent); }
+  .seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .stage {
+    position: relative;
+    width: min(320px, 86vw);
+    margin: 0 auto;
+  }
+
+  .ghost {
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    height: 18px;
+    border: 1px solid var(--glass-border);
+    border-radius: 0 0 14px 14px;
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  .ghost.g1 { width: 92%; z-index: 1; opacity: 0.85; transform: translate(-50%, 7px) rotate(-1.4deg); }
+  .ghost.g2 { width: 84%; z-index: 0; opacity: 0.55; transform: translate(-50%, 13px) rotate(2deg); }
+
+  .card {
+    position: relative;
+    z-index: 2;
+    min-height: 420px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 45%, rgba(255,255,255,0.3)),
+      var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.5);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: pointer;
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+    transition: transform 0.28s cubic-bezier(.3,.7,.4,1), opacity 0.28s ease, box-shadow 0.2s ease;
+  }
+  .card:hover { box-shadow: var(--shadow-lift); transform: translateY(-3px); }
+  .card:active { transform: translateY(-1px) scale(0.99); }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .card.leaving-next { transform: translateY(-30px) scale(0.95) rotate(-3deg); opacity: 0; }
+  .card.leaving-prev { transform: translateY(30px) scale(0.95) rotate(3deg); opacity: 0; }
+  .card.entering-next { transform: translateY(28px) scale(0.96) rotate(2deg); opacity: 0; }
+  .card.entering-prev { transform: translateY(-28px) scale(0.96) rotate(-2deg); opacity: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: box-shadow 0.15s ease; }
+    .card.leaving-next, .card.leaving-prev, .card.entering-next, .card.entering-prev {
+      transform: none; opacity: 1;
+    }
+  }
+
+  .plate {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    margin: 16px 16px 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.5), transparent 55%),
+      var(--glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -12px 24px -18px rgba(58,58,62,0.18);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .plate .icon-slot { width: 72%; height: 72%; color: var(--ink); }
+  .plate .icon-slot svg { width: 100%; height: 100%; display: block; }
+  .plate .mark {
+    position: absolute; width: 10px; height: 10px;
+    border-color: var(--accent-2);
+    opacity: 0.85;
+  }
+  .plate .mark.tl { top: 6px; left: 6px; border-top: 1.5px solid; border-left: 1.5px solid; }
+  .plate .mark.tr { top: 6px; right: 6px; border-top: 1.5px solid; border-right: 1.5px solid; }
+  .plate .mark.bl { bottom: 6px; left: 6px; border-bottom: 1.5px solid; border-left: 1.5px solid; }
+  .plate .mark.br { bottom: 6px; right: 6px; border-bottom: 1.5px solid; border-right: 1.5px solid; }
+
+  .card-body { padding: 16px 18px 6px; flex: 1; }
+  .card-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .era {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+  }
+  .card-body h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 19px;
+    line-height: 1.32;
+    margin: 0 0 9px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .card-body p {
+    font-size: 13.8px;
+    color: var(--ink-soft);
+    margin: 0;
+    line-height: 1.62;
+  }
+  .card-foot {
+    padding: 12px 18px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--font-mono);
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+  .card-foot .num { color: var(--accent-2); font-weight: 600; }
+  .tap-hint {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--accent);
+    transition: transform 0.2s ease;
+  }
+  .card:hover .tap-hint { transform: translateX(3px); }
+
+  .stage-controls {
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  .ctrl {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 4px;
+    transition: color 0.15s ease;
+  }
+  .ctrl:hover { color: var(--accent); }
+  .ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ctrl:disabled { opacity: 0.3; cursor: default; }
+  .ctrl:disabled:hover { color: var(--ink-soft); }
+  .counter-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* ---------- Guide ---------- */
+  .guide {
+    border-top: 1px solid var(--line-strong);
+    padding-top: 30px;
+  }
+  .guide h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 20px;
+    margin: 0 0 4px;
+    color: var(--ink);
+  }
+  .guide > p {
+    margin: 0 0 20px;
+    color: var(--ink-soft);
+    font-size: 14px;
+    max-width: 62ch;
+  }
+  .slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .slot { background: var(--paper-2); padding: 14px 16px; }
+  .slot .n { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent-2); letter-spacing: 0.06em; }
+  .slot .k { font-family: var(--font-display); font-size: 15px; margin: 4px 0 4px; color: var(--ink); }
+  .slot .d { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+
+  .note {
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    display: flex;
+    gap: 10px;
+  }
+  .note .mark-icon { flex: none; color: var(--accent-2); }
+
+  @media (max-width: 560px) {
+    .page { padding: 32px 16px 56px; }
+    .masthead { align-items: flex-start; }
+    .masthead-right { text-align: left; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="masthead-left">
+      <p class="eyebrow">Informacion · 카드 포맷 스펙</p>
+      <h1 class="title">카드로 보는 기술의 역사</h1>
+      <p>최대 10장, 그림 한 장 + 짧은 설명 한 단락. 카드를 클릭하면 다음 장으로 넘어간다. 예시 주제 — 자동차 열선시트의 역사.</p>
+    </div>
+    <div class="masthead-right">
+      No. 001 · EXHIBIT SERIES
+      <br>
+      <span class="stamp">VERIFIED · 검증 전 초안</span>
+    </div>
+  </header>
+
+  <section class="stage-wrap">
+    <p class="stage-hint">카드를 클릭하거나 눌러서 다음 장으로 넘기세요</p>
+
+    <div class="progress" id="progress"></div>
+
+    <div class="stage">
+      <div class="ghost g2" aria-hidden="true"></div>
+      <div class="ghost g1" aria-hidden="true"></div>
+      <article class="card" id="card" role="button" tabindex="0" aria-label="카드, 클릭하면 다음 장으로 이동">
+        <span class="mark tl"></span><span class="mark tr"></span><span class="mark bl"></span><span class="mark br"></span>
+        <div class="plate"><span class="icon-slot" id="iconSlot"></span></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="tag" id="tagEl"></span><span class="era" id="eraEl"></span></div>
+          <h3 id="titleEl"></h3>
+          <p id="bodyEl"></p>
+        </div>
+        <div class="card-foot">
+          <span><span class="num" id="numEl"></span> / 10</span>
+          <span class="tap-hint">다음 <span aria-hidden="true">›</span></span>
+        </div>
+      </article>
+    </div>
+
+    <div class="stage-controls">
+      <button class="ctrl" id="prevBtn">‹ 이전</button>
+      <span class="counter-text" id="counterText" aria-live="polite">01 / 10</span>
+      <button class="ctrl" id="nextBtn">다음 ›</button>
+    </div>
+  </section>
+
+  <section class="guide">
+    <h2>포맷 스펙 — 어떤 주제든 이 뼈대에 얹으면 된다</h2>
+    <p>범용 주제용 10칸 구조. 이야기가 짧으면 중간 칸을 건너뛰고 6~8장으로 줄여도 된다. 카드 1장 = 그림 1개 + 2~3문장.</p>
+    <div class="slots">
+      <div class="slot"><div class="n">00</div><div class="k">표지</div><div class="d">주제 + 한 줄 호기심 질문</div></div>
+      <div class="slot"><div class="n">01</div><div class="k">문제</div><div class="d">이게 없던 시절엔 뭐가 불편했나</div></div>
+      <div class="slot"><div class="n">02</div><div class="k">아이디어</div><div class="d">누군가 이렇게 생각했다</div></div>
+      <div class="slot"><div class="n">03</div><div class="k">최초 등장</div><div class="d">최초 발명 · 특허 · 상용화</div></div>
+      <div class="slot"><div class="n">04</div><div class="k">초기 기술</div><div class="d">처음엔 이런 모습이었다</div></div>
+      <div class="slot"><div class="n">05</div><div class="k">한계</div><div class="d">초기 버전의 문제점</div></div>
+      <div class="slot"><div class="n">06</div><div class="k">개선</div><div class="d">기술이 어떻게 나아졌나</div></div>
+      <div class="slot"><div class="n">07</div><div class="k">대중화</div><div class="d">누구나 쓰게 된 계기</div></div>
+      <div class="slot"><div class="n">08</div><div class="k">현재</div><div class="d">지금은 이렇게 쓰인다</div></div>
+      <div class="slot"><div class="n">09</div><div class="k">미래</div><div class="d">앞으로는 어떻게 될까</div></div>
+    </div>
+  </section>
+
+  <p class="note">
+    <span class="mark-icon">✎</span>
+    이 카드의 연도·서술은 포맷 예시용 초안이며, 실제 발행 전에는 특허·제조사 자료 등 1차 출처로 별도 검증이 필요합니다.
+  </p>
+
+</div>
+
+<script>
+  (function () {
+    // Shared "seat" motif: headrest posts + backrest + cushion (side profile).
+    // Every card reuses this exact shape, dressed differently per era —
+    // the recurring form is what lets the illustrations carry the story.
+    // Manga-inking pass: bold outline + flat base tint + one-side cel shadow,
+    // so the recurring shape reads as an inked, lit object instead of a diagram.
+    var SEAT = '<rect x="29" y="9" width="4" height="9" rx="2"/><rect x="37" y="9" width="4" height="9" rx="2"/><rect x="26" y="18" width="16" height="46" rx="6"/><rect x="26" y="64" width="48" height="14" rx="6"/>';
+    var SEAT_BASE = '<rect x="26" y="18" width="16" height="46" rx="6" fill="currentColor" opacity="0.055" stroke="none"/><rect x="26" y="64" width="48" height="14" rx="6" fill="currentColor" opacity="0.055" stroke="none"/>';
+    var SEAT_SHADOW = '<rect x="33" y="22" width="7" height="38" fill="currentColor" opacity="0.17" stroke="none"/><rect x="30" y="70" width="40" height="4" fill="currentColor" opacity="0.17" stroke="none"/>';
+    var SEAT_FULL = SEAT_BASE + SEAT + SEAT_SHADOW;
+    var COIL_BACK = '<path d="M29 24 L39 30 L29 36 L39 42 L29 48 L39 54 L29 58" stroke-width="1.8"/>';
+    var COIL_CUSHION = '<path d="M30 72 L38 68 L46 72 L54 68 L62 72 L70 68" stroke-width="1.8"/>';
+    var SVG_OPEN = '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">';
+    function sparkle(cx, cy, s, op) {
+      s = s || 4; op = op == null ? 1 : op;
+      var k = s * 0.15;
+      return '<path d="M' + cx + ',' + (cy - s) + ' Q' + (cx + k) + ',' + (cy - k) + ' ' + (cx + s) + ',' + cy +
+        ' Q' + (cx + k) + ',' + (cy + k) + ' ' + cx + ',' + (cy + s) +
+        ' Q' + (cx - k) + ',' + (cy + k) + ' ' + (cx - s) + ',' + cy +
+        ' Q' + (cx - k) + ',' + (cy - k) + ' ' + cx + ',' + (cy - s) + ' Z" fill="currentColor" opacity="' + op + '" stroke="none"/>';
+    }
+    function rot(deg, inner) { return '<g transform="rotate(' + deg + ' 50 50)">' + inner + '</g>'; }
+    function tint(color, inner) { return '<g style="color:' + color + '">' + inner + '</g>'; }
+    var HEAT = 'var(--heat)', COLD = 'var(--cold)', GOLD = 'var(--accent-2)', ECO = 'var(--accent)';
+    function dotsPattern(id, color, size) {
+      size = size || 3.2;
+      return '<defs><pattern id="' + id + '" width="' + size + '" height="' + size + '" patternUnits="userSpaceOnUse"><circle cx="' + (size * 0.25) + '" cy="' + (size * 0.25) + '" r="' + (size * 0.17) + '" fill="' + color + '" stroke="none"/></pattern></defs>';
+    }
+    function focusLines(cx, cy, rIn, rOut, n, color, op) {
+      op = op == null ? 1 : op;
+      var lines = '';
+      for (var k = 0; k < n; k++) {
+        var a = (Math.PI * 2 * k) / n + 0.12;
+        var len = rOut - (k % 3) * 5;
+        var x1 = (cx + Math.cos(a) * rIn).toFixed(1), y1 = (cy + Math.sin(a) * rIn).toFixed(1);
+        var x2 = (cx + Math.cos(a) * len).toFixed(1), y2 = (cy + Math.sin(a) * len).toFixed(1);
+        var w = (k % 4 === 0) ? 2 : 0.9;
+        var lop = ((k % 4 === 0) ? 0.5 : 0.22) * op;
+        lines += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + w + '" opacity="' + lop.toFixed(2) + '"/>';
+      }
+      return tint(color, lines);
+    }
+
+    // DATA is the only part that changes per topic — see README for the 10-slot spec.
+    var DATA = [
+      {
+        num: '00', tag: 'Exhibit · 표지', era: '10 Cards', cover: true,
+        title: '자동차 열선시트의 역사',
+        body: '겨울, 앉자마자 등이 따뜻해지는 그 기능은 누가 처음 만들었을까?',
+        svg: SVG_OPEN + rot(-3, SEAT_FULL +
+          tint(HEAT,
+            '<path d="M80 25 A7 7 0 0 1 80 39" stroke-width="2" opacity="0.9"/>' +
+            '<path d="M80 19 A13 13 0 0 1 80 45" stroke-width="2" opacity="0.6"/>' +
+            '<path d="M80 13 A19 19 0 0 1 80 51" stroke-width="2" opacity="0.35"/>'
+          ) +
+          tint(GOLD, sparkle(91, 9, 3.6) + sparkle(95, 21, 2.2, 0.7)) +
+          '<line x1="16" y1="90" x2="88" y2="90" stroke-width="1.4" stroke-dasharray="1 4" opacity="0.5"/>' +
+          '<line x1="20" y1="87" x2="20" y2="93" stroke-width="1.4" opacity="0.5"/><line x1="37" y1="87" x2="37" y2="93" stroke-width="1.4" opacity="0.5"/>' +
+          '<line x1="54" y1="87" x2="54" y2="93" stroke-width="1.4" opacity="0.5"/><line x1="71" y1="87" x2="71" y2="93" stroke-width="1.4" opacity="0.5"/>' +
+          '<line x1="88" y1="87" x2="88" y2="93" stroke-width="1.4" opacity="0.5"/>'
+        ) + '</svg>'
+      },
+      {
+        num: '01', tag: '01 · 문제', era: '1950s 이전',
+        title: '겨울 아침, 얼어붙은 시트',
+        body: '초기 자동차엔 시트 난방 장치가 따로 없었다. 히터가 데우는 건 발밑 공기뿐, 몸이 닿는 시트 표면은 시동을 걸고도 한참 차가운 채로 남아 있었다.',
+        svg: SVG_OPEN + rot(-2, SEAT_FULL +
+          tint(COLD,
+            '<circle cx="31" cy="6" r="4" opacity="0.28" fill="currentColor" stroke-width="1"/><circle cx="37" cy="3.5" r="5.2" opacity="0.28" fill="currentColor" stroke-width="1"/><circle cx="43" cy="6" r="4" opacity="0.28" fill="currentColor" stroke-width="1"/>' +
+            '<path d="M46,9 Q49,13 46,17 Q43,13 46,9 Z" fill="currentColor" opacity="0.85" stroke-width="1.1"/>' +
+            '<path d="M26 18 L28 14 L31 18 L34 14 L37 18 L40 14 L42 18" stroke-width="1.7"/>' +
+            '<line x1="29" y1="28" x2="35" y2="28" stroke-width="1.7"/><line x1="32" y1="25" x2="32" y2="31" stroke-width="1.7"/>' +
+            '<line x1="34" y1="48" x2="40" y2="48" stroke-width="1.7"/><line x1="37" y1="45" x2="37" y2="51" stroke-width="1.7"/>' +
+            '<line x1="57" y1="70" x2="63" y2="70" stroke-width="1.7"/><line x1="60" y1="67" x2="60" y2="73" stroke-width="1.7"/>' +
+            '<path d="M6 30 q4 -5 8 0 t8 0" stroke-width="1.6" opacity="0.7"/><path d="M4 46 q4 -5 8 0 t8 0" stroke-width="1.6" opacity="0.7"/><path d="M6 62 q4 -5 8 0 t8 0" stroke-width="1.6" opacity="0.7"/>'
+          )
+        ) + '</svg>'
+      },
+      {
+        num: '02', tag: '02 · 아이디어', era: '1950s',
+        title: '시트 자체를 데우면 어떨까',
+        body: '실내 공기를 데우는 대신, 몸이 직접 닿는 시트 표면에 전기 저항선을 심어 그 자리에서 열을 내면 되지 않을까 — 발상의 전환이 시작됐다.',
+        svg: SVG_OPEN + rot(3, '<g stroke-dasharray="3 2">' + SEAT_FULL + '</g>' +
+          tint(GOLD, '<circle cx="35" cy="7" r="6.5" fill="currentColor" opacity="0.16" stroke="none"/>') +
+          '<circle cx="35" cy="7" r="5" stroke-width="1.8"/><path d="M32 7 L35 4 L35 10 L38 7" stroke-width="1.2"/><rect x="33" y="12" width="4" height="3" rx="1" stroke-width="1.6"/>' +
+          tint(GOLD, sparkle(24, 1, 3.2) + sparkle(46, 4, 2.4, 0.75) + sparkle(35, -4, 1.8, 0.5)) +
+          '<line x1="35" y1="15" x2="33" y2="18" stroke-width="1.2" stroke-dasharray="1 2"/>' +
+          tint(HEAT, '<path d="M28 26 L36 32 L28 38 L36 44 L28 50 L36 56" stroke-width="1.9"/>')
+        ) + '</svg>'
+      },
+      {
+        num: '03', tag: '03 · 최초 등장', era: '1950s',
+        title: '저항선 방석, 특허로 남다',
+        body: '전기 저항선을 얇게 배열해 열을 내는 좌석용 발열 장치의 특허가 등장했다. 오늘날 열선시트 구조의 원형이 여기서 시작됐다.',
+        svg: SVG_OPEN + SEAT_FULL +
+          '<path d="M28 26 L36 32 L28 38 L36 44 L28 50 L36 56" stroke-width="1.9"/>' +
+          '<path d="M30 70 L38 66 L46 70 L54 66 L62 70 L70 66" stroke-width="1.9"/>' +
+          '<circle cx="36" cy="32" r="1.6" fill="currentColor" stroke="none"/><line x1="38" y1="32" x2="54" y2="32" stroke-width="1.1"/><line x1="54" y1="32" x2="54" y2="26" stroke-width="1.1"/>' +
+          '<circle cx="54" cy="68" r="1.6" fill="currentColor" stroke="none"/><line x1="56" y1="68" x2="70" y2="58" stroke-width="1.1"/>' +
+          '<line x1="6" y1="24" x2="10" y2="14" stroke-width="1.2" opacity="0.7"/><line x1="9" y1="24" x2="13" y2="14" stroke-width="1.2" opacity="0.7"/><line x1="12" y1="24" x2="16" y2="14" stroke-width="1.2" opacity="0.7"/><line x1="15" y1="24" x2="19" y2="14" stroke-width="1.2" opacity="0.7"/><line x1="18" y1="24" x2="22" y2="14" stroke-width="1.2" opacity="0.7"/><line x1="21" y1="24" x2="25" y2="14" stroke-width="1.2" opacity="0.7"/>' +
+          tint(GOLD, '<circle cx="84" cy="80" r="7" stroke-width="1.9"/><line x1="80" y1="86" x2="78" y2="92" stroke-width="1.5"/><line x1="88" y1="86" x2="90" y2="92" stroke-width="1.5"/>') +
+          '</svg>'
+      },
+      {
+        num: '04', tag: '04 · 초기 기술', era: '1960s~70s',
+        title: '고급차의 사치품으로',
+        body: '일부 고급 브랜드의 최상위 트림에서만 만날 수 있는 옵션이었다. 온도 조절은 단순한 온·오프 스위치 하나가 전부였다.',
+        svg: SVG_OPEN + rot(2, SEAT_FULL +
+          '<path d="M74 64 L86 58 L82 72 L74 72 Z" stroke-width="1.9"/>' +
+          '<rect x="6" y="50" width="12" height="20" rx="2" stroke-width="1.9"/><line x1="12" y1="52" x2="12" y2="64" stroke-width="1.4"/><circle cx="12" cy="56" r="3" stroke-width="1.6"/>' +
+          tint(HEAT, '<circle cx="12" cy="53" r="0.9" fill="currentColor" stroke="none"/>') +
+          '<circle cx="86" cy="20" r="10" stroke-width="1.5"/><circle cx="86" cy="20" r="7" stroke-width="1.1"/><line x1="86" y1="20" x2="90" y2="14" stroke-width="1.6"/>' +
+          '<line x1="82" y1="15" x2="84" y2="13" stroke-width="1" opacity="0.7"/><line x1="80" y1="18" x2="82" y2="16.5" stroke-width="1" opacity="0.7"/>' +
+          '<line x1="86" y1="8" x2="86" y2="10" stroke-width="1.1"/><line x1="74" y1="20" x2="76" y2="20" stroke-width="1.1"/><line x1="98" y1="20" x2="96" y2="20" stroke-width="1.1"/><line x1="86" y1="32" x2="86" y2="30" stroke-width="1.1"/>'
+        ) + '</svg>'
+      },
+      {
+        num: '05', tag: '05 · 한계', era: '1970s~80s',
+        title: '너무 뜨겁거나, 미지근하거나',
+        body: '초기 시스템은 온도를 세밀하게 조절하기 어려웠다. 저항선이 몰린 한 지점만 뜨거워지고, 반대편은 여전히 차가운 경우가 많았다.',
+        svg: SVG_OPEN + rot(-4, SEAT_FULL +
+          tint(HEAT,
+            '<path d="M28 72 L32 68 L36 72 L40 68" stroke-width="1.9"/>' +
+            '<line x1="28" y1="66" x2="22" y2="58" stroke-width="1.6"/><line x1="34" y1="64" x2="32" y2="54" stroke-width="1.6"/><line x1="40" y1="66" x2="46" y2="56" stroke-width="1.6"/>' +
+            '<path d="M22 50 q3 -4 6 0 t6 0" stroke-width="1.3" opacity="0.5"/>' +
+            '<path d="M34 50 L29 60 L39 60 Z" stroke-width="1.7"/><line x1="34" y1="53" x2="34" y2="57" stroke-width="1.6"/><circle cx="34" cy="58.6" r="0.8" fill="currentColor" stroke="none"/>'
+          ) +
+          tint(COLD, '<path d="M64 30 q4 -5 8 0 t8 0" stroke-width="1.3" opacity="0.4"/><path d="M62 42 q4 -5 8 0 t8 0" stroke-width="1.3" opacity="0.4"/>')
+        ) + '</svg>'
+      },
+      {
+        num: '06', tag: '06 · 개선', era: '1980s~90s',
+        title: '온도 센서와 다단 조절이 붙다',
+        body: '온도 센서와 다단계 조절 스위치가 더해지며 시트가 설정 온도를 스스로 유지하기 시작했다. 발열선 배열도 더 촘촘하고 고르게 개선됐다.',
+        svg: SVG_OPEN + rot(2, SEAT_FULL + tint(HEAT, COIL_BACK + COIL_CUSHION) +
+          '<circle cx="86" cy="40" r="10" stroke-width="1.5"/><line x1="78" y1="34" x2="80" y2="36" stroke-width="1.1"/><line x1="86" y1="29" x2="86" y2="32" stroke-width="1.1"/><line x1="94" y1="34" x2="92" y2="36" stroke-width="1.1"/><line x1="86" y1="40" x2="86" y2="31" stroke-width="1.7"/>' +
+          '<circle cx="46" cy="30" r="2" fill="currentColor" stroke="none"/><path d="M46 25 A5 5 0 0 1 51 30" stroke-width="1.1" opacity="0.6"/>' + tint(GOLD, sparkle(54, 25, 2, 0.7))
+        ) + '</svg>'
+      },
+      {
+        num: '07', tag: '07 · 대중화', era: '1990s~2000s',
+        title: '옵션에서 기본 사양으로',
+        body: '부품 단가가 낮아지고 공정이 표준화되며 열선시트는 준중형급까지 널리 퍼졌다. 겨울철 필수 옵션으로 자리잡은 것도 이 시기다.',
+        svg: SVG_OPEN +
+          '<g transform="translate(-12,10) scale(0.55)">' + SEAT_FULL + tint(HEAT, COIL_BACK + COIL_CUSHION) + '</g>' +
+          '<g transform="translate(22,10) scale(0.55)">' + SEAT_FULL + tint(HEAT, COIL_BACK + COIL_CUSHION) + '</g>' +
+          '<g transform="translate(56,10) scale(0.55)">' + SEAT_FULL + tint(HEAT, COIL_BACK + COIL_CUSHION) + '</g>' +
+          '</svg>'
+      },
+      {
+        num: '08', tag: '08 · 현재', era: '2010s~현재',
+        title: '탄소섬유 발열체와 정밀 제어',
+        body: '가늘고 유연한 탄소섬유 발열체를 쓰고, 실내 온도와 탑승자 설정에 맞춰 자동으로 세기를 조절한다. 통풍·마사지 기능과 한 시트에 결합되기도 한다.',
+        svg: SVG_OPEN + rot(1, SEAT_FULL +
+          tint(HEAT,
+            '<line x1="30" y1="18" x2="30" y2="64" stroke-width="1" opacity="0.5"/><line x1="34" y1="18" x2="34" y2="64" stroke-width="1" opacity="0.5"/><line x1="38" y1="18" x2="38" y2="64" stroke-width="1" opacity="0.5"/><line x1="26" y1="22" x2="42" y2="22" stroke-width="1" opacity="0.5"/><line x1="26" y1="26" x2="42" y2="26" stroke-width="1" opacity="0.5"/><line x1="26" y1="30" x2="42" y2="30" stroke-width="1" opacity="0.5"/><line x1="26" y1="34" x2="42" y2="34" stroke-width="1" opacity="0.5"/><line x1="26" y1="38" x2="42" y2="38" stroke-width="1" opacity="0.5"/><line x1="26" y1="42" x2="42" y2="42" stroke-width="1" opacity="0.5"/><line x1="26" y1="46" x2="42" y2="46" stroke-width="1" opacity="0.5"/><line x1="26" y1="50" x2="42" y2="50" stroke-width="1" opacity="0.5"/><line x1="26" y1="54" x2="42" y2="54" stroke-width="1" opacity="0.5"/><line x1="26" y1="58" x2="42" y2="58" stroke-width="1" opacity="0.5"/><line x1="26" y1="62" x2="42" y2="62" stroke-width="1" opacity="0.5"/>' +
+            '<line x1="30" y1="64" x2="30" y2="78" stroke-width="1" opacity="0.5"/><line x1="34" y1="64" x2="34" y2="78" stroke-width="1" opacity="0.5"/><line x1="38" y1="64" x2="38" y2="78" stroke-width="1" opacity="0.5"/><line x1="42" y1="64" x2="42" y2="78" stroke-width="1" opacity="0.5"/><line x1="46" y1="64" x2="46" y2="78" stroke-width="1" opacity="0.5"/><line x1="50" y1="64" x2="50" y2="78" stroke-width="1" opacity="0.5"/><line x1="54" y1="64" x2="54" y2="78" stroke-width="1" opacity="0.5"/><line x1="58" y1="64" x2="58" y2="78" stroke-width="1" opacity="0.5"/><line x1="62" y1="64" x2="62" y2="78" stroke-width="1" opacity="0.5"/><line x1="66" y1="64" x2="66" y2="78" stroke-width="1" opacity="0.5"/><line x1="70" y1="64" x2="70" y2="78" stroke-width="1" opacity="0.5"/><line x1="26" y1="68" x2="74" y2="68" stroke-width="1" opacity="0.5"/><line x1="26" y1="72" x2="74" y2="72" stroke-width="1" opacity="0.5"/><line x1="26" y1="76" x2="74" y2="76" stroke-width="1" opacity="0.5"/>'
+          ) +
+          '<path d="M85 28 A13 13 0 0 1 96 48" stroke-width="1.9"/><line x1="85" y1="41" x2="93" y2="33" stroke-width="1.6"/><circle cx="85" cy="41" r="1.6" fill="currentColor" stroke="none"/><line x1="85" y1="26" x2="85" y2="29" stroke-width="1.1"/><line x1="97" y1="41" x2="94" y2="41" stroke-width="1.1"/>'
+        ) + '</svg>'
+      },
+      {
+        num: '09', tag: '09 · 미래', era: '앞으로',
+        title: '전기차의 항속거리를 지키는 기술로',
+        body: '실내 전체를 데우는 대신 열선시트로 탑승자만 데워 배터리 소모를 줄이는 전략이 중요해지고 있다. 편의 기능을 넘어 ‘효율 기술’로 다시 조명받는 중이다.',
+        svg: SVG_OPEN + rot(-2,
+          '<g transform="translate(-6,6) scale(0.8)">' + SEAT_FULL + '</g>' +
+          '<rect x="62" y="26" width="22" height="38" rx="3" stroke-width="1.9"/><rect x="70" y="21" width="6" height="5" rx="1" stroke-width="1.6"/>' +
+          tint(ECO,
+            '<rect x="66" y="52" width="14" height="6" fill="currentColor" stroke="none" opacity="0.85"/><rect x="66" y="43" width="14" height="6" fill="currentColor" stroke="none" opacity="0.85"/><rect x="66" y="34" width="14" height="6" fill="currentColor" stroke="none" opacity="0.85"/>' +
+            '<line x1="90" y1="26" x2="90" y2="13" stroke-width="2"/><line x1="90" y1="13" x2="86" y2="17" stroke-width="2"/><line x1="90" y1="13" x2="94" y2="17" stroke-width="2"/>' +
+            '<line x1="87" y1="24" x2="87" y2="17" stroke-width="1.2" opacity="0.45"/><line x1="93" y1="24" x2="93" y2="17" stroke-width="1.2" opacity="0.45"/>'
+          ) +
+          tint(GOLD, sparkle(74, 18, 2.4, 0.7))
+        ) + '</svg>'
+      }
+    ];
+
+    var card = document.getElementById('card');
+    var iconSlot = document.getElementById('iconSlot');
+    var tagEl = document.getElementById('tagEl');
+    var eraEl = document.getElementById('eraEl');
+    var titleEl = document.getElementById('titleEl');
+    var bodyEl = document.getElementById('bodyEl');
+    var numEl = document.getElementById('numEl');
+    var counterText = document.getElementById('counterText');
+    var progress = document.getElementById('progress');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+
+    var total = DATA.length;
+    var index = 0;
+    var animating = false;
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var segs = [];
+    for (var s = 0; s < total; s++) {
+      var seg = document.createElement('button');
+      seg.className = 'seg';
+      seg.setAttribute('aria-label', '카드 ' + (s + 1) + '로 이동');
+      seg.innerHTML = '<i></i>';
+      (function (idx) {
+        seg.addEventListener('click', function (e) {
+          e.stopPropagation();
+          jump(idx);
+        });
+      })(s);
+      progress.appendChild(seg);
+      segs.push(seg);
+    }
+
+    function render(i) {
+      var d = DATA[i];
+      tagEl.textContent = d.tag;
+      eraEl.textContent = d.era;
+      titleEl.textContent = d.title;
+      bodyEl.textContent = d.body;
+      numEl.textContent = d.num;
+      iconSlot.innerHTML = d.svg;
+      counterText.textContent = d.num + ' / 10';
+      segs.forEach(function (seg, j) {
+        seg.classList.toggle('current', j === i);
+        seg.classList.toggle('done', j < i);
+      });
+    }
+
+    function transitionTo(target, dir) {
+      if (animating || target === index) return;
+      animating = true;
+      if (reduced) {
+        index = target;
+        render(index);
+        animating = false;
+        return;
+      }
+      card.classList.add('leaving-' + dir);
+      setTimeout(function () {
+        card.classList.remove('leaving-' + dir);
+        index = target;
+        render(index);
+        card.classList.add('entering-' + dir);
+        void card.offsetWidth;
+        card.classList.remove('entering-' + dir);
+        setTimeout(function () { animating = false; }, 300);
+      }, 260);
+    }
+
+    function go(delta) {
+      var target = (index + delta + total) % total;
+      transitionTo(target, delta > 0 ? 'next' : 'prev');
+    }
+    function jump(i) {
+      transitionTo(i, i > index ? 'next' : 'prev');
+    }
+
+    card.addEventListener('click', function () { go(1); });
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    });
+    prevBtn.addEventListener('click', function (e) { e.stopPropagation(); go(-1); });
+    nextBtn.addEventListener('click', function (e) { e.stopPropagation(); go(1); });
+
+    render(0);
+  })();
+</script>

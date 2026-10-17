@@ -1,0 +1,706 @@
+<title>금의 역사 · Informacion</title>
+<style>
+  :root {
+    --paper: #ffffff;
+    --paper-2: #f4f4f6;
+    --paper-edge: #e6e6ea;
+    --glass: rgba(255, 255, 255, 0.55);
+    --glass-strong: rgba(255, 255, 255, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --ink: #3a3a3e;
+    --ink-soft: #6c6c72;
+    --ink-faint: #9a9aa1;
+    --accent: #8e8e95;      /* liquid glass — soft neutral gray */
+    --accent-strong: #57575c;
+    --accent-2: #b3aca0;    /* warm-gray glint — stands in for gold/brass */
+    --heat: #cdbfae;        /* warm-neutral gray — warmth, heating wire */
+    --cold: #b3c1cd;        /* cool-neutral gray — frost, cold air */
+    --line: rgba(58, 58, 62, 0.1);
+    --line-strong: rgba(58, 58, 62, 0.2);
+    --shadow: 0 1px 0 rgba(58,58,62,0.03), 0 18px 34px -20px rgba(58,58,62,0.22);
+    --shadow-lift: 0 2px 0 rgba(58,58,62,0.04), 0 26px 46px -20px rgba(58,58,62,0.28);
+
+    --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Noto Serif KR", serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1c1c1e; --paper-2: #232326; --paper-edge: #2c2c30;
+      --glass: rgba(255,255,255,0.07); --glass-strong: rgba(255,255,255,0.12); --glass-border: rgba(255,255,255,0.14);
+      --ink: #f2f2f4; --ink-soft: #c6c6cc; --ink-faint: #8b8b92;
+      --accent: #b7b7bd; --accent-strong: #e2e2e6; --accent-2: #cdc4b6;
+      --heat: #d9c8b6; --cold: #b9c8d6;
+      --line: rgba(242,242,244,0.1); --line-strong: rgba(242,242,244,0.2);
+      --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 20px 38px -18px rgba(0,0,0,0.55);
+      --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 28px 48px -20px rgba(0,0,0,0.62);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1c1c1e; --paper-2: #232326; --paper-edge: #2c2c30;
+    --glass: rgba(255,255,255,0.07); --glass-strong: rgba(255,255,255,0.12); --glass-border: rgba(255,255,255,0.14);
+    --ink: #f2f2f4; --ink-soft: #c6c6cc; --ink-faint: #8b8b92;
+    --accent: #b7b7bd; --accent-strong: #e2e2e6; --accent-2: #cdc4b6;
+    --heat: #d9c8b6; --cold: #b9c8d6;
+    --line: rgba(242,242,244,0.1); --line-strong: rgba(242,242,244,0.2);
+    --shadow: 0 1px 0 rgba(0,0,0,0.3), 0 20px 38px -18px rgba(0,0,0,0.55);
+    --shadow-lift: 0 2px 0 rgba(0,0,0,0.35), 0 28px 48px -20px rgba(0,0,0,0.62);
+  }
+  :root[data-theme="light"] {
+    --paper: #ffffff; --paper-2: #f4f4f6; --paper-edge: #e6e6ea;
+    --glass: rgba(255,255,255,0.55); --glass-strong: rgba(255,255,255,0.75); --glass-border: rgba(255,255,255,0.65);
+    --ink: #3a3a3e; --ink-soft: #6c6c72; --ink-faint: #9a9aa1;
+    --accent: #8e8e95; --accent-strong: #57575c; --accent-2: #b3aca0;
+    --heat: #cdbfae; --cold: #b3c1cd;
+    --line: rgba(58, 58, 62, 0.1); --line-strong: rgba(58, 58, 62, 0.2);
+    --shadow: 0 1px 0 rgba(58,58,62,0.03), 0 18px 34px -20px rgba(58,58,62,0.22);
+    --shadow-lift: 0 2px 0 rgba(58,58,62,0.04), 0 26px 46px -20px rgba(58,58,62,0.28);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background:
+      radial-gradient(ellipse at 15% -10%, rgba(58,58,62,0.035), transparent 45%),
+      radial-gradient(ellipse at 85% 110%, rgba(58,58,62,0.025), transparent 50%),
+      var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    position: relative; z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 40px;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line-strong);
+    margin-bottom: 40px;
+  }
+  .masthead-left { max-width: 620px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1.title {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.15;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .masthead-left p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 58ch;
+  }
+  .masthead-right {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .masthead-right .stamp {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--accent-2);
+    color: var(--accent-2);
+    letter-spacing: 0.06em;
+    border-radius: 3px;
+    transform: rotate(-2deg);
+  }
+
+  /* ---------- Stage (single click-through card) ---------- */
+  .stage-wrap { margin-bottom: 40px; }
+  .stage-hint {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    margin: 0 0 16px;
+  }
+
+  .progress {
+    display: flex;
+    gap: 5px;
+    max-width: 320px;
+    margin: 0 auto 18px;
+  }
+  .seg {
+    flex: 1;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+  .seg i {
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--line-strong);
+    transition: background 0.2s ease;
+  }
+  .seg.done i, .seg.current i { background: var(--accent); }
+  .seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .stage {
+    position: relative;
+    width: min(320px, 86vw);
+    margin: 0 auto;
+  }
+
+  .ghost {
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    height: 18px;
+    border: 1px solid var(--glass-border);
+    border-radius: 0 0 14px 14px;
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  .ghost.g1 { width: 92%; z-index: 1; opacity: 0.85; transform: translate(-50%, 7px) rotate(-1.4deg); }
+  .ghost.g2 { width: 84%; z-index: 0; opacity: 0.55; transform: translate(-50%, 13px) rotate(2deg); }
+
+  .card {
+    position: relative;
+    z-index: 2;
+    min-height: 420px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 45%, rgba(255,255,255,0.3)),
+      var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.5);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: pointer;
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+    transition: transform 0.28s cubic-bezier(.3,.7,.4,1), opacity 0.28s ease, box-shadow 0.2s ease;
+  }
+  .card:hover { box-shadow: var(--shadow-lift); transform: translateY(-3px); }
+  .card:active { transform: translateY(-1px) scale(0.99); }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .card.leaving-next { transform: translateY(-30px) scale(0.95) rotate(-3deg); opacity: 0; }
+  .card.leaving-prev { transform: translateY(30px) scale(0.95) rotate(3deg); opacity: 0; }
+  .card.entering-next { transform: translateY(28px) scale(0.96) rotate(2deg); opacity: 0; }
+  .card.entering-prev { transform: translateY(-28px) scale(0.96) rotate(-2deg); opacity: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: box-shadow 0.15s ease; }
+    .card.leaving-next, .card.leaving-prev, .card.entering-next, .card.entering-prev {
+      transform: none; opacity: 1;
+    }
+  }
+
+  .plate {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    margin: 16px 16px 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.5), transparent 55%),
+      var(--glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -12px 24px -18px rgba(58,58,62,0.18);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .plate .icon-slot { width: 72%; height: 72%; color: var(--ink); }
+  .plate .icon-slot svg { width: 100%; height: 100%; display: block; }
+  .plate .mark {
+    position: absolute; width: 10px; height: 10px;
+    border-color: var(--accent-2);
+    opacity: 0.85;
+  }
+  .plate .mark.tl { top: 6px; left: 6px; border-top: 1.5px solid; border-left: 1.5px solid; }
+  .plate .mark.tr { top: 6px; right: 6px; border-top: 1.5px solid; border-right: 1.5px solid; }
+  .plate .mark.bl { bottom: 6px; left: 6px; border-bottom: 1.5px solid; border-left: 1.5px solid; }
+  .plate .mark.br { bottom: 6px; right: 6px; border-bottom: 1.5px solid; border-right: 1.5px solid; }
+
+  .card-body { padding: 16px 18px 6px; flex: 1; }
+  .card-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .era {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+  }
+  .card-body h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 19px;
+    line-height: 1.32;
+    margin: 0 0 9px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .card-body p {
+    font-size: 13.8px;
+    color: var(--ink-soft);
+    margin: 0;
+    line-height: 1.62;
+  }
+  .card-foot {
+    padding: 12px 18px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--font-mono);
+    color: var(--ink-faint);
+    font-size: 11px;
+  }
+  .card-foot .num { color: var(--accent-2); font-weight: 600; }
+  .tap-hint {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--accent);
+    transition: transform 0.2s ease;
+  }
+  .card:hover .tap-hint { transform: translateX(3px); }
+
+  .stage-controls {
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  .ctrl {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 4px;
+    transition: color 0.15s ease;
+  }
+  .ctrl:hover { color: var(--accent); }
+  .ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ctrl:disabled { opacity: 0.3; cursor: default; }
+  .ctrl:disabled:hover { color: var(--ink-soft); }
+  .counter-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  .note {
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    display: flex;
+    gap: 10px;
+  }
+  .note .mark-icon { flex: none; color: var(--accent-2); }
+
+  @media (max-width: 560px) {
+    .page { padding: 32px 16px 56px; }
+    .masthead { align-items: flex-start; }
+    .masthead-right { text-align: left; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="masthead-left">
+      <p class="eyebrow">Informacion · 카드 스토리</p>
+      <h1 class="title">금, 인류가 가장 오래 사랑한 금속</h1>
+      <p>신석기시대 강바닥의 돌멩이가 어떻게 문명을 움직이는 힘이 되었을까 — 발견부터 화폐, 금본위제, 그리고 앞으로의 금까지 10장으로 따라간다.</p>
+    </div>
+    <div class="masthead-right">
+      No. 001 · EXHIBIT SERIES
+      <br>
+      <span class="stamp">SOURCED · 출처 기반 조사</span>
+    </div>
+  </header>
+
+  <section class="stage-wrap">
+    <p class="stage-hint">카드를 클릭하거나 눌러서 다음 장으로 넘기세요</p>
+
+    <div class="progress" id="progress"></div>
+
+    <div class="stage">
+      <div class="ghost g2" aria-hidden="true"></div>
+      <div class="ghost g1" aria-hidden="true"></div>
+      <article class="card" id="card" role="button" tabindex="0" aria-label="카드, 클릭하면 다음 장으로 이동">
+        <span class="mark tl"></span><span class="mark tr"></span><span class="mark bl"></span><span class="mark br"></span>
+        <div class="plate"><span class="icon-slot" id="iconSlot"></span></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="tag" id="tagEl"></span><span class="era" id="eraEl"></span></div>
+          <h3 id="titleEl"></h3>
+          <p id="bodyEl"></p>
+        </div>
+        <div class="card-foot">
+          <span><span class="num" id="numEl"></span> / 10</span>
+          <span class="tap-hint">다음 <span aria-hidden="true">›</span></span>
+        </div>
+      </article>
+    </div>
+
+    <div class="stage-controls">
+      <button class="ctrl" id="prevBtn">‹ 이전</button>
+      <span class="counter-text" id="counterText" aria-live="polite">01 / 10</span>
+      <button class="ctrl" id="nextBtn">다음 ›</button>
+    </div>
+  </section>
+
+  <p class="note">
+    <span class="mark-icon">✎</span>
+    연대·사실관계는 공개 자료를 바탕으로 조사했습니다 (바르나 네크로폴리스, 리디아 크로이소스 금화, 시안화법, 브레튼우즈·닉슨쇼크 등). 세부 수치는 출처마다 다를 수 있어 정확한 인용이 필요하면 원출처 확인을 권합니다.
+  </p>
+
+</div>
+
+<script>
+  (function () {
+    // Shared "gold object" motif: a rough nugget that gets reshaped into
+    // an ingot bar and a stamped coin as the story moves through history —
+    // the recurring shape visually tracks how gold itself was transformed.
+    var NUGGET_BASE = '<path d="M36,49 Q29,41 39,34 Q47,25 60,31 Q71,27 74,39 Q80,49 69,58 Q62,68 47,64 Q33,62 33,52 Q31,50 36,49 Z" fill="currentColor" opacity="0.16" stroke="none"/>';
+    var NUGGET = '<path d="M36,49 Q29,41 39,34 Q47,25 60,31 Q71,27 74,39 Q80,49 69,58 Q62,68 47,64 Q33,62 33,52 Q31,50 36,49 Z"/>';
+    var NUGGET_SHINE = '<path d="M50,32 Q60,30 64,40 Q65,47 58,49 Q52,50 50,42 Z" fill="currentColor" opacity="0.22" stroke="none"/>';
+    var NUGGET_FULL = NUGGET_BASE + NUGGET + NUGGET_SHINE;
+
+    var INGOT_BASE = '<path d="M30,58 L70,58 L64,70 L36,70 Z" fill="currentColor" opacity="0.16" stroke="none"/>';
+    var INGOT = '<path d="M30,58 L70,58 L64,70 L36,70 Z"/><line x1="35" y1="60" x2="65" y2="60" stroke-width="1.2" opacity="0.4"/>';
+    var INGOT_SHINE = '<path d="M40,60 L54,60 L52,66 L42,66 Z" fill="currentColor" opacity="0.22" stroke="none"/>';
+    var INGOT_FULL = INGOT_BASE + INGOT + INGOT_SHINE;
+
+    var SVG_OPEN = '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">';
+    function sparkle(cx, cy, s, op) {
+      s = s || 4; op = op == null ? 1 : op;
+      var k = s * 0.15;
+      return '<path d="M' + cx + ',' + (cy - s) + ' Q' + (cx + k) + ',' + (cy - k) + ' ' + (cx + s) + ',' + cy +
+        ' Q' + (cx + k) + ',' + (cy + k) + ' ' + cx + ',' + (cy + s) +
+        ' Q' + (cx - k) + ',' + (cy + k) + ' ' + (cx - s) + ',' + cy +
+        ' Q' + (cx - k) + ',' + (cy - k) + ' ' + cx + ',' + (cy - s) + ' Z" fill="currentColor" opacity="' + op + '" stroke="none"/>';
+    }
+    function rot(deg, inner) { return '<g transform="rotate(' + deg + ' 50 50)">' + inner + '</g>'; }
+    function tint(color, inner) { return '<g style="color:' + color + '">' + inner + '</g>'; }
+    var HEAT = 'var(--heat)', COLD = 'var(--cold)', GOLD = 'var(--accent-2)', ECO = 'var(--accent)';
+    function focusLines(cx, cy, rIn, rOut, n, color, op) {
+      op = op == null ? 1 : op;
+      var lines = '';
+      for (var k = 0; k < n; k++) {
+        var a = (Math.PI * 2 * k) / n + 0.12;
+        var len = rOut - (k % 3) * 5;
+        var x1 = (cx + Math.cos(a) * rIn).toFixed(1), y1 = (cy + Math.sin(a) * rIn).toFixed(1);
+        var x2 = (cx + Math.cos(a) * len).toFixed(1), y2 = (cy + Math.sin(a) * len).toFixed(1);
+        var w = (k % 4 === 0) ? 2 : 0.9;
+        var lop = ((k % 4 === 0) ? 0.5 : 0.22) * op;
+        lines += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + w + '" opacity="' + lop.toFixed(2) + '"/>';
+      }
+      return tint(color, lines);
+    }
+
+    // DATA is the only part that changes per topic — see template for the 10-slot spec.
+    var DATA = [
+      {
+        num: '00', tag: 'Exhibit · 표지', era: '10 Cards', cover: true,
+        title: '금, 인류가 가장 오래 사랑한 금속',
+        body: '반짝이는 노란 돌 하나가 어떻게 문명을 움직이는 힘이 되었을까? 신석기시대부터 오늘의 반도체 회로까지, 금이 걸어온 6,500년을 따라가 본다.',
+        svg: SVG_OPEN + rot(-2,
+          focusLines(50, 50, 22, 44, 14, GOLD, 0.24) +
+          '<path d="M18,68 Q18,84 34,88 Q50,92 66,88 Q82,84 82,68" stroke-width="2.2"/>' +
+          '<path d="M23,68 Q25,58 30,68" stroke-width="1.7"/>' +
+          '<path d="M36,68 Q38,56 43,68" stroke-width="1.7"/>' +
+          '<path d="M50,68 Q52,55 57,68" stroke-width="1.7"/>' +
+          '<path d="M63,68 Q67,57 72,68" stroke-width="1.7"/>' +
+          tint(GOLD, '<g transform="translate(12,15) scale(0.7)">' + NUGGET_FULL + '</g>') +
+          tint(GOLD, sparkle(76, 24, 4.2) + sparkle(24, 28, 2.6, 0.7) + sparkle(56, 16, 2, 0.55))
+        ) + '</svg>'
+      },
+      {
+        num: '01', tag: '01 · 문제', era: '기원전 4600년경 · 신석기시대',
+        title: '너무 무른, 쓸모없는 돌',
+        body: '신석기인들은 강바닥에서 노랗게 빛나는 덩어리를 발견했다. 돌망치로 두드려도 깨지지 않고 눌려서 모양만 바뀌는 이 금속은, 도구로 쓰기엔 너무 무르고 약했다.',
+        svg: SVG_OPEN + rot(-3,
+          tint(GOLD, '<g transform="translate(-4,4)">' + NUGGET_FULL + '</g>') +
+          '<line x1="18" y1="10" x2="34" y2="28" stroke-width="2.4"/>' +
+          '<path d="M12,4 L26,2 L28,14 L14,16 Z" stroke-width="1.8"/>' +
+          '<path d="M8,20 Q18,10 32,14" stroke-width="1.1" stroke-dasharray="2 3" opacity="0.5"/>' +
+          '<line x1="38" y1="26" x2="34" y2="20" stroke-width="1.3" opacity="0.5"/><line x1="44" y1="24" x2="44" y2="17" stroke-width="1.3" opacity="0.5"/><line x1="50" y1="26" x2="54" y2="20" stroke-width="1.3" opacity="0.5"/>' +
+          '<path d="M78,60 L86,50 L83,66 L92,58" stroke-width="1.6" opacity="0.7"/>' +
+          '<path d="M80,54 L84,58 M82,50 L86,55" stroke-width="1" opacity="0.4"/>'
+        ) + '</svg>'
+      },
+      {
+        num: '02', tag: '02 · 아이디어', era: '기원전 4600~4200년경 · 바르나',
+        title: '쓸모 대신 상징으로',
+        body: '도구가 될 수 없다면 몸에 걸치면 어떨까. 불가리아 바르나의 무덤에서는 3,000점 넘는 금 장신구가 발견됐다 — 인류 최초로 "쓸모"가 아니라 "가치"만을 위해 만든 물건이었다.',
+        svg: SVG_OPEN +
+          focusLines(50, 26, 16, 30, 10, GOLD, 0.2) +
+          '<path d="M14,36 Q16,10 50,6 Q84,10 86,36" stroke-width="2.2"/>' +
+          tint(GOLD,
+            '<path d="M28,40 Q50,54 72,40" stroke-width="2.6"/>' +
+            '<circle cx="50" cy="58" r="7" stroke-width="1.8" fill="currentColor" fill-opacity="0.18"/>' +
+            sparkle(50, 58, 2.6, 0.85) + sparkle(30, 42, 2, 0.6) + sparkle(70, 42, 2, 0.6)
+          ) +
+          '</svg>'
+      },
+      {
+        num: '03', tag: '03 · 최초 등장', era: '기원전 3000~1300년경 · 고대 이집트',
+        title: '태양의 살, 파라오의 금속',
+        body: '이집트인들은 금을 "태양신 라의 살"이라 불렀다. 남쪽 누비아(현지어로 "금의 땅") 광산에서 캐낸 금이 파라오의 마스크와 신전을 채웠다.',
+        svg: SVG_OPEN +
+          '<path d="M14,82 L50,26 L86,82 Z" stroke-width="1.6" opacity="0.4"/>' +
+          '<line x1="30" y1="82" x2="42" y2="58" stroke-width="1" opacity="0.3"/>' +
+          '<line x1="58" y1="58" x2="70" y2="82" stroke-width="1" opacity="0.3"/>' +
+          tint(GOLD,
+            '<circle cx="50" cy="18" r="7" stroke-width="2"/>' +
+            focusLines(50, 18, 9, 17, 10, GOLD, 0.5) +
+            '<g transform="translate(6,-10) scale(0.85)">' + INGOT_FULL + '</g>' +
+            INGOT_FULL +
+            sparkle(74, 68, 2.4, 0.7)
+          ) +
+          '</svg>'
+      },
+      {
+        num: '04', tag: '04 · 초기 기술', era: '기원전 550년경 · 리디아 왕국',
+        title: '무게 대신 숫자로 — 최초의 금화',
+        body: '리디아의 크로이소스 왕은 순도를 표준화한 금화를 찍어냈다. 거래마다 금 조각의 무게를 저울로 재던 불편함이 사라지고, "화폐"라는 개념이 태어났다.',
+        svg: SVG_OPEN +
+          '<line x1="50" y1="16" x2="50" y2="80" stroke-width="2.2"/>' +
+          '<path d="M40,80 L60,80" stroke-width="2.2"/>' +
+          '<line x1="24" y1="28" x2="76" y2="28" stroke-width="2.2"/>' +
+          '<circle cx="50" cy="28" r="3" stroke-width="1.6"/>' +
+          '<line x1="28" y1="28" x2="28" y2="42" stroke-width="1.4"/>' +
+          '<path d="M18,42 Q28,50 38,42" stroke-width="1.4"/>' +
+          '<line x1="72" y1="28" x2="72" y2="42" stroke-width="1.4"/>' +
+          '<path d="M62,42 Q72,50 82,42" stroke-width="1.4"/>' +
+          tint(GOLD, '<g transform="translate(5,16) scale(0.42)">' + NUGGET_FULL + '</g>') +
+          tint(GOLD,
+            '<circle cx="72" cy="34" r="7" stroke-width="1.8" fill="currentColor" fill-opacity="0.18"/><circle cx="72" cy="34" r="4" stroke-width="1.1" opacity="0.6"/>' +
+            sparkle(72, 24, 2.2, 0.7)
+          ) +
+          '</svg>'
+      },
+      {
+        num: '05', tag: '05 · 한계', era: '기원전 3세기경 · 시라쿠사',
+        title: '이 왕관, 진짜 순금이 맞을까',
+        body: '금은 귀했지만 위조는 더 흔했다. 히에론 왕의 의뢰를 받은 아르키메데스는 목욕물이 넘치는 걸 보고 부력의 원리를 깨달아, 왕관을 녹이지 않고도 순도를 가려내는 법을 찾아냈다.',
+        svg: SVG_OPEN +
+          '<path d="M14,58 Q14,74 28,76 L72,76 Q86,74 86,58" stroke-width="2.2"/>' +
+          '<line x1="10" y1="56" x2="90" y2="56" stroke-width="2.2"/>' +
+          tint(COLD,
+            '<path d="M18,56 q6,-4 12,0 t12,0 t12,0 t12,0 t12,0" stroke-width="1.5" opacity="0.55"/>' +
+            '<circle cx="50" cy="52" r="11" stroke-width="1" opacity="0.32"/>' +
+            '<circle cx="50" cy="52" r="17" stroke-width="1" opacity="0.18"/>' +
+            '<path d="M12,52 q-3,-5 0,-9" stroke-width="1.3" opacity="0.5"/><path d="M88,52 q3,-5 0,-9" stroke-width="1.3" opacity="0.5"/>'
+          ) +
+          tint(GOLD,
+            '<path d="M36,50 L38,40 L43,47 L48,38 L53,47 L58,40 L62,48 L64,50 L60,52 L40,52 Z"/>' +
+            sparkle(50, 44, 2.2, 0.7)
+          ) +
+          tint(GOLD, focusLines(80, 18, 4, 15, 9, GOLD, 0.75) + sparkle(80, 18, 4.6)) +
+          '</svg>'
+      },
+      {
+        num: '06', tag: '06 · 개선', era: '1887년 · 스코틀랜드',
+        title: '눈에 안 보이는 금까지 녹여내다',
+        body: '19세기 후반, 저품위 광석에서는 금을 절반도 못 건졌다. 화학자 존 맥아더와 포레스트 형제가 개발한 시안화법은 광석을 화학 용액에 녹여 금을 추출했다 — 채굴량이 극적으로 늘었다.',
+        svg: SVG_OPEN +
+          '<line x1="26" y1="80" x2="74" y2="80" stroke-width="1.6" opacity="0.5"/>' +
+          '<path d="M42,16 L42,34 L24,70 Q22,78 32,78 L68,78 Q78,78 76,70 L58,34 L58,16 Z" stroke-width="2.2"/>' +
+          '<line x1="40" y1="14" x2="60" y2="14" stroke-width="2.2"/>' +
+          '<path d="M30,58 Q50,53 70,58 L67,70 Q65,74 58,74 L42,74 Q35,74 33,70 Z" fill="currentColor" opacity="0.1" stroke="none"/>' +
+          '<path d="M40,44 L46,50 L38,56 L44,60" stroke-width="1.3" stroke-dasharray="2 2" opacity="0.55"/>' +
+          '<circle cx="46" cy="40" r="2.4" stroke-width="1.2" opacity="0.6"/><circle cx="56" cy="48" r="1.8" stroke-width="1.2" opacity="0.5"/>' +
+          tint(GOLD,
+            '<circle cx="44" cy="68" r="1.6" fill="currentColor" stroke="none"/><circle cx="52" cy="71" r="1.3" fill="currentColor" stroke="none"/><circle cx="58" cy="67" r="1.8" fill="currentColor" stroke="none"/><circle cx="49" cy="65" r="1" fill="currentColor" stroke="none"/>' +
+            sparkle(50, 68, 2, 0.6)
+          ) +
+          '</svg>'
+      },
+      {
+        num: '07', tag: '07 · 대중화', era: '1848년~ · 캘리포니아 외',
+        title: '누구나 냄비 하나 들고 강으로',
+        body: '캘리포니아 새크라멘토 강에서 금이 발견됐다는 소식에 수만 명이 몰려들었다. 골드러시는 이후 호주, 클론다이크로 이어지며 "금을 캐면 인생이 바뀐다"는 꿈을 세계에 퍼뜨렸다.',
+        svg: SVG_OPEN +
+          tint(COLD,
+            '<path d="M6,78 q6,-5 12,0 t12,0 t12,0 t12,0 t12,0 t12,0" stroke-width="1.6" opacity="0.5"/>' +
+            '<path d="M6,86 q6,-5 12,0 t12,0 t12,0 t12,0 t12,0 t12,0" stroke-width="1.4" opacity="0.32"/>'
+          ) +
+          '<ellipse cx="42" cy="56" rx="22" ry="8" stroke-width="2.2"/>' +
+          '<path d="M64,56 L80,44" stroke-width="2"/>' +
+          '<line x1="18" y1="42" x2="10" y2="14" stroke-width="2.2"/>' +
+          '<path d="M2,10 Q10,4 20,12" stroke-width="1.8"/>' +
+          tint(GOLD,
+            '<circle cx="34" cy="55" r="1.6" fill="currentColor" stroke="none"/><circle cx="42" cy="58" r="1.3" fill="currentColor" stroke="none"/><circle cx="49" cy="54" r="1.8" fill="currentColor" stroke="none"/><circle cx="38" cy="52" r="1" fill="currentColor" stroke="none"/>' +
+            sparkle(46, 50, 2.2, 0.7) + focusLines(84, 16, 4, 13, 8, GOLD, 0.45)
+          ) +
+          '</svg>'
+      },
+      {
+        num: '08', tag: '08 · 현재', era: '1944~1971년 · 브레튼우즈~닉슨쇼크',
+        title: '화폐를 떠난 금, 자산으로 남다',
+        body: '1944년 브레튼우즈 체제는 달러를 금에 고정했지만, 1971년 닉슨 대통령이 금태환을 중단하며 금본위제는 막을 내렸다. 오늘날 금은 반도체 배선, 장신구, 그리고 여전히 안전자산으로 쓰인다.',
+        svg: SVG_OPEN +
+          '<circle cx="36" cy="54" r="26" stroke-width="2.2"/>' +
+          '<circle cx="36" cy="54" r="19" stroke-width="1.1" opacity="0.5"/>' +
+          '<circle cx="36" cy="54" r="3" stroke-width="1.6"/>' +
+          '<line x1="36" y1="35" x2="36" y2="40" stroke-width="1.6" opacity="0.6"/><line x1="36" y1="68" x2="36" y2="73" stroke-width="1.6" opacity="0.6"/><line x1="17" y1="54" x2="22" y2="54" stroke-width="1.6" opacity="0.6"/><line x1="50" y1="54" x2="55" y2="54" stroke-width="1.6" opacity="0.6"/>' +
+          tint(GOLD, '<g transform="translate(11,24) scale(0.5)">' + INGOT_FULL + '</g>' + '<g transform="translate(11,14) scale(0.5)">' + INGOT_FULL + '</g>') +
+          '<path d="M70,22 A6.5 6.5 0 1 1 70,35" stroke-width="2.4"/>' +
+          '<path d="M81,22 A6.5 6.5 0 1 1 81,35" stroke-width="2.2" stroke-dasharray="2 2" opacity="0.4"/>' +
+          '<line x1="74" y1="28.5" x2="78" y2="28.5" stroke-width="1.6" opacity="0.3"/>' +
+          '</svg>'
+      },
+      {
+        num: '09', tag: '09 · 미래', era: '앞으로',
+        title: '전자쓰레기와 소행성에서',
+        body: '새 금맥을 찾는 대신, 버려진 전자기기에서 금을 회수하는 "도시 광산"이 주목받는다. 더 먼 미래에는 소행성 채굴이 금의 다음 산지가 될 수도 있다.',
+        svg: SVG_OPEN +
+          '<rect x="30" y="34" width="34" height="34" rx="3" stroke-width="2.2"/>' +
+          '<line x1="36" y1="30" x2="36" y2="34" stroke-width="1.5"/><line x1="46" y1="30" x2="46" y2="34" stroke-width="1.5"/><line x1="58" y1="30" x2="58" y2="34" stroke-width="1.5"/>' +
+          '<line x1="36" y1="68" x2="36" y2="72" stroke-width="1.5"/><line x1="46" y1="68" x2="46" y2="72" stroke-width="1.5"/><line x1="58" y1="68" x2="58" y2="72" stroke-width="1.5"/>' +
+          '<line x1="26" y1="42" x2="30" y2="42" stroke-width="1.5"/><line x1="26" y1="52" x2="30" y2="52" stroke-width="1.5"/><line x1="26" y1="62" x2="30" y2="62" stroke-width="1.5"/>' +
+          '<line x1="64" y1="42" x2="68" y2="42" stroke-width="1.5"/><line x1="64" y1="52" x2="68" y2="52" stroke-width="1.5"/><line x1="64" y1="62" x2="68" y2="62" stroke-width="1.5"/>' +
+          tint(GOLD,
+            '<path d="M36,42 L48,42 L48,50 L58,50" stroke-width="1.4" opacity="0.75"/>' +
+            '<path d="M36,58 L44,58 L44,52" stroke-width="1.4" opacity="0.75"/>' +
+            '<circle cx="48" cy="50" r="1.4" fill="currentColor" stroke="none"/>'
+          ) +
+          tint(ECO,
+            '<path d="M14,50 A14 14 0 0 1 24,38" stroke-width="2"/><path d="M22,36 L24,38 L20,42" stroke-width="1.6"/>' +
+            '<path d="M18,58 A14 14 0 0 1 20,72" stroke-width="2"/><path d="M23,70 L20,72 L21,66" stroke-width="1.6"/>'
+          ) +
+          '<g transform="translate(60,5) scale(0.32)">' + NUGGET + '</g>' +
+          tint(GOLD, sparkle(78, 16, 2.4, 0.7) + sparkle(84, 22, 1.6, 0.5)) +
+          '</svg>'
+      }
+    ];
+
+    var card = document.getElementById('card');
+    var iconSlot = document.getElementById('iconSlot');
+    var tagEl = document.getElementById('tagEl');
+    var eraEl = document.getElementById('eraEl');
+    var titleEl = document.getElementById('titleEl');
+    var bodyEl = document.getElementById('bodyEl');
+    var numEl = document.getElementById('numEl');
+    var counterText = document.getElementById('counterText');
+    var progress = document.getElementById('progress');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+
+    var total = DATA.length;
+    var index = 0;
+    var animating = false;
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var segs = [];
+    for (var s = 0; s < total; s++) {
+      var seg = document.createElement('button');
+      seg.className = 'seg';
+      seg.setAttribute('aria-label', '카드 ' + (s + 1) + '로 이동');
+      seg.innerHTML = '<i></i>';
+      (function (idx) {
+        seg.addEventListener('click', function (e) {
+          e.stopPropagation();
+          jump(idx);
+        });
+      })(s);
+      progress.appendChild(seg);
+      segs.push(seg);
+    }
+
+    function render(i) {
+      var d = DATA[i];
+      tagEl.textContent = d.tag;
+      eraEl.textContent = d.era;
+      titleEl.textContent = d.title;
+      bodyEl.textContent = d.body;
+      numEl.textContent = d.num;
+      iconSlot.innerHTML = d.svg;
+      counterText.textContent = d.num + ' / 10';
+      segs.forEach(function (seg, j) {
+        seg.classList.toggle('current', j === i);
+        seg.classList.toggle('done', j < i);
+      });
+    }
+
+    function transitionTo(target, dir) {
+      if (animating || target === index) return;
+      animating = true;
+      if (reduced) {
+        index = target;
+        render(index);
+        animating = false;
+        return;
+      }
+      card.classList.add('leaving-' + dir);
+      setTimeout(function () {
+        card.classList.remove('leaving-' + dir);
+        index = target;
+        render(index);
+        card.classList.add('entering-' + dir);
+        void card.offsetWidth;
+        card.classList.remove('entering-' + dir);
+        setTimeout(function () { animating = false; }, 300);
+      }, 260);
+    }
+
+    function go(delta) {
+      var target = (index + delta + total) % total;
+      transitionTo(target, delta > 0 ? 'next' : 'prev');
+    }
+    function jump(i) {
+      transitionTo(i, i > index ? 'next' : 'prev');
+    }
+
+    card.addEventListener('click', function () { go(1); });
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    });
+    prevBtn.addEventListener('click', function (e) { e.stopPropagation(); go(-1); });
+    nextBtn.addEventListener('click', function (e) { e.stopPropagation(); go(1); });
+
+    render(0);
+  })();
+</script>
