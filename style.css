@@ -4,10 +4,72 @@
   padding: 0;
 }
 
+:root {
+  --bg-page: #f0f4f8;
+  --bg-section: #fff;
+  --bg-card: #fafafa;
+  --bg-input: #f7fafc;
+  --text-primary: #2d3748;
+  --text-secondary: #4a5568;
+  --text-muted: #718096;
+  --border: #e2e8f0;
+  --border-input: #cbd5e0;
+  --accent: #667eea;
+  --accent-hover: #5a67d8;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --card-overdue-bg: #fff5f5;
+  --card-upcoming-bg: #f0fff4;
+  --badge-overdue-bg: #fed7d7;
+  --badge-overdue-text: #c53030;
+  --badge-upcoming-bg: #c6f6d5;
+  --badge-upcoming-text: #276749;
+  --badge-done-bg: #e2e8f0;
+  --badge-done-text: #718096;
+  --btn-done-bg: #c6f6d5;
+  --btn-done-text: #276749;
+  --btn-done-hover: #9ae6b4;
+  --btn-delete-bg: #fed7d7;
+  --btn-delete-text: #c53030;
+  --btn-delete-hover: #feb2b2;
+  --notif-bg: #2d3748;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #1a202c;
+    --bg-section: #2d3748;
+    --bg-card: #2d3748;
+    --bg-input: #4a5568;
+    --text-primary: #e2e8f0;
+    --text-secondary: #cbd5e0;
+    --text-muted: #a0aec0;
+    --border: #4a5568;
+    --border-input: #718096;
+    --accent: #7f9cf5;
+    --accent-hover: #667eea;
+    --shadow: rgba(0, 0, 0, 0.3);
+    --card-overdue-bg: #3d1f1f;
+    --card-upcoming-bg: #1c3a2a;
+    --badge-overdue-bg: #742a2a;
+    --badge-overdue-text: #feb2b2;
+    --badge-upcoming-bg: #1c4532;
+    --badge-upcoming-text: #9ae6b4;
+    --badge-done-bg: #4a5568;
+    --badge-done-text: #cbd5e0;
+    --btn-done-bg: #1c4532;
+    --btn-done-text: #9ae6b4;
+    --btn-done-hover: #276749;
+    --btn-delete-bg: #742a2a;
+    --btn-delete-text: #feb2b2;
+    --btn-delete-hover: #9b2c2c;
+    --notif-bg: #1a202c;
+  }
+}
+
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f0f4f8;
-  color: #2d3748;
+  background: var(--bg-page);
+  color: var(--text-primary);
   min-height: 100vh;
   padding: 20px;
 }
@@ -24,22 +86,22 @@ header {
 
 header h1 {
   font-size: 2rem;
-  color: #4a5568;
+  color: var(--text-secondary);
 }
 
 section {
-  background: #fff;
+  background: var(--bg-section);
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 h2 {
   font-size: 1.1rem;
   margin-bottom: 16px;
-  color: #4a5568;
-  border-bottom: 2px solid #e2e8f0;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
   padding-bottom: 8px;
 }
 
@@ -52,7 +114,7 @@ label {
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 6px;
-  color: #4a5568;
+  color: var(--text-secondary);
 }
 
 input[type="text"],
@@ -60,18 +122,19 @@ input[type="datetime-local"],
 textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #cbd5e0;
+  border: 1px solid var(--border-input);
   border-radius: 8px;
   font-size: 0.95rem;
   transition: border-color 0.2s;
-  background: #f7fafc;
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 input:focus,
 textarea:focus {
   outline: none;
-  border-color: #667eea;
-  background: #fff;
+  border-color: var(--accent);
+  background: var(--bg-section);
 }
 
 textarea {
@@ -81,7 +144,7 @@ textarea {
 button[type="submit"] {
   width: 100%;
   padding: 12px;
-  background: #667eea;
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: 8px;
@@ -93,11 +156,11 @@ button[type="submit"] {
 }
 
 button[type="submit"]:hover {
-  background: #5a67d8;
+  background: var(--accent-hover);
 }
 
 .empty-msg {
-  color: #a0aec0;
+  color: var(--text-muted);
   text-align: center;
   padding: 20px 0;
   font-size: 0.95rem;
@@ -108,30 +171,30 @@ button[type="submit"]:hover {
   justify-content: space-between;
   align-items: flex-start;
   padding: 14px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 10px;
   margin-bottom: 12px;
   transition: box-shadow 0.2s;
-  background: #fafafa;
+  background: var(--bg-card);
 }
 
 .reminder-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 .reminder-card.overdue {
   border-left: 4px solid #fc8181;
-  background: #fff5f5;
+  background: var(--card-overdue-bg);
 }
 
 .reminder-card.upcoming {
   border-left: 4px solid #68d391;
-  background: #f0fff4;
+  background: var(--card-upcoming-bg);
 }
 
 .reminder-card.done {
   opacity: 0.5;
-  border-left: 4px solid #a0aec0;
+  border-left: 4px solid var(--text-muted);
 }
 
 .reminder-info .title {
@@ -142,13 +205,13 @@ button[type="submit"]:hover {
 
 .reminder-info .time {
   font-size: 0.8rem;
-  color: #718096;
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
 .reminder-info .note {
   font-size: 0.85rem;
-  color: #4a5568;
+  color: var(--text-secondary);
 }
 
 .reminder-info .badge {
@@ -161,18 +224,18 @@ button[type="submit"]:hover {
 }
 
 .badge.overdue {
-  background: #fed7d7;
-  color: #c53030;
+  background: var(--badge-overdue-bg);
+  color: var(--badge-overdue-text);
 }
 
 .badge.upcoming {
-  background: #c6f6d5;
-  color: #276749;
+  background: var(--badge-upcoming-bg);
+  color: var(--badge-upcoming-text);
 }
 
 .badge.done {
-  background: #e2e8f0;
-  color: #718096;
+  background: var(--badge-done-bg);
+  color: var(--badge-done-text);
 }
 
 .reminder-actions {
@@ -195,21 +258,21 @@ button[type="submit"]:hover {
 }
 
 .btn-done {
-  background: #c6f6d5;
-  color: #276749;
+  background: var(--btn-done-bg);
+  color: var(--btn-done-text);
 }
 
 .btn-done:hover {
-  background: #9ae6b4;
+  background: var(--btn-done-hover);
 }
 
 .btn-delete {
-  background: #fed7d7;
-  color: #c53030;
+  background: var(--btn-delete-bg);
+  color: var(--btn-delete-text);
 }
 
 .btn-delete:hover {
-  background: #feb2b2;
+  background: var(--btn-delete-hover);
 }
 
 /* Notification banner */
@@ -218,21 +281,21 @@ button[type="submit"]:hover {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: #2d3748;
+  background: var(--notif-bg);
   color: white;
   padding: 14px 24px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   font-size: 0.95rem;
   max-width: 90%;
 }
 
 .notification-banner button {
-  background: #667eea;
+  background: var(--accent);
   border: none;
   color: white;
   padding: 6px 14px;
@@ -243,7 +306,7 @@ button[type="submit"]:hover {
 }
 
 .notification-banner button:hover {
-  background: #5a67d8;
+  background: var(--accent-hover);
 }
 
 .hidden {
