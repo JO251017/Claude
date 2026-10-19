@@ -13,9 +13,15 @@ from src.sourcing.profit import LABEL, REASON_LABELS, TAX_NOTE, round_half_up
 
 SHEET_SUMMARY, SHEET_CANDS, SHEET_REJECTS, SHEET_META = "요약", "후보", "탈락·실패", "메타"
 LBL_RUN_ID, LBL_RUN_APPROVAL, LBL_RUN_MEMO = "run_id", "실행 승인", "승인 메모"
-CAND_HEADERS = ["키워드", "도매처", "시장 기준가", "판매처 수", "클릭 증가율", "원가", "도매 배송비",
-                "순이익(세전: 부가세·소득세 미반영)", "이익률", "보수 순이익", "광고비 손익분기율", "판정", "사유", "경고",
-                "AI 노출 준비", "구분 라벨", "항목 승인(O/X)"]
+PROFIT_HEADER = "순이익(세전: 부가세·소득세 미반영)"
+VAT_HEADER = "부가세 반영 순이익(추정)"
+CAND_HEADERS = ["키워드", "도매처", "시장 기준가", "판매처 수", "클릭 증가율", "원가", "도매 배송비", "최저 원가",
+                PROFIT_HEADER, "이익률", "보수 순이익", "손익분기 판매가", VAT_HEADER, "광고비 손익분기율",
+                "판정", "사유", "경고", "AI 노출 준비", "구분 라벨", "항목 승인(O/X)"]
+# 칸 이름 -> 숫자 서식
+CAND_FORMATS = {"시장 기준가": "#,##0", "원가": "#,##0", "도매 배송비": "#,##0", PROFIT_HEADER: "#,##0",
+                "보수 순이익": "#,##0", "손익분기 판매가": "#,##0", VAT_HEADER: "#,##0",
+                "이익률": "0.0%", "광고비 손익분기율": "0.0%", "클릭 증가율": "0.0%"}
 REJECT_HEADERS = ["키워드", "도매처", "구분", "부족액(원)", "사유", "실제값 대 기준값"]
 HDR_FILL = PatternFill("solid", fgColor="DDE6F0")
 WON, PCT = "#,##0", "0.0%"
@@ -153,8 +159,11 @@ def fill_result_sheets(wb, rows: list[ResultRow], facts: dict, meta: dict) -> No
             row.growth_display,
             round_half_up(row.cost) if row.cost is not None else None,
             round_half_up(row.ship) if row.ship is not None else None,
+            "O" if row.cheapest else None,
             pr.profit if pr else row.profit_text,
-            pr.margin if pr else None, pr.stress_profit if pr else None, pr.a_star if pr else None,
+            pr.margin if pr else None, pr.stress_profit if pr else None,
+            pr.breakeven if pr else None, pr.profit_after_vat if pr else None,
+            pr.a_star if pr else None,
             row.verdict, "; ".join(x.text for x in row.reasons), "; ".join(row.warnings),
             ai_readiness_text(row.ai_missing), LABEL, None,
         ])
@@ -201,15 +210,13 @@ def ai_readiness_text(missing) -> str:
 
 
 def _format_candidates(ws, n):
-    widths = [16, 14, 12, 10, 12, 10, 12, 22, 9, 12, 14, 8, 50, 40, 24, 36, 14]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[ws.cell(1, i).column_letter].width = w
+    for i in range(1, len(CAND_HEADERS) + 1):
         ws.cell(1, i).font = Font(bold=True); ws.cell(1, i).fill = HDR_FILL
         ws.cell(1, i).alignment = Alignment(wrap_text=True, vertical="top")
     ws.freeze_panes = "C2"
     dv = DataValidation(type="list", formula1='"O,X"', allow_blank=True)
     ws.add_data_validation(dv)
     for i in range(2, n + 2):
-        for col, fmt in ((3, WON), (6, WON), (7, WON), (8, WON), (10, WON), (9, PCT), (11, PCT), (5, PCT)):
-            ws.cell(i, col).number_format = fmt
+        for name, fmt in CAND_FORMATS.items():
+            ws.cell(i, CAND_HEADERS.index(name) + 1).number_format = fmt
         dv.add(ws.cell(i, len(CAND_HEADERS)))

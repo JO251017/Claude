@@ -1,6 +1,9 @@
 # 가상 데이터 실행용 설정. config.yaml과 margin_min_pct만 다르다.
 # 모든 요율·기준값은 여기서만 정의한다 (코드 하드코딩 금지).
-fee_sales_pct: 3.003
+# 판매수수료: 스마트스토어 3%(VAT 포함, 2025-06-02 결제분부터, 공식 FAQ 15759). 판매자 마케팅 유입은 1%.
+fee_sales_pct: 3.0
+# Npay 주문관리 수수료(VAT 포함, 2025-10-01 결제분부터, 공식 FAQ 3713): 영세 1.947 / 중소1 2.563 / 중소2 2.728 / 중소3 3.003 / 일반 3.630
+# 내 등급을 모르면 가장 높은 '일반'으로 둔다(보수적).
 fee_payment_pct: 3.63
 ad_rate_pct: 5
 return_rate_pct: 3
@@ -8,6 +11,9 @@ margin_min_pct: 5      # 샘플 전용: 기본 15%에서는 보수 시나리오 
 profit_min_won: 2000
 discount_rate_pct: 0
 fee_on_shipping: all        # all만 구현
+
+# 부가세 반영 순이익(추정, 표시만): general = 일반과세자 (매출 - 수수료·광고비 - 원가·배송비) / 11 을 낼 부가세로 추정 / none = 면세·간이과세
+vat_mode: general
 
 stress:
   ad_rate_pct: 10

@@ -28,6 +28,9 @@ def test_manual_samples_match():
         assert res.profit == int(r["expected_profit"])
         assert res.stress_profit == int(r["expected_stress_profit"])
         assert res.verdict == r["expected_verdict"]
+        assert res.breakeven == int(r["expected_breakeven"])
+        assert res.vat_est == int(r["expected_vat"])
+        assert res.profit_after_vat == int(r["expected_profit_after_vat"])
 
 
 def test_t_min_ceiling():
@@ -57,7 +60,7 @@ def test_t_sug_floor_with_discount():
 def test_verdict_pass_hold_reject_priority():
     # 탈락(T_sug<T_min) 우선: 보수 순손실이어도 탈락
     r = compute_profit(15000, 3000, 21000, CFG)
-    assert r.verdict == "탈락" and r.shortfall == 25581 - 21000
+    assert r.verdict == "탈락" and r.shortfall == 25580 - 21000
     assert any(x.code == "BELOW_TMIN" for x in r.reasons)
 
 
@@ -98,7 +101,7 @@ def test_stress_never_negative_when_default_margin():
 
 def test_a_star_formula_and_breakeven():
     r = compute_profit(8000, 2500, 19800, CFG)
-    expected = 1 - 0.03003 - 0.0363 - 0.03 - 10500 / 19800
+    expected = 1 - 0.03 - 0.0363 - 0.03 - 10500 / 19800
     assert r.a_star == pytest.approx(expected)
     # a* == 광고율이면 순이익 0: 광고율을 a*로 바꿔 재계산
     import dataclasses
@@ -125,3 +128,22 @@ def test_f_defaults_to_s():
     r1 = compute_profit(1000, 700, 20000, CFG)
     r2 = compute_profit(1000, 700, 20000, CFG, customer_ship=700)
     assert r1.p == r2.p == 19300
+
+
+def test_breakeven_price_gives_zero_profit():
+    r = compute_profit(8000, 2500, 19800, CFG)
+    # 손익분기 판매가에서 순이익 >= 0, 1원 낮으면 < 0
+    for t, sign in ((r.breakeven, 1), (r.breakeven - 1, -1)):
+        p = Fraction(t) - 10500 - Fraction(t) * CFG.v
+        assert (p >= 0) if sign > 0 else (p < 0)
+
+
+def test_vat_mode_none_hides_estimate():
+    c = with_cfg(vat_mode="none")
+    r = compute_profit(8000, 2500, 19800, c)
+    assert r.vat_est is None and r.profit_after_vat is None and r.profit == 6403
+
+
+def test_vat_never_negative():
+    r = compute_profit(30000, 5000, 20000, CFG)      # 원가가 매출보다 큼
+    assert r.vat_est == 0

@@ -83,7 +83,8 @@ def test_sample_covers_required_cases(sample_env):
     fail = [r for r in rows.values() if r["keyword"] == FAIL_KW]
     assert fail and fail[0]["growth_status"] == "조회 실패"
     wb = load_workbook(res["xlsx"])
-    grow = [r[4].value for r in wb["후보"].iter_rows(min_row=2) if r[0].value == FAIL_KW]
+    hdr = [c.value for c in wb["후보"][1]]
+    grow = [r[hdr.index("클릭 증가율")].value for r in wb["후보"].iter_rows(min_row=2) if r[0].value == FAIL_KW]
     assert grow == ["조회 실패"]
     print("[기준③ 조회 실패 키워드가 후보 시트 성장률 칸에 '조회 실패'로 표시됨]")
 
@@ -91,10 +92,12 @@ def test_sample_covers_required_cases(sample_env):
 def test_sort_order(sample_env):
     _, res, _ = run_sample(sample_env)
     ws = load_workbook(res["xlsx"])["후보"]
-    verdicts = [r[11].value for r in ws.iter_rows(min_row=2)]
+    hdr = [c.value for c in ws[1]]
+    iv, ig = hdr.index("판정"), hdr.index("클릭 증가율")
+    verdicts = [r[iv].value for r in ws.iter_rows(min_row=2)]
     assert verdicts == sorted(verdicts, key=lambda v: 0 if v == "통과" else 1)
-    passed = [r for r in ws.iter_rows(min_row=2) if r[11].value == "통과"]
-    g = [r[4].value for r in passed]
+    passed = [r for r in ws.iter_rows(min_row=2) if r[iv].value == "통과"]
+    g = [r[ig].value for r in passed]
     assert g == sorted(g, reverse=True)
 
 
@@ -166,8 +169,10 @@ def test_datalab_cli_end_to_end_mocked(sample_env, monkeypatch, capsys):
     assert "DUMMY" not in out
     assert seen == ["가상 접이식 정리함", "가상 주방 선반"]                   # 분야 코드 없는 키워드는 호출 안 함
     xlsx = glob.glob(str(sample_env["out"] / "*.xlsx"))[0]
-    rows = {r[0]: r for r in load_workbook(xlsx)["후보"].iter_rows(min_row=2, values_only=True)}
-    assert rows["가상 방수 파우치"][4] == "조회 실패"
+    ws = load_workbook(xlsx)["후보"]
+    hdr = [c.value for c in ws[1]]
+    rows = {r[0]: r for r in ws.iter_rows(min_row=2, values_only=True)}
+    assert rows["가상 방수 파우치"][hdr.index("클릭 증가율")] == "조회 실패"
     blob = b""
     for p in glob.glob(str(sample_env["out"] / "**" / "*"), recursive=True):
         if os.path.isfile(p) and p.endswith(".xlsx"):
@@ -306,3 +311,22 @@ def test_cli_csv_run_and_approve_import(sample_env, capsys, tmp_path):
     assert cli.main(base + ["approve", "import", edited]) == 0
     assert "신규 2건" in capsys.readouterr().out
     assert cli.main(base + ["approve", "import", _edit(xlsx, str(tmp_path / "bad.xlsx"), tamper="label")]) == 3
+
+
+def test_cheapest_supplier_marked(sample_env):
+    from src.pipeline import ResultRow, _mark_cheapest
+    from fractions import Fraction as F
+    rows = [ResultRow("k", "A", "k|A", cost=F(15000), ship=F(3000), verdict="통과"),
+            ResultRow("k", "B", "k|B", cost=F(14000), ship=F(3500), verdict="탈락"),
+            ResultRow("k", "C", "k|C", verdict="입력 오류")]
+    _mark_cheapest(rows)
+    assert [r.cheapest for r in rows] == [False, True, None]
+    one = [ResultRow("k", "A", "k|A", cost=F(1), ship=F(1), verdict="통과")]
+    _mark_cheapest(one)
+    assert one[0].cheapest is None
+    _, res, _ = run_sample(sample_env)
+    ws = load_workbook(res["xlsx"])["후보"]
+    hdr = [c.value for c in ws[1]]
+    marks = {(r[0], r[1]): r[hdr.index("최저 원가")] for r in ws.iter_rows(min_row=2, values_only=True)}
+    assert marks[("가상 주방 선반", "도매A")] == "O"                       # 도매A 18,000 < 도매B 33,500
+    assert "손익분기 판매가" in hdr and "부가세 반영 순이익(추정)" in hdr

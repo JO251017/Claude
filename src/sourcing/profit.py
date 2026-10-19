@@ -66,6 +66,9 @@ class ProfitResult:
     stress_profit: int | None = None
     a_star: float | None = None
     shortfall: int | None = None
+    breakeven: int | None = None         # 손익분기 판매가(순이익 0원, 1원 단위 올림)
+    vat_est: int | None = None           # 낼 부가세 추정(일반과세자), vat_mode=none이면 None
+    profit_after_vat: int | None = None  # 순이익 - 부가세 추정(표시만, 판정에 쓰지 않음)
     label: str = LABEL
     tax_note: str = TAX_NOTE
     # 판정에 쓴 정확값(보고에는 쓰지 않음)
@@ -101,6 +104,11 @@ def compute_profit(cost, ship, market, cfg: Config, customer_ship=None) -> Profi
     profit = T - C - S - T * v
     stress = T - C - S - T * v_st
     a_star = 1 - (cfg.fee_sales_pct + cfg.fee_payment_pct) / 100 - cfg.return_rate_pct / 100 - (C + S) / T
+    breakeven = math.ceil((C + S) / (1 - v))
+    vat_exact = None
+    if cfg.vat_mode == "general":
+        # 추정: 매출 VAT - 매입 VAT ≈ (매출 - 수수료·광고비 - 원가·배송비) / 11 (반품률은 비용이 아니라 위험분이므로 제외)
+        vat_exact = max(Fraction(0), (T - T * (cfg.fee_sales_pct + cfg.fee_payment_pct + cfg.ad_rate_pct) / 100 - C - S) / 11)
 
     reasons: list[Reason] = []
     shortfall = None
@@ -128,5 +136,7 @@ def compute_profit(cost, ship, market, cfg: Config, customer_ship=None) -> Profi
         t_min=t_min, t_sug=t_sug, p=round_half_up(P),
         profit=round_half_up(profit), margin=float(profit / T),
         stress_profit=round_half_up(stress), a_star=float(a_star),
-        shortfall=shortfall, profit_exact=profit, stress_exact=stress,
+        shortfall=shortfall, profit_exact=profit, stress_exact=stress, breakeven=breakeven,
+        vat_est=round_half_up(vat_exact) if vat_exact is not None else None,
+        profit_after_vat=(round_half_up(profit) - round_half_up(vat_exact)) if vat_exact is not None else None,
     )

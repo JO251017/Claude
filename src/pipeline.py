@@ -38,6 +38,7 @@ class ResultRow:
     warnings: list = field(default_factory=list)
     profit_text: str = ""                              # 순이익 대신 보일 문구(원가/시세 미입력)
     ai_missing: list | None = None                     # AI 노출 정보 중 빠진 항목(None=원가 행 없음)
+    cheapest: bool | None = None                       # 같은 키워드 도매처 중 원가+배송비 최저(도매처 1곳이면 None)
 
     @property
     def growth_display(self):
@@ -106,9 +107,21 @@ def run_pipeline(cfg: Config, keywords: list[str], competitor_rows: list[dict], 
         market = markets.get(kw)
         cost_list = costs_by_kw.get(kw) or [None]
         seen_suppliers = set()
-        for cr in cost_list:
-            rows.append(_build_row(cfg, kw, cr, market, growth, source.name, fetched_at, as_of, seen_suppliers))
+        kw_rows = [_build_row(cfg, kw, cr, market, growth, source.name, fetched_at, as_of, seen_suppliers)
+                   for cr in cost_list]
+        _mark_cheapest(kw_rows)
+        rows += kw_rows
     return PipelineOutput(rows=rows, lookup_failures=failures, keywords=list(keywords))
+
+
+def _mark_cheapest(kw_rows: list) -> None:
+    """같은 키워드에 유효한 도매처가 2곳 이상이면 원가+도매 배송비가 가장 낮은 곳을 표시(동률이면 모두)."""
+    valid = [r for r in kw_rows if r.verdict != INPUT_ERROR and r.cost is not None and r.ship is not None]
+    if len(valid) < 2:
+        return
+    low = min(r.cost + r.ship for r in valid)
+    for r in valid:
+        r.cheapest = (r.cost + r.ship) == low
 
 
 def _build_row(cfg, kw, cr, market, growth, source_name, fetched_at, as_of, seen) -> ResultRow:

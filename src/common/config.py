@@ -29,6 +29,7 @@ class Config:
     profit_min_won: Fraction
     discount_rate_pct: Fraction
     fee_on_shipping: str
+    vat_mode: str
     stress_ad_rate_pct: Fraction
     stress_return_rate_pct: Fraction
     stress_fee_add_pp: Fraction
@@ -132,6 +133,10 @@ def load_config(path: str) -> Config:
     b429 = _list(data, "trend.retry_429_backoff_sec", bad, missing)
     btr = _list(data, "trend.retry_transient_backoff_sec", bad, missing)
 
+    vat_mode = data.get("vat_mode")
+    if vat_mode not in ("general", "none"):
+        (missing if vat_mode is None else bad).append("vat_mode")
+
     fos = data.get("fee_on_shipping")
     if fos is None:
         missing.append("fee_on_shipping")
@@ -193,7 +198,7 @@ def load_config(path: str) -> Config:
 
     return Config(
         fee_sales_pct=fee_sales, fee_payment_pct=fee_pay, ad_rate_pct=ad, return_rate_pct=ret,
-        margin_min_pct=margin, profit_min_won=pmin, discount_rate_pct=disc, fee_on_shipping=fos,
+        margin_min_pct=margin, profit_min_won=pmin, discount_rate_pct=disc, fee_on_shipping=fos, vat_mode=vat_mode,
         stress_ad_rate_pct=s_ad, stress_return_rate_pct=s_ret, stress_fee_add_pp=s_fee,
         market_lowest_k=int(k), growth_min_base=gmin,
         growth_floor_pct=_frac(floor) if floor is not None else None,

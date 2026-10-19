@@ -128,7 +128,7 @@ def style_candidates(ws, col_idx):
     ws.freeze_panes = "C2"
     ws.auto_filter.ref = ws.dimensions
     wrap_cols = {col_idx["사유"], col_idx["경고"], col_idx["구분 라벨"], col_idx["AI 노출 준비"]}
-    center_cols = {col_idx["판매처 수"], col_idx["항목 승인(O/X)"]}
+    center_cols = {col_idx["판매처 수"], col_idx["항목 승인(O/X)"], col_idx["최저 원가"]}
     for row in ws.iter_rows(min_row=2):
         for c in row:
             c.font = _font()
@@ -147,7 +147,7 @@ def style_candidates(ws, col_idx):
                         (VERDICT["보류"][1] if str(ai.value).startswith("보완") else MUTED))
         row[col_idx["항목 승인(O/X)"] - 1].fill = _fill(INPUT)
         row[col_idx["항목 승인(O/X)"] - 1].font = _font(bold=True)
-        for h in ("순이익(세전: 부가세·소득세 미반영)", "보수 순이익"):
+        for h in ("순이익(세전: 부가세·소득세 미반영)", "보수 순이익", "부가세 반영 순이익(추정)"):
             c = row[col_idx[h] - 1]
             if isinstance(c.value, (int, float)) and c.value < 0:
                 c.font = _font(bold=True, color=VERDICT["탈락"][1])
@@ -157,7 +157,8 @@ def style_candidates(ws, col_idx):
                 c.font = _font(size=9, italic=True, color=MUTED)
                 c.alignment = Alignment(horizontal="center", vertical="center")
     for col, w in {"키워드": 22, "도매처": 10, "시장 기준가": 12, "판매처 수": 9, "클릭 증가율": 11, "원가": 10,
-                   "도매 배송비": 10, "순이익(세전: 부가세·소득세 미반영)": 16, "이익률": 9, "보수 순이익": 12,
+                   "도매 배송비": 10, "최저 원가": 8, "순이익(세전: 부가세·소득세 미반영)": 16,
+                   "손익분기 판매가": 11, "부가세 반영 순이익(추정)": 13, "이익률": 9, "보수 순이익": 12,
                    "광고비 손익분기율": 12, "판정": 9, "사유": 42, "경고": 32, "AI 노출 준비": 24, "구분 라벨": 30,
                    "항목 승인(O/X)": 11}.items():
         ws.column_dimensions[ws.cell(1, col_idx[col]).column_letter].width = w

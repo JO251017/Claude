@@ -13,7 +13,7 @@ CFG = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
 
 def test_config_loads_and_v():
     c = load_config(CFG)
-    assert float(c.v) == pytest.approx(0.14633)
+    assert float(c.v) == pytest.approx(0.1463)
     assert c.growth_floor_pct is None
 
 
