@@ -1,0 +1,5 @@
+# 미검산: 사용자 표본이 없어 독립 Decimal 수기 계산(docs/profit_samples_calc.md)으로 생성. 기본 config 기준.
+id,cost,ship,customer_ship,market,expected_t_min,expected_t_sug,expected_p,expected_profit,expected_stress_profit,expected_verdict
+S1,8000,2500,,19800,14922,19800,17300,6403,4819,통과
+S2,15000,3000,,21000,25581,21000,18000,-73,-1753,탈락
+S3,12000,3000,1500,26001,21317,26001,24501,7196,5116,통과
