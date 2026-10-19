@@ -50,6 +50,13 @@ class Config:
     datalab_endpoint: str
     datalab_daily_limit: int
     datalab_timeout_sec: float
+    disc_terms_ack: bool
+    disc_searchad_env: tuple
+    disc_searchad_base_url: str
+    disc_shop_endpoint: str
+    disc_shop_daily_limit: int
+    disc_max_candidates: int
+    disc_min_monthly_search: int | None
     db_path: str
     output_dir: str
     log_dir: str
@@ -151,6 +158,22 @@ def load_config(path: str) -> Config:
         (missing if endpoint is None else bad).append("datalab.endpoint")
     d_limit = n("datalab.daily_limit"); d_timeout = n("datalab.timeout_sec")
 
+    dc = data.get("discovery") or {}
+    dc_ack = dc.get("api_terms_ack")
+    if not isinstance(dc_ack, bool):
+        (missing if dc_ack is None else bad).append("discovery.api_terms_ack")
+    dc_env = dc.get("searchad_required_env")
+    if not isinstance(dc_env, list) or len(dc_env) != 3 or not all(isinstance(x, str) and x for x in dc_env):
+        (missing if dc_env is None else bad).append("discovery.searchad_required_env")
+    for key in ("searchad_base_url", "shop_endpoint"):
+        u = dc.get(key)
+        if not isinstance(u, str) or not u.startswith("https://"):
+            (missing if u is None else bad).append(f"discovery.{key}")
+    dc_shop_limit = n("discovery.shop_daily_limit"); dc_max = n("discovery.max_candidates")
+    dc_min = dc.get("min_monthly_search")
+    if dc_min is not None and (isinstance(dc_min, bool) or not isinstance(dc_min, int) or dc_min < 0):
+        bad.append("discovery.min_monthly_search")
+
     paths = data.get("paths") or {}
     for key in ("db_path", "output_dir", "log_dir"):
         if not isinstance(paths.get(key), str) or not paths.get(key):
@@ -180,6 +203,9 @@ def load_config(path: str) -> Config:
         retry_429_backoff_sec=b429, retry_transient_max=int(rtr), retry_transient_backoff_sec=btr,
         datalab_terms_ack=ack, ai_affects_verdict=ai_aff, datalab_required_env=tuple(req_env),
         datalab_endpoint=endpoint, datalab_daily_limit=int(d_limit), datalab_timeout_sec=float(d_timeout),
+        disc_terms_ack=dc_ack, disc_searchad_env=tuple(dc_env), disc_searchad_base_url=dc["searchad_base_url"],
+        disc_shop_endpoint=dc["shop_endpoint"], disc_shop_daily_limit=int(dc_shop_limit),
+        disc_max_candidates=int(dc_max), disc_min_monthly_search=dc_min,
         db_path=paths["db_path"], output_dir=paths["output_dir"], log_dir=paths["log_dir"],
         config_hash=hashlib.sha256(raw_bytes).hexdigest(),
     )

@@ -1,5 +1,9 @@
 """재시도·호출 간격 제어. 외부 호출부(DatalabTrendSource 등)가 공통으로 쓴다."""
+import json
+import socket
 import time
+import urllib.error
+import urllib.request
 
 
 class HttpError(Exception):
@@ -63,3 +67,24 @@ def call_with_retry(fn, *, max_429, backoff_429, max_transient, backoff_transien
             delay = backoff_transient[min(ntr, len(backoff_transient) - 1)]
             ntr += 1
         sleep(delay)
+
+
+def _retry_after(headers) -> float | None:
+    try:
+        return float(headers.get("Retry-After")) if headers and headers.get("Retry-After") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def open_json(req: urllib.request.Request, timeout: float, urlopen=None):
+    """요청 1회. HTTP 오류는 HttpError, 네트워크 오류·타임아웃은 TimeoutError로 올린다(재시도 규칙용).
+    응답 본문·헤더는 오류 메시지에 담지 않는다. 성공 시 JSON을 파싱해 돌려준다(형식 오류는 ValueError)."""
+    opener = urlopen or urllib.request.urlopen
+    try:
+        with opener(req, timeout=timeout) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as e:
+        raise HttpError(e.code, retry_after=_retry_after(e.headers)) from None
+    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError):
+        raise TimeoutError("네트워크 오류 또는 타임아웃") from None
+    return json.loads(raw)

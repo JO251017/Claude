@@ -1,4 +1,8 @@
-# 네이버 데이터랩 자동 조회 켜기 (처음 한 번)
+# 네이버 API 연결하기 (처음 한 번)
+
+1~6장: 1단계 클릭 추이 자동 조회(데이터랩). 7장: 0단계 키워드 발굴(검색광고 + 쇼핑 검색).
+
+## 데이터랩 자동 조회
 
 클릭 추이(trends.csv)를 손으로 옮겨 적지 않고, 프로그램이 **네이버 데이터랩 쇼핑인사이트 공식 API**로 직접 받아오게 하는 방법입니다.
 규격: `docs/api/naver_datalab_shopping_keywords.md` (공식 문서 요약). 하루 호출 한도 1,000회, 키워드 1개당 1회 호출.
@@ -46,3 +50,14 @@ python -m src.cli run --source datalab
 | | | | | | |
 | | | | | | |
 | | | | | | |
+
+## 7. 키워드 발굴(0단계) 키 설정
+규격: `docs/api/naver_searchad_keywordstool.md`, `docs/api/naver_search_shop.md`
+
+1. **검색광고 키**: https://manage.searchad.naver.com 로그인 → 도구 → API 사용 관리 → 라이선스 생성.
+   `.env`에 `NAVER_AD_API_KEY`(액세스 라이선스), `NAVER_AD_SECRET_KEY`(비밀키), `NAVER_AD_CUSTOMER_ID`(고객 ID)를 채웁니다.
+2. **쇼핑 검색 권한**: 1장에서 만든 개발자센터 앱의 API 설정에서 **'검색'**도 선택합니다(같은 NAVER_CLIENT_ID/SECRET 사용). 빠지면 403.
+3. 약관 확인 후 `config.yaml`에서 `discovery.api_terms_ack: true`.
+4. 실행: `python -m src.cli discover`
+- 쇼핑 검색은 하루 25,000회까지. 한 번 실행에 상품 수 조회는 `discovery.max_candidates`(기본 100)개까지만 합니다(월간 검색수 많은 순).
+- 확인 필요: 검색광고 키워드도구는 공식 문서에 호출 한도와 띄어쓰기 허용 여부가 없습니다. 씨앗 키워드가 실패하면 그 씨앗만 "조회 실패"로 표시되니, 실패하면 띄어쓰기를 뺀 단어로 다시 해 보세요.

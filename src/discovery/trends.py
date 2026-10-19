@@ -1,9 +1,7 @@
 """C2 성장률 (M1 기획서 5.4). ratio 시계열은 메모리에서만 쓰고 DB·파일·로그에 저장하지 않는다(DEC-008)."""
 import calendar
 import json
-import socket
 import time
-import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -12,7 +10,7 @@ from fractions import Fraction
 
 from src.common.config import Config
 from src.common.csvio import parse_number, read_csv
-from src.common.http_retry import HttpError, RetryExhausted, Throttle, call_with_retry
+from src.common.http_retry import RetryExhausted, Throttle, call_with_retry, open_json
 
 TOTAL_MONTHS = 15      # 최근 15개 완결 월
 RECENT_WINDOW = 3      # 최근 3개월 vs 1년 전 같은 3개월
@@ -83,13 +81,6 @@ class MockTrendSource(TrendSource):
         return list(self.data[keyword])
 
 
-def _retry_after(headers) -> float | None:
-    try:
-        return float(headers.get("Retry-After")) if headers and headers.get("Retry-After") else None
-    except (TypeError, ValueError):
-        return None
-
-
 class DatalabTrendSource(TrendSource):
     """네이버 데이터랩 쇼핑인사이트 키워드별 트렌드 API (docs/api/naver_datalab_shopping_keywords.md).
     키워드 1개당 1회 호출한다(여러 개를 묶으면 ratio 기준인 최댓값 100이 함께 묶인 키워드에 따라 달라짐).
@@ -120,16 +111,8 @@ class DatalabTrendSource(TrendSource):
         req = urllib.request.Request(self._cfg.datalab_endpoint, data=body, method="POST", headers={
             "X-Naver-Client-Id": self._auth[0], "X-Naver-Client-Secret": self._auth[1],
             "Content-Type": "application/json"})
-        opener = self._urlopen or urllib.request.urlopen
         try:
-            with opener(req, timeout=self._cfg.datalab_timeout_sec) as resp:
-                raw = resp.read()
-        except urllib.error.HTTPError as e:
-            raise HttpError(e.code, retry_after=_retry_after(e.headers)) from None
-        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError):
-            raise TimeoutError("네트워크 오류 또는 타임아웃") from None
-        try:
-            results = json.loads(raw)["results"]
+            results = open_json(req, self._cfg.datalab_timeout_sec, self._urlopen)["results"]
             by_month = {d["period"][:7]: float(d["ratio"]) for r in results for d in r.get("data", [])}
         except (ValueError, KeyError, TypeError):
             raise TrendFetchError("malformed", "응답 형식 오류") from None

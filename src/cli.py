@@ -14,6 +14,8 @@ from src.common.logging_setup import setup_logging
 from src.common.notify import ConsoleNotifier, FileNotifier, MultiNotifier, Notifier
 from src.discovery.trends import (CachedTrendSource, CsvTrendSource, DatalabTrendSource, RetryingTrendSource,
                                   TrendSource)
+from src.discovery.keyword_finder import SearchAdClient, ShopSearchClient, discover
+from src.discovery_report import conclusion, write_discovery_xlsx, write_keywords_csv
 from src.pipeline import reasons_json, run_pipeline
 from src.report_xlsx import SummaryConsistencyError, build_summary, write_workbook
 
@@ -107,6 +109,37 @@ def build_source(args, cfg: Config, as_of: date) -> TrendSource:
     return CachedTrendSource(RetryingTrendSource(DatalabTrendSource(cfg, as_of, categories, cid, secret), cfg))
 
 
+def execute_discover(cfg: Config, seeds_path: str, notifier: Notifier, run_id: str,
+                     ad: SearchAdClient | None = None, shop: ShopSearchClient | None = None, sleep=None) -> dict:
+    """모듈 0. 키는 존재 여부만 확인하고 값은 기록하지 않는다."""
+    import time as _time
+    log = setup_logging(run_id, cfg.log_dir)
+    seeds = [{"seed": r["seed"], "category": r.get("category", "")} for r in read_csv(seeds_path) if r.get("seed")]
+    seeds = list({s["seed"]: s for s in seeds}.values())
+    if ad is None or shop is None:
+        if not cfg.disc_terms_ack:
+            raise ConfigError(["discovery.api_terms_ack"])
+        load_env_file(".env")
+        check_required_env(list(cfg.disc_searchad_env) + list(cfg.datalab_required_env[:2]))
+        ak, sk, cid = (os.environ[n] for n in cfg.disc_searchad_env)
+        ad = SearchAdClient(cfg, ak, sk, cid)
+        shop = ShopSearchClient(cfg, *(os.environ[n] for n in cfg.datalab_required_env[:2]))
+    log.info("discover 시작 seeds=%d", len(seeds))
+    res = discover(cfg, seeds, ad, shop, sleep=sleep or _time.sleep)
+    os.makedirs(cfg.output_dir, exist_ok=True)
+    csv_path = os.path.join(cfg.output_dir, f"discovered_keywords_{run_id}.csv")
+    xlsx_path = os.path.join(cfg.output_dir, f"discovery_{run_id}.xlsx")
+    n_ok = write_keywords_csv(csv_path, res)
+    write_discovery_xlsx(xlsx_path, res, {"run_id": run_id, "executed_at": datetime.now().isoformat(timespec="seconds"),
+                                          "n_seeds": len(seeds)}, os.path.basename(csv_path))
+    line = conclusion(res)
+    log.info("discover 완료 %s", line)
+    if seeds and len(res.seed_failures) == len(seeds):
+        notifier.notify("오류: 모든 씨앗 키워드의 연관 키워드 조회 실패", "error", run_id)
+    notifier.notify(line, "info", run_id)
+    return {"xlsx": xlsx_path, "csv": csv_path, "n_ok": n_ok, "result": res}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m src.cli")
     ap.add_argument("--config", default="config.yaml")
@@ -119,6 +152,8 @@ def main(argv=None) -> int:
     r.add_argument("--source", choices=["csv", "datalab"], default="csv",
                    help="csv: trends.csv 사용 / datalab: 네이버 데이터랩 API로 직접 조회(.env에 키 필요)")
     r.add_argument("--as-of", help="성장률 기준일 YYYY-MM-DD (기본 오늘)")
+    d = sub.add_parser("discover", help="모듈 0: 씨앗 키워드로 연관 키워드 발굴")
+    d.add_argument("--seeds", default="data/input/seeds.csv")
     a = sub.add_parser("approve")
     a.add_argument("action", choices=["import"])
     a.add_argument("xlsx")
@@ -145,6 +180,17 @@ def main(argv=None) -> int:
         print(f"승인 가져오기 완료 run_id={rep.run_id} 신규 {rep.inserted}건, 중복 {rep.duplicates}건, 행 오류 {len(rep.row_errors)}건")
         for msg in rep.row_errors:
             print("  - 건너뜀:", msg)
+        return 0
+
+    if args.cmd == "discover":
+        try:
+            execute_discover(cfg, args.seeds, notifier, run_id)
+        except ConfigError as e:
+            notifier.notify(str(e), "error", run_id)
+            return 2
+        except FileNotFoundError as e:
+            notifier.notify(f"오류: 입력 파일 없음 ({os.path.basename(str(e.filename))})", "error", run_id)
+            return 2
         return 0
 
     try:

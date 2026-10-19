@@ -1,6 +1,8 @@
-# 순이익 후보표 도구 (스마트스토어 1단계)
+# 스마트스토어 상품 발굴·순이익 후보표 도구
 
-키워드·경쟁 시세·도매 원가·클릭 추이를 넣으면 **팔아서 남는 상품 후보**를 골라 엑셀로 정리해 주는 도구입니다.
+두 단계로 씁니다.
+- **0단계 키워드 발굴** (`discover`): 관심 분야 단어(씨앗)를 넣으면 연관 키워드·월간 검색수·상품 수를 모아 **덜 붐비는 키워드 순**으로 정리
+- **1단계 순이익 후보표** (`run`): 키워드·경쟁 시세·도매 원가·클릭 추이를 넣으면 **팔아서 남는 상품 후보**를 골라 엑셀로 정리
 네이버 쇼핑 AI가 추천할 때 쓰는 정보(스펙·모델명·출고일·차별점)를 갖췄는지도 함께 점검합니다.
 
 > 순이익은 **세전**(부가세·소득세 미반영)입니다. 요율·기준값은 모두 `config.yaml`에서 바꿉니다.
@@ -10,7 +12,15 @@
 pip install -r requirements.txt
 ```
 
-## 2. 매번 쓰는 순서
+## 2. 0단계: 키워드 발굴 (선택)
+1. `data/templates/seeds.csv`를 `data/input/seeds.csv`로 복사해 씨앗 키워드를 적습니다(분야 코드 `category`도 적어 두면 1단계까지 따라감).
+2. 실행: `python -m src.cli discover`
+3. 결과
+   - `output/discovery_<실행번호>.xlsx`: 연관 키워드별 월간 검색수, 상품 수, **경쟁강도(상품 수 ÷ 월간 검색수, 낮을수록 덜 붐빔)**
+   - `output/discovered_keywords_<실행번호>.csv`: 경쟁강도 낮은 순 키워드 목록. 팔 키워드만 남겨 `data/input/keywords.csv`로 복사하면 1단계 입력이 됩니다.
+- 처음 한 번 키 설정이 필요합니다(`docs/RUN_REAL_API.md` 7장). 호출 상한·검색수 기준은 `config.yaml`의 `discovery`에서 바꿉니다.
+
+## 3. 1단계: 매번 쓰는 순서
 1. `data/templates/`의 양식 4개를 `data/input/`에 복사해 채웁니다.
 
    | 파일 | 내용 |
@@ -38,7 +48,7 @@ pip install -r requirements.txt
    ```
    실행 승인 = 승인이고 항목이 O인 것만 "승인된 후보"로 남습니다.
 
-## 3. 판정 기준 (탈락 > 보류 > 통과 순으로 더 나쁜 쪽)
+## 4. 판정 기준 (탈락 > 보류 > 통과 순으로 더 나쁜 쪽)
 | 판정 | 언제 |
 |---|---|
 | 탈락 | 시장 가격으로 팔면 최소 마진(15%)·최소 이익(2,000원)을 못 맞춤 / 고객 배송비가 시장가 이상 |
@@ -53,20 +63,20 @@ pip install -r requirements.txt
 - 기본은 **표시만** 합니다. 판정에도 반영하려면 `config.yaml`의 `ai_readiness.affects_verdict: true`.
 - 리뷰는 판매 후에 쌓이므로 이 단계에서는 보지 않습니다.
 
-## 4. 연습용 샘플
+## 5. 연습용 샘플
 가상 데이터로 결과를 미리 볼 수 있습니다.
 ```
 python -m src.cli --config data/sample/config.sample.yaml run --keywords data/sample/keywords.csv --competitors data/sample/competitors.csv --costs data/sample/costs.csv --trends data/sample/trends.csv --as-of 2026-07-15
 ```
 (샘플 설정은 보류 사례를 보여 주려고 최소 마진만 5%로 낮춘 것입니다. 실제로는 `config.yaml`을 씁니다.)
 
-## 5. 알아둘 점
+## 6. 알아둘 점
 - `data/input/`, `output/`은 git에 올라가지 않습니다(개인 데이터 보호).
 - 클릭 추이 자동 조회는 네이버 개발자센터 API 키가 필요합니다. 설정 방법: `docs/RUN_REAL_API.md`. 하루 1,000회까지.
 - 실행 기록: `output/logs/`, 알림 기록: `output/notifications.log`, 데이터: `output/mvp.db`.
 - 개발 기록과 가정: `docs/dev_log.md`.
 
-## 6. 개발자용
+## 7. 개발자용
 ```
 python -m pytest -q
 ```

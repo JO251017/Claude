@@ -30,6 +30,16 @@ freshness:
 ai_readiness:
   affects_verdict: false     # true면 정보가 빠진 후보를 보류로 판정
 
+# 키워드 발굴(모듈 0): 검색광고 키워드도구 + 쇼핑 검색 API (docs/api/)
+discovery:
+  api_terms_ack: false       # 검색광고 API·검색 API 약관 확인 후 true
+  searchad_required_env: [NAVER_AD_API_KEY, NAVER_AD_SECRET_KEY, NAVER_AD_CUSTOMER_ID]   # 이름만
+  searchad_base_url: https://api.searchad.naver.com
+  shop_endpoint: https://openapi.naver.com/v1/search/shop.json
+  shop_daily_limit: 25000    # 검색 API 공식 하루 한도
+  max_candidates: 100        # 상품 수를 조회할 최대 키워드 수(호출량 상한, 검색수 많은 순)
+  min_monthly_search: null   # 값을 넣으면 월간 검색수(PC+모바일)가 이보다 적은 키워드 제외
+
 trend:
   min_interval_sec: 0.2
   retry_429_max: 3
