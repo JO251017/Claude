@@ -40,3 +40,4 @@
 - 2a 완료: `src/service.py`(공통 서비스 계층), `src/mcp_server.py`(MCP 읽기 도구 2개). 코어 무변경.
 - 가정: MCP Python SDK 2.x(`mcp.server.mcpserver.MCPServer`)를 쓴다. 설치된 패키지 소스로 API를 확인했고, 1.x의 FastMCP는 쓰지 않는다.
 - 가정: market_price(경쟁 시세 CSV)는 사용자가 입력한 값이라 네이버 API 파생값으로 보지 않는다. 확인 필요: 시세를 네이버 쇼핑 화면에서 수집한다면 같은 제한을 적용할지 결정 필요.
+- 결정(사용자): 승인은 사용자 본인만 한다. AI 자동 승인·위임장 한도는 만들지 않고, MCP에 승인 쓰기 도구를 두지 않는다.
