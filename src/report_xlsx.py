@@ -7,6 +7,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 NO_MARKET_LABEL = "시세 미입력"
 from src.pipeline import INPUT_ERROR, ResultRow, split_rows
+from src.xlsx_style import style_candidates, style_rejects, style_summary
 from src.sourcing.profit import LABEL, REASON_LABELS, TAX_NOTE, round_half_up
 
 SHEET_SUMMARY, SHEET_CANDS, SHEET_REJECTS, SHEET_META = "요약", "후보", "탈락·실패", "메타"
@@ -174,6 +175,10 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
     for k in ("run_id", "config_hash", "source_name", "executed_at", "as_of"):
         wm.append([k, meta[k]])
     wm.sheet_state = "hidden"
+
+    style_summary(ws)
+    style_candidates(wc, {h: i for i, h in enumerate(CAND_HEADERS, 1)})
+    style_rejects(wr)
     wb.save(path)
 
 
