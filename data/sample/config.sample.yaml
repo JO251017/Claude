@@ -38,9 +38,13 @@ trend:
   retry_transient_max: 2
   retry_transient_backoff_sec: [1, 2]
 
-hub:
-  api_terms_ack: false       # 이용약관 확인 후 true (docs/RUN_REAL_API.md)
-  required_env: [NAVER_HUB_CLIENT_ID, NAVER_HUB_CLIENT_SECRET]   # 이름만
+# 네이버 데이터랩 쇼핑인사이트 API (docs/api/naver_datalab_shopping_keywords.md)
+datalab:
+  api_terms_ack: false       # 네이버 개발자센터 이용약관 확인 후 true (docs/RUN_REAL_API.md)
+  required_env: [NAVER_CLIENT_ID, NAVER_CLIENT_SECRET]   # .env의 키 이름만. 값은 적지 않는다.
+  endpoint: https://openapi.naver.com/v1/datalab/shopping/category/keywords
+  daily_limit: 1000          # 공식 하루 호출 한도
+  timeout_sec: 10
 
 paths:
   db_path: output/mvp.db

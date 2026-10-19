@@ -1,4 +1,4 @@
-"""재시도·호출 간격 제어. 외부 호출부(HubTrendSource 등)가 공통으로 쓴다."""
+"""재시도·호출 간격 제어. 외부 호출부(DatalabTrendSource 등)가 공통으로 쓴다."""
 import time
 
 

@@ -50,3 +50,9 @@
 - 가정: costs.csv의 새 칸은 모두 선택이다. 없으면 "보완: …"으로 표시될 뿐 실행은 막지 않는다.
 - 결정(사용자): MCP 서버 삭제(`src/mcp_server.py`, `src/service.py`와 테스트). 설계 문서는 AI 노출 준비도 부분만 남겨 `docs/ai_exposure.md`로 정리.
 - 가정: 입력 파일 기본 경로를 `data/input/*.csv`로 둔다(`python -m src.cli run`만으로 실행). 빈 양식은 `data/templates/`.
+- 결정(사용자: "데이터랩에서 직접 받아"): 작동하지 않던 HUB 스텁을 **네이버 개발자센터 데이터랩 쇼핑인사이트 공식 API**(`DatalabTrendSource`, `--source datalab`)로 교체. 공식 문서를 확인해 `docs/api/naver_datalab_shopping_keywords.md`에 요약하고 그대로 구현(규격 추측 없음). 이 세션에서 실제 호출은 하지 않았고 테스트는 가짜 응답으로만 검증.
+- 가정: 키워드 1개당 1회 호출. 여러 키워드를 묶으면 ratio 기준(최댓값 100)이 묶인 키워드에 따라 달라져 growth_min_base 판단이 흔들리기 때문.
+- 가정: 데이터랩 API는 분야 코드(category)가 필수라 keywords.csv에 `category` 칸을 추가. 비어 있으면 호출하지 않고 "조회 실패".
+- 가정: 하루 한도(1,000회)는 재시도 포함 호출 수로 센다. 한도에 닿으면 나머지 키워드는 "조회 실패(rate_limit)"와 한도 초과 오류 알림.
+- 가정: 환경변수 이름은 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET (공식 헤더 X-Naver-Client-Id/Secret에 대응).
+- 사실: 웹 화면 수집(크롤링)은 처음 지시문의 금지 사항이라 하지 않았다. 실제 키워드·키가 없어 이 세션에서 데이터를 직접 받아오지는 못함.

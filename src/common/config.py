@@ -44,9 +44,12 @@ class Config:
     retry_429_backoff_sec: tuple
     retry_transient_max: int
     retry_transient_backoff_sec: tuple
-    hub_api_terms_ack: bool
+    datalab_terms_ack: bool
     ai_affects_verdict: bool
-    hub_required_env: tuple
+    datalab_required_env: tuple
+    datalab_endpoint: str
+    datalab_daily_limit: int
+    datalab_timeout_sec: float
     db_path: str
     output_dir: str
     log_dir: str
@@ -136,12 +139,17 @@ def load_config(path: str) -> Config:
     if not isinstance(ai_aff, bool):
         (missing if ai_aff is None else bad).append("ai_readiness.affects_verdict")
 
-    ack = (data.get("hub") or {}).get("api_terms_ack")
+    dl = data.get("datalab") or {}
+    ack = dl.get("api_terms_ack")
     if not isinstance(ack, bool):
-        (missing if ack is None else bad).append("hub.api_terms_ack")
-    req_env = (data.get("hub") or {}).get("required_env")
+        (missing if ack is None else bad).append("datalab.api_terms_ack")
+    req_env = dl.get("required_env")
     if not isinstance(req_env, list) or not all(isinstance(x, str) and x for x in req_env):
-        (missing if req_env is None else bad).append("hub.required_env")
+        (missing if req_env is None else bad).append("datalab.required_env")
+    endpoint = dl.get("endpoint")
+    if not isinstance(endpoint, str) or not endpoint.startswith("https://"):
+        (missing if endpoint is None else bad).append("datalab.endpoint")
+    d_limit = n("datalab.daily_limit"); d_timeout = n("datalab.timeout_sec")
 
     paths = data.get("paths") or {}
     for key in ("db_path", "output_dir", "log_dir"):
@@ -170,7 +178,8 @@ def load_config(path: str) -> Config:
         researched_at_days=int(d_res), wholesale_date_days=int(d_wh),
         min_interval_sec=float(interval), retry_429_max=int(r429),
         retry_429_backoff_sec=b429, retry_transient_max=int(rtr), retry_transient_backoff_sec=btr,
-        hub_api_terms_ack=ack, ai_affects_verdict=ai_aff, hub_required_env=tuple(req_env),
+        datalab_terms_ack=ack, ai_affects_verdict=ai_aff, datalab_required_env=tuple(req_env),
+        datalab_endpoint=endpoint, datalab_daily_limit=int(d_limit), datalab_timeout_sec=float(d_timeout),
         db_path=paths["db_path"], output_dir=paths["output_dir"], log_dir=paths["log_dir"],
         config_hash=hashlib.sha256(raw_bytes).hexdigest(),
     )

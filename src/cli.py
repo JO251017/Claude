@@ -12,7 +12,7 @@ from src.common.csvio import read_csv
 from src.common.db import init_db
 from src.common.logging_setup import setup_logging
 from src.common.notify import ConsoleNotifier, FileNotifier, MultiNotifier, Notifier
-from src.discovery.trends import (CachedTrendSource, CsvTrendSource, HubTrendSource, RetryingTrendSource,
+from src.discovery.trends import (CachedTrendSource, CsvTrendSource, DatalabTrendSource, RetryingTrendSource,
                                   TrendSource)
 from src.pipeline import reasons_json, run_pipeline
 from src.report_xlsx import SummaryConsistencyError, build_summary, write_workbook
@@ -97,12 +97,14 @@ def build_source(args, cfg: Config, as_of: date) -> TrendSource:
         if not args.trends:
             raise ConfigError(["--trends"])
         return CachedTrendSource(CsvTrendSource(args.trends, as_of))
-    # hub
-    if not cfg.hub_api_terms_ack:
-        raise ConfigError(["hub.api_terms_ack"])
+    # datalab: 공식 API. 약관 확인·키 존재(이름만 확인)를 실행 전에 검사한다.
+    if not cfg.datalab_terms_ack:
+        raise ConfigError(["datalab.api_terms_ack"])
     load_env_file(".env")
-    check_required_env(cfg.hub_required_env)
-    return CachedTrendSource(RetryingTrendSource(HubTrendSource(), cfg))
+    check_required_env(cfg.datalab_required_env)
+    cid, secret = (os.environ[n] for n in cfg.datalab_required_env[:2])
+    categories = {r["keyword"]: r.get("category", "") for r in read_csv(args.keywords) if r.get("keyword")}
+    return CachedTrendSource(RetryingTrendSource(DatalabTrendSource(cfg, as_of, categories, cid, secret), cfg))
 
 
 def main(argv=None) -> int:
@@ -114,7 +116,8 @@ def main(argv=None) -> int:
     r.add_argument("--competitors", default="data/input/competitors.csv")
     r.add_argument("--costs", default="data/input/costs.csv")
     r.add_argument("--trends", default="data/input/trends.csv")
-    r.add_argument("--source", choices=["csv", "hub"], default="csv")
+    r.add_argument("--source", choices=["csv", "datalab"], default="csv",
+                   help="csv: trends.csv 사용 / datalab: 네이버 데이터랩 API로 직접 조회(.env에 키 필요)")
     r.add_argument("--as-of", help="성장률 기준일 YYYY-MM-DD (기본 오늘)")
     a = sub.add_parser("approve")
     a.add_argument("action", choices=["import"])
@@ -153,6 +156,9 @@ def main(argv=None) -> int:
         source = build_source(args, cfg, as_of)
     except ConfigError as e:
         notifier.notify(str(e), "error", run_id)
+        return 2
+    except FileNotFoundError as e:
+        notifier.notify(f"오류: 입력 파일 없음 ({os.path.basename(str(e.filename))})", "error", run_id)
         return 2
     try:
         execute_run(cfg, args.keywords, args.competitors, args.costs, source, as_of, notifier, run_id)

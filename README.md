@@ -15,14 +15,15 @@ pip install -r requirements.txt
 
    | 파일 | 내용 |
    |---|---|
-   | `keywords.csv` | 검토할 키워드 |
+   | `keywords.csv` | 검토할 키워드 (+ 자동 조회용 분야 코드 `category`) |
    | `competitors.csv` | 경쟁 판매자 가격·배송비·조사일 |
    | `costs.csv` | 도매 원가·배송비·도매처 + AI 노출 정보 4칸 |
-   | `trends.csv` | 네이버 데이터랩 쇼핑인사이트의 월별 클릭 추이(최근 15개월, 이번 달 제외) |
+   | `trends.csv` | 월별 클릭 추이(최근 15개월). **자동 조회를 켜면 필요 없음** |
 
 2. 실행합니다.
    ```
-   python -m src.cli run
+   python -m src.cli run                    # trends.csv를 직접 채운 경우
+   python -m src.cli run --source datalab   # 네이버 데이터랩에서 자동으로 받아오는 경우(처음 한 번 설정: docs/RUN_REAL_API.md)
    ```
    `output/candidates_<실행번호>.xlsx`가 생깁니다.
 
@@ -61,7 +62,7 @@ python -m src.cli --config data/sample/config.sample.yaml run --keywords data/sa
 
 ## 5. 알아둘 점
 - `data/input/`, `output/`은 git에 올라가지 않습니다(개인 데이터 보호).
-- 클릭 추이는 지금 `trends.csv`로 직접 넣습니다. 네이버 API 자동 조회는 공식 문서가 필요해 아직 꺼져 있습니다(`docs/RUN_REAL_API.md`).
+- 클릭 추이 자동 조회는 네이버 개발자센터 API 키가 필요합니다. 설정 방법: `docs/RUN_REAL_API.md`. 하루 1,000회까지.
 - 실행 기록: `output/logs/`, 알림 기록: `output/notifications.log`, 데이터: `output/mvp.db`.
 - 개발 기록과 가정: `docs/dev_log.md`.
 

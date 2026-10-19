@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import date
 
@@ -6,7 +7,7 @@ import pytest
 from src.common.config import load_config
 from src.common.http_retry import HttpError
 from src.discovery.market import compute_markets
-from src.discovery.trends import (CachedTrendSource, HubTrendSource, MockTrendSource, RetryingTrendSource,
+from src.discovery.trends import (CachedTrendSource, DatalabTrendSource, MockTrendSource, RetryingTrendSource,
                                   TrendFetchError, complete_months, compute_growth)
 
 CFG = load_config(os.path.join(os.path.dirname(__file__), "..", "config.yaml"))
@@ -134,6 +135,93 @@ def test_cache_prevents_duplicate_calls():
     assert mock.calls.count("a") == 1 and mock.calls.count("f") == 1
 
 
-def test_hub_is_stub():
-    with pytest.raises(NotImplementedError):
-        HubTrendSource().fetch("x")
+class FakeResp:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+def datalab_payload(months, ratios):
+    return {"results": [{"title": "k", "keyword": ["k"],
+                         "data": [{"period": f"{m}-01", "ratio": r} for m, r in zip(months, ratios) if r is not None]}]}
+
+
+def make_datalab(opener, cats=None):
+    return DatalabTrendSource(CFG, date(2026, 7, 15), cats or {"k": "50000000"}, "ID-X", "SECRET-X", urlopen=opener)
+
+
+def test_datalab_request_matches_official_spec():
+    seen = {}
+    months = complete_months(date(2026, 7, 15))
+
+    def opener(req, timeout):
+        seen["url"], seen["method"], seen["timeout"] = req.full_url, req.get_method(), timeout
+        seen["headers"] = {k.lower(): v for k, v in req.header_items()}
+        seen["body"] = json.loads(req.data)
+        return FakeResp(datalab_payload(months, [10.0] * 14 + [None]))
+
+    out = make_datalab(opener).fetch("k")
+    assert seen["url"] == "https://openapi.naver.com/v1/datalab/shopping/category/keywords" and seen["method"] == "POST"
+    assert seen["headers"]["x-naver-client-id"] == "ID-X" and seen["headers"]["content-type"] == "application/json"
+    b = seen["body"]
+    assert b == {"startDate": "2025-04-01", "endDate": "2026-06-30", "timeUnit": "month", "category": "50000000",
+                 "keyword": [{"name": "k", "param": ["k"]}]}
+    assert len(out) == 15 and out[0] == 10.0 and out[-1] is None          # 응답에 없는 달은 결측
+
+
+def test_datalab_no_category_skips_call():
+    calls = []
+    src = make_datalab(lambda req, timeout: calls.append(1), cats={"k": ""})
+    with pytest.raises(TrendFetchError) as e:
+        src.fetch("k")
+    assert e.value.kind == "no_category" and calls == []
+
+
+def test_datalab_http_errors_map_to_retry_rules():
+    import urllib.error
+    def raise_(code, headers=None):
+        def opener(req, timeout):
+            raise urllib.error.HTTPError(req.full_url, code, "x", headers or {}, None)
+        return opener
+    with pytest.raises(HttpError) as e:
+        make_datalab(raise_(429, {"Retry-After": "3"})).fetch("k")
+    assert e.value.status == 429 and e.value.retry_after == 3.0
+    sleeps = []
+    wrapped = RetryingTrendSource(make_datalab(raise_(403)), CFG, sleep=sleeps.append, clock=lambda: 0.0)
+    with pytest.raises(TrendFetchError) as e2:
+        wrapped.fetch("k")
+    assert e2.value.kind == "client"                                     # 403(권한 없음)은 재시도 안 함
+
+    def timeout_opener(req, timeout):
+        raise urllib.error.URLError("timed out")
+    with pytest.raises(TimeoutError):
+        make_datalab(timeout_opener).fetch("k")
+
+
+def test_datalab_malformed_and_empty():
+    with pytest.raises(TrendFetchError) as e:
+        make_datalab(lambda req, timeout: FakeResp({"nope": 1})).fetch("k")
+    assert e.value.kind == "malformed"
+    with pytest.raises(TrendFetchError) as e:
+        make_datalab(lambda req, timeout: FakeResp({"results": []})).fetch("k")
+    assert e.value.kind == "empty"
+
+
+def test_datalab_daily_limit():
+    import dataclasses
+    cfg = dataclasses.replace(CFG, datalab_daily_limit=2)
+    months = complete_months(date(2026, 7, 15))
+    src = DatalabTrendSource(cfg, date(2026, 7, 15), {"a": "1", "b": "1", "c": "1"}, "i", "s",
+                             urlopen=lambda req, timeout: FakeResp(datalab_payload(months, [5.0] * 15)))
+    src.fetch("a"); src.fetch("b")
+    with pytest.raises(TrendFetchError) as e:
+        src.fetch("c")
+    assert e.value.kind == "rate_limit" and src.calls == 2

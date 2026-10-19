@@ -124,35 +124,70 @@ def test_no_duplicate_trend_calls_and_no_timeseries_saved(sample_env, monkeypatc
     print(f"[검사] ratio 값 {len(uniq)}개 / 비밀 더미값: DB·엑셀·로그·알림 파일에서 0건")
 
 
-def test_secret_not_leaked_on_hub_path(sample_env, monkeypatch, capsys):
+def _datalab_env(sample_env, monkeypatch, ack=True):
     import yaml
-    monkeypatch.setenv("NAVER_HUB_CLIENT_ID", "DUMMYID-AAA-1")
-    monkeypatch.setenv("NAVER_HUB_CLIENT_SECRET", "DUMMYSECRET-BBB-2")
     cfg = yaml.safe_load(open(sample_env["cfg_path"], encoding="utf-8"))
-    cfg["hub"]["api_terms_ack"] = True
+    cfg["datalab"]["api_terms_ack"] = ack
     open(sample_env["cfg_path"], "w", encoding="utf-8").write(yaml.safe_dump(cfg, allow_unicode=True))
-    code = cli.main(["--config", sample_env["cfg_path"], "run", "--keywords", sample_env["files"]["keywords"],
-                     "--competitors", sample_env["files"]["competitors"], "--costs", sample_env["files"]["costs"],
-                     "--source", "hub", "--as-of", AS_OF])
-    assert code == 4                                   # HubTrendSource 스텁 -> NotImplementedError
+    kw = sample_env["tmp"] / "kw_cat.csv"
+    kw.write_text("keyword,category\n가상 접이식 정리함,50000000\n가상 주방 선반,50000000\n가상 방수 파우치,\n",
+                  encoding="utf-8")
+    return ["--config", sample_env["cfg_path"], "run", "--keywords", str(kw),
+            "--competitors", sample_env["files"]["competitors"], "--costs", sample_env["files"]["costs"],
+            "--source", "datalab", "--as-of", AS_OF]
+
+
+def test_datalab_cli_end_to_end_mocked(sample_env, monkeypatch, capsys):
+    """실제 네이버 호출 없이 urlopen을 가짜로 바꿔 전체 흐름 확인 + 비밀값·ratio 미기록 검사."""
+    import json as _json
+    import urllib.request
+    from src.discovery.trends import complete_months
+    monkeypatch.setenv("NAVER_CLIENT_ID", "DUMMYID-AAA-1")
+    monkeypatch.setenv("NAVER_CLIENT_SECRET", "DUMMYSECRET-BBB-2")
+    months = complete_months(date.fromisoformat(AS_OF))
+    ratios = [round(8800.3141 + i * 0.0271, 4) for i in range(15)]
+    seen = []
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self):
+            return _json.dumps({"results": [{"data": [{"period": f"{m}-01", "ratio": r}
+                                                      for m, r in zip(months, ratios)]}]}).encode()
+
+    def fake_urlopen(req, timeout):
+        seen.append(_json.loads(req.data)["keyword"][0]["name"])
+        assert dict(req.header_items()).get("X-naver-client-secret") == "DUMMYSECRET-BBB-2"
+        return Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert cli.main(_datalab_env(sample_env, monkeypatch)) == 0
     out = capsys.readouterr().out
-    assert "미구현" in out and "DUMMY" not in out
-    blob = b"".join(open(p, "rb").read() for p in glob.glob(str(sample_env["out"] / "**" / "*"), recursive=True)
-                    if os.path.isfile(p))
-    assert b"DUMMY" not in blob
+    assert "DUMMY" not in out
+    assert seen == ["가상 접이식 정리함", "가상 주방 선반"]                   # 분야 코드 없는 키워드는 호출 안 함
+    xlsx = glob.glob(str(sample_env["out"] / "*.xlsx"))[0]
+    rows = {r[0]: r for r in load_workbook(xlsx)["후보"].iter_rows(min_row=2, values_only=True)}
+    assert rows["가상 방수 파우치"][4] == "조회 실패"
+    blob = b""
+    for p in glob.glob(str(sample_env["out"] / "**" / "*"), recursive=True):
+        if os.path.isfile(p) and p.endswith(".xlsx"):
+            with zipfile.ZipFile(p) as z:
+                blob += b"".join(z.read(n) for n in z.namelist())
+        elif os.path.isfile(p):
+            blob += open(p, "rb").read()
+    assert "가상 접이식 정리함".encode() in blob                            # 양성 대조
+    assert b"DUMMY" not in blob and all(str(r).encode() not in blob for r in ratios)
 
 
-def test_hub_requires_ack_and_env_names_only(sample_env, monkeypatch, capsys):
-    base = ["--config", sample_env["cfg_path"], "run", "--keywords", sample_env["files"]["keywords"],
-            "--competitors", sample_env["files"]["competitors"], "--costs", sample_env["files"]["costs"], "--source", "hub"]
-    assert cli.main(base) == 2
-    assert "hub.api_terms_ack" in capsys.readouterr().out
-    import yaml
-    cfg = yaml.safe_load(open(sample_env["cfg_path"], encoding="utf-8")); cfg["hub"]["api_terms_ack"] = True
-    open(sample_env["cfg_path"], "w", encoding="utf-8").write(yaml.safe_dump(cfg, allow_unicode=True))
-    monkeypatch.delenv("NAVER_HUB_CLIENT_ID", raising=False); monkeypatch.delenv("NAVER_HUB_CLIENT_SECRET", raising=False)
-    assert cli.main(base) == 2
-    assert "NAVER_HUB_CLIENT_ID" in capsys.readouterr().out
+def test_datalab_requires_ack_and_env_names_only(sample_env, monkeypatch, capsys):
+    args = _datalab_env(sample_env, monkeypatch, ack=False)
+    assert cli.main(args) == 2
+    assert "datalab.api_terms_ack" in capsys.readouterr().out
+    args = _datalab_env(sample_env, monkeypatch, ack=True)
+    monkeypatch.delenv("NAVER_CLIENT_ID", raising=False); monkeypatch.delenv("NAVER_CLIENT_SECRET", raising=False)
+    monkeypatch.chdir(sample_env["tmp"])                                 # 저장소의 .env를 읽지 않도록
+    assert cli.main(args) == 2
+    assert "NAVER_CLIENT_ID" in capsys.readouterr().out
 
 
 def test_cli_missing_config_key_stops_before_run(tmp_path, capsys):
