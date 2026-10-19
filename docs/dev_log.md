@@ -45,3 +45,6 @@
 - 2c 완료(사용자 위임): ChatGPT는 원격 MCP에 연결하므로 GPT 전용 어댑터 대신 같은 MCP 서버의 HTTP 실행(`--transport http`, 기본 127.0.0.1)으로 대응. 기계 판독 필드(schema_version, input_hash, reason_codes, stale, human_approved, run_decision)와 읽기 도구 list_approved_candidates 추가. 코어 무변경.
 - 가정: 외부 공개(공개 HTTPS, 인증)는 하지 않는다. 공개 여부·방법은 사용자가 결정.
 - 가정: 성장률 관련 사유는 코드도 `HIDDEN`으로 숨긴다(코드만으로도 네이버 조회 상태가 드러나므로).
+- 정정: 사용자 의도는 "스마트스토어 상품이 AI 쇼핑 에이전트에 잘 추천되게"였다. AI 노출 준비도 기준(spec_info, model_name, dispatch_days, differentiator) 추가. 근거는 docs/ai_trade_design.md 9장.
+- 가정: AI 노출 준비도는 기본으로 판정에 반영하지 않고 표시만 한다(공식 기준이 아니므로). `ai_readiness.affects_verdict: true`로 바꾸면 보류 처리.
+- 가정: costs.csv의 새 칸은 모두 선택이다. 없으면 "보완: …"으로 표시될 뿐 실행은 막지 않는다.

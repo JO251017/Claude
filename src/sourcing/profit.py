@@ -23,6 +23,7 @@ REASON_LABELS = {
     "GROWTH_FLOOR": "성장률 하한 미달",
     "NO_COST": "원가 미입력",
     "NO_MARKET": "시세 미입력",
+    "AI_INFO_MISSING": "AI 노출 정보 부족",
     "INPUT_ERROR": "입력 오류",
 }
 

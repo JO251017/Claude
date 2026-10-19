@@ -25,6 +25,11 @@ freshness:
   researched_at_days: 7
   wholesale_date_days: 14
 
+# AI 노출 준비도: 네이버 쇼핑 AI 에이전트는 스펙·후기·도착 예정일을 근거로 추천한다(2026 보도).
+# 후보 단계에서 확인 가능한 정보(스펙, 모델명·브랜드, 출고 소요일, 차별점)가 있는지 본다.
+ai_readiness:
+  affects_verdict: false     # true면 정보가 빠진 후보를 보류로 판정
+
 trend:
   min_interval_sec: 0.2
   retry_429_max: 3

@@ -14,7 +14,7 @@ SHEET_SUMMARY, SHEET_CANDS, SHEET_REJECTS, SHEET_META = "요약", "후보", "탈
 LBL_RUN_ID, LBL_RUN_APPROVAL, LBL_RUN_MEMO = "run_id", "실행 승인", "승인 메모"
 CAND_HEADERS = ["키워드", "도매처", "시장 기준가", "판매처 수", "클릭 증가율", "원가", "도매 배송비",
                 "순이익(세전: 부가세·소득세 미반영)", "이익률", "보수 순이익", "광고비 손익분기율", "판정", "사유", "경고",
-                "구분 라벨", "항목 승인(O/X)"]
+                "AI 노출 준비", "구분 라벨", "항목 승인(O/X)"]
 REJECT_HEADERS = ["키워드", "도매처", "구분", "부족액(원)", "사유", "실제값 대 기준값"]
 HDR_FILL = PatternFill("solid", fgColor="DDE6F0")
 WON, PCT = "#,##0", "0.0%"
@@ -49,6 +49,7 @@ def build_summary(rows: list[ResultRow], total_keywords: int) -> dict:
             "원가 미입력": _distinct(rows, lambda r: any(x.code == "NO_COST" for x in r.reasons)),
             "최신성 초과": _distinct(rows, lambda r: any(x.code == "STALE" for x in r.reasons)),
             "표본 부족": _distinct(rows, lambda r: any(w.startswith("표본 부족") for w in r.warnings)),
+            "AI 노출 정보 부족": _distinct(rows, lambda r: r.verdict in ("통과", "보류") and bool(r.ai_missing)),
         },
     }
     if top is not None:
@@ -67,7 +68,8 @@ def build_summary(rows: list[ResultRow], total_keywords: int) -> dict:
     n_anom = sum(len(v) for v in facts["anomalies"].values())
     ev.append((f"이상 징후 {n_anom}건(조회 실패 {len(facts['anomalies']['조회 실패'])}, 시세·원가 미입력 "
                f"{len(facts['anomalies']['시세 미입력']) + len(facts['anomalies']['원가 미입력'])}, 최신성 초과 "
-               f"{len(facts['anomalies']['최신성 초과'])}, 표본 부족 {len(facts['anomalies']['표본 부족'])})", SHEET_SUMMARY))
+               f"{len(facts['anomalies']['최신성 초과'])}, 표본 부족 {len(facts['anomalies']['표본 부족'])}, "
+               f"AI 노출 정보 부족 {len(facts['anomalies']['AI 노출 정보 부족'])})", SHEET_SUMMARY))
     facts["evidence"] = ev
     facts["n_cands"], facts["n_rejects"] = len(cands), len(rejects)
     verify_summary(facts, rows, cands, rejects)
@@ -145,7 +147,8 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
             round_half_up(row.ship) if row.ship is not None else None,
             pr.profit if pr else row.profit_text,
             pr.margin if pr else None, pr.stress_profit if pr else None, pr.a_star if pr else None,
-            row.verdict, "; ".join(x.text for x in row.reasons), "; ".join(row.warnings), LABEL, None,
+            row.verdict, "; ".join(x.text for x in row.reasons), "; ".join(row.warnings),
+            ai_readiness_text(row.ai_missing), LABEL, None,
         ])
     _format_candidates(wc, len(cands))
 
@@ -184,8 +187,14 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
 
 
 
+def ai_readiness_text(missing) -> str:
+    if missing is None:
+        return "해당 없음(원가 미입력)"
+    return "준비됨" if not missing else "보완: " + ", ".join(missing)
+
+
 def _format_candidates(ws, n):
-    widths = [16, 14, 12, 10, 12, 10, 12, 22, 9, 12, 14, 8, 50, 40, 36, 14]
+    widths = [16, 14, 12, 10, 12, 10, 12, 22, 9, 12, 14, 8, 50, 40, 24, 36, 14]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = w
         ws.cell(1, i).font = Font(bold=True); ws.cell(1, i).fill = HDR_FILL
@@ -196,4 +205,4 @@ def _format_candidates(ws, n):
     for i in range(2, n + 2):
         for col, fmt in ((3, WON), (6, WON), (7, WON), (8, WON), (10, WON), (9, PCT), (11, PCT), (5, PCT)):
             ws.cell(i, col).number_format = fmt
-        dv.add(ws.cell(i, 16))
+        dv.add(ws.cell(i, len(CAND_HEADERS)))

@@ -11,6 +11,10 @@ from src.discovery.trends import GrowthResult, TrendFetchError, TrendSource, com
 from src.sourcing.profit import (LABEL, REASON_LABELS, VERDICT_RANK, ProfitResult, Reason, coerce_number,
                                  compute_profit)
 
+# AI 노출 준비도 점검 항목: (costs.csv 칸, 표시명)
+AI_CHECKS = (("spec_info", "스펙 정보"), ("model_name", "모델명·브랜드"),
+             ("dispatch_days", "출고 소요일"), ("differentiator", "차별점"))
+_YES = {"y", "yes", "o", "예", "있음"}
 NO_COST_TEXT = "원가 미입력"
 NO_MARKET_TEXT = "시세 미입력"
 INPUT_ERROR = "입력 오류"
@@ -33,6 +37,7 @@ class ResultRow:
     reasons: list = field(default_factory=list)        # list[Reason]
     warnings: list = field(default_factory=list)
     profit_text: str = ""                              # 순이익 대신 보일 문구(원가/시세 미입력)
+    ai_missing: list | None = None                     # AI 노출 정보 중 빠진 항목(None=원가 행 없음)
 
     @property
     def growth_display(self):
@@ -51,6 +56,23 @@ class PipelineOutput:
 
 def _worse(a: str, b: str) -> str:
     return a if VERDICT_RANK[a] >= VERDICT_RANK[b] else b
+
+
+def ai_missing_items(cr: dict) -> list[str]:
+    """도매 행에서 AI 추천 근거가 될 정보 중 빠진 항목."""
+    out = []
+    for col, label in AI_CHECKS:
+        v = (cr.get(col) or "").strip()
+        if col == "spec_info":
+            ok = v.lower() in _YES
+        elif col == "dispatch_days":
+            n = coerce_number(v)
+            ok = n is not None and n >= 0
+        else:
+            ok = bool(v)
+        if not ok:
+            out.append(label)
+    return out
 
 
 def _age_days(d: date | None, as_of: date) -> int | None:
@@ -151,6 +173,13 @@ def _build_row(cfg, kw, cr, market, growth, source_name, fetched_at, as_of, seen
         wholesale_date = parse_date(cr.get("wholesale_date"))
         if wholesale_date is None:
             warnings.append("확인 필요: wholesale_date 없음")
+
+    # --- AI 노출 준비도 ---
+    if cr is not None:
+        row.ai_missing = ai_missing_items(cr)
+        if row.ai_missing and cfg.ai_affects_verdict:
+            verdict = _worse(verdict, "보류")
+            reasons.append(Reason("AI_INFO_MISSING", f"{REASON_LABELS['AI_INFO_MISSING']} ({', '.join(row.ai_missing)})"))
 
     # --- 최신성 ---
     stale = []

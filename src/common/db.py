@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS results (
     reasons TEXT,
     warnings TEXT,
     label TEXT,
+    ai_missing TEXT,
     UNIQUE (run_id, row_key)
 );
 CREATE TABLE IF NOT EXISTS approval_events (
@@ -77,5 +78,8 @@ def init_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(results)")}
+    if "ai_missing" not in cols:            # 이전 버전 DB 호환
+        conn.execute("ALTER TABLE results ADD COLUMN ai_missing TEXT")
     conn.commit()
     return conn

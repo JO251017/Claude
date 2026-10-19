@@ -78,7 +78,7 @@ def get_run_summary(run_id: str, config_path: str | None = None) -> dict:
             raise ValueError(f"알 수 없는 run_id: {run_id}")
         rows = conn.execute(
             "SELECT row_key, keyword, supplier, market_price, cost, ship, profit, margin, stress_profit, a_star, "
-            "verdict, reasons, warnings FROM results WHERE run_id=? ORDER BY id", (run_id,)).fetchall()
+            "verdict, reasons, warnings, ai_missing FROM results WHERE run_id=? ORDER BY id", (run_id,)).fetchall()
         approved = {r["row_key"] for r in conn.execute(
             "SELECT row_key FROM approved_candidates WHERE run_id=?", (run_id,))}
         run_decision = conn.execute(
@@ -99,6 +99,7 @@ def get_run_summary(run_id: str, config_path: str | None = None) -> dict:
             "keyword": r["keyword"], "supplier": r["supplier"], "verdict": r["verdict"],
             "reason_codes": codes, "stale": "STALE" in codes,
             "human_approved": r["row_key"] in approved,
+            "ai_missing": json.loads(r["ai_missing"]) if r["ai_missing"] is not None else None,
             "market_price": r["market_price"], "cost": r["cost"], "ship": r["ship"],
             "profit": r["profit"], "margin": r["margin"], "stress_profit": r["stress_profit"],
             "a_star": r["a_star"], "reasons": reasons, "warnings": warnings,

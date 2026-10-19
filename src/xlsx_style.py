@@ -127,7 +127,7 @@ def style_candidates(ws, col_idx):
     _header(ws, 44)
     ws.freeze_panes = "C2"
     ws.auto_filter.ref = ws.dimensions
-    wrap_cols = {col_idx["사유"], col_idx["경고"], col_idx["구분 라벨"]}
+    wrap_cols = {col_idx["사유"], col_idx["경고"], col_idx["구분 라벨"], col_idx["AI 노출 준비"]}
     center_cols = {col_idx["판매처 수"], col_idx["항목 승인(O/X)"]}
     for row in ws.iter_rows(min_row=2):
         for c in row:
@@ -141,6 +141,10 @@ def style_candidates(ws, col_idx):
         row[col_idx["구분 라벨"] - 1].font = _font(size=8, color=MUTED)
         row[col_idx["경고"] - 1].font = _font(size=9, color=VERDICT["보류"][1])
         row[col_idx["사유"] - 1].font = _font(size=9)
+        ai = row[col_idx["AI 노출 준비"] - 1]
+        ai.font = _font(size=9, bold=ai.value == "준비됨",
+                        color=VERDICT["통과"][1] if ai.value == "준비됨" else
+                        (VERDICT["보류"][1] if str(ai.value).startswith("보완") else MUTED))
         row[col_idx["항목 승인(O/X)"] - 1].fill = _fill(INPUT)
         row[col_idx["항목 승인(O/X)"] - 1].font = _font(bold=True)
         for h in ("순이익(세전: 부가세·소득세 미반영)", "보수 순이익"):
@@ -154,7 +158,7 @@ def style_candidates(ws, col_idx):
                 c.alignment = Alignment(horizontal="center", vertical="center")
     for col, w in {"키워드": 22, "도매처": 10, "시장 기준가": 12, "판매처 수": 9, "클릭 증가율": 11, "원가": 10,
                    "도매 배송비": 10, "순이익(세전: 부가세·소득세 미반영)": 16, "이익률": 9, "보수 순이익": 12,
-                   "광고비 손익분기율": 12, "판정": 9, "사유": 42, "경고": 32, "구분 라벨": 30,
+                   "광고비 손익분기율": 12, "판정": 9, "사유": 42, "경고": 32, "AI 노출 준비": 24, "구분 라벨": 30,
                    "항목 승인(O/X)": 11}.items():
         ws.column_dimensions[ws.cell(1, col_idx[col]).column_letter].width = w
     ws.page_setup.orientation = "landscape"

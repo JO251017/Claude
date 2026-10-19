@@ -45,6 +45,7 @@ class Config:
     retry_transient_max: int
     retry_transient_backoff_sec: tuple
     hub_api_terms_ack: bool
+    ai_affects_verdict: bool
     hub_required_env: tuple
     db_path: str
     output_dir: str
@@ -131,6 +132,10 @@ def load_config(path: str) -> Config:
     if floor is not None and (isinstance(floor, bool) or not isinstance(floor, (int, float))):
         bad.append("growth_floor_pct")
 
+    ai_aff = (data.get("ai_readiness") or {}).get("affects_verdict")
+    if not isinstance(ai_aff, bool):
+        (missing if ai_aff is None else bad).append("ai_readiness.affects_verdict")
+
     ack = (data.get("hub") or {}).get("api_terms_ack")
     if not isinstance(ack, bool):
         (missing if ack is None else bad).append("hub.api_terms_ack")
@@ -165,7 +170,7 @@ def load_config(path: str) -> Config:
         researched_at_days=int(d_res), wholesale_date_days=int(d_wh),
         min_interval_sec=float(interval), retry_429_max=int(r429),
         retry_429_backoff_sec=b429, retry_transient_max=int(rtr), retry_transient_backoff_sec=btr,
-        hub_api_terms_ack=ack, hub_required_env=tuple(req_env),
+        hub_api_terms_ack=ack, ai_affects_verdict=ai_aff, hub_required_env=tuple(req_env),
         db_path=paths["db_path"], output_dir=paths["output_dir"], log_dir=paths["log_dir"],
         config_hash=hashlib.sha256(raw_bytes).hexdigest(),
     )

@@ -32,8 +32,8 @@ def save_results(conn, run_id, rows):
         conn.execute(
             "INSERT INTO results (run_id,row_key,keyword,supplier,product_name,market_price,seller_count,sample_count,"
             "growth_rate,growth_status,growth_flags,trend_source,trend_fetched_at,cost,ship,customer_ship,t_min,t_sug,p,"
-            "profit,margin,stress_profit,a_star,verdict,reasons,warnings,label) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "profit,margin,stress_profit,a_star,verdict,reasons,warnings,label,ai_missing) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (run_id, r.row_key, r.keyword, r.supplier, r.product_name,
              float(m.price) if m else None, m.seller_count if m else None, m.sample_count if m else None,
              g.g_raw if g else None, g.status if g else None, ",".join(g.flags) if g else "",
@@ -43,7 +43,8 @@ def save_results(conn, run_id, rows):
              pr.t_min if pr else None, pr.t_sug if pr else None, pr.p if pr else None,
              pr.profit if pr else None, pr.margin if pr else None, pr.stress_profit if pr else None,
              pr.a_star if pr else None, r.verdict, reasons_json(r),
-             json.dumps(r.warnings, ensure_ascii=False), pr.label if pr else None))
+             json.dumps(r.warnings, ensure_ascii=False), pr.label if pr else None,
+             json.dumps(r.ai_missing, ensure_ascii=False) if r.ai_missing is not None else None))
     conn.commit()
 
 
