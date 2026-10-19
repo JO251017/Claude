@@ -45,3 +45,19 @@
 - 2b: 승인 도구 + 멱등키·감사 로그 + 위임장 한도.
 - 2c: 5의 추가 기준 구현, GPT 어댑터.
 - 각 단계 pytest 통과 후 커밋, 코어 변경이 필요하면 먼저 확인.
+
+## 7. 진행 상황
+- [x] 2a: 서비스 계층(`src/service.py`) + MCP 읽기 도구(`evaluate_candidate`, `get_run_summary`). stdio 연결 확인, CLI 결과와 동일성 테스트 통과.
+- [ ] 2b: 승인 도구 + 멱등키·감사 로그 + 위임장 한도 (자동 승인 기준 확정 필요)
+- [ ] 2c: 추가 판정 기준 + GPT 어댑터 (최신 공식 규격 확인 후)
+
+### MCP 서버 연결 (Claude)
+```
+python -m src.mcp_server        # stdio, 저장소 루트에서 실행
+```
+클라이언트 설정 예(Claude Desktop/Code의 mcpServers 항목). 확인 필요: 클라이언트별 작업 폴더 지정 방식.
+```json
+{"mcpServers": {"profit-candidates": {
+  "command": "python", "args": ["-m", "src.mcp_server"],
+  "env": {"PROFIT_CONFIG": "config.yaml"}}}}
+```
