@@ -48,10 +48,12 @@ class TrendSource(ABC):
 class CsvTrendSource(TrendSource):
     name = "csv"
 
-    def __init__(self, path: str, as_of: date):
+    def __init__(self, path_or_rows, as_of: date):
+        """path_or_rows: trends.csv 경로 또는 이미 읽은 행 목록(관리 엑셀 '클릭추이' 시트)."""
         self._months = complete_months(as_of)
         self._data: dict[str, dict[str, float]] = {}
-        for r in read_csv(path):
+        rows = read_csv(path_or_rows) if isinstance(path_or_rows, str) else path_or_rows
+        for r in rows:
             val = parse_number(r.get("ratio"))
             if r.get("keyword") and r.get("month") and val is not None:
                 self._data.setdefault(r["keyword"], {})[r["month"]] = float(val)

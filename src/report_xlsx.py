@@ -7,6 +7,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 NO_MARKET_LABEL = "시세 미입력"
 from src.pipeline import INPUT_ERROR, ResultRow, split_rows
+from src.workbook import replace_sheet
 from src.xlsx_style import style_candidates, style_rejects, style_summary
 from src.sourcing.profit import LABEL, REASON_LABELS, TAX_NOTE, round_half_up
 
@@ -95,12 +96,19 @@ def verify_summary(facts, rows, cands, rejects) -> None:
 
 
 def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) -> None:
-    cands, rejects = split_rows(rows)
+    """결과만 담은 독립 엑셀(실행 기록 사본)."""
     wb = Workbook()
+    fill_result_sheets(wb, rows, facts, meta)
+    del wb[wb.sheetnames[0]]
+    wb.save(path)
+
+
+def fill_result_sheets(wb, rows: list[ResultRow], facts: dict, meta: dict) -> None:
+    """요약·후보·탈락·실패·메타 시트를 wb에 새로 쓴다(같은 이름 시트는 교체). 관리 엑셀에도 그대로 쓴다."""
+    cands, rejects = split_rows(rows)
 
     # ---- 요약 ----
-    ws = wb.active
-    ws.title = SHEET_SUMMARY
+    ws = replace_sheet(wb, SHEET_SUMMARY)
     bold = Font(bold=True)
     r = 1
     ws.cell(r, 1, "순이익 후보표 - 요약").font = Font(bold=True, size=14); r += 1
@@ -135,7 +143,7 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
     ws.column_dimensions["A"].width = 24; ws.column_dimensions["B"].width = 80; ws.column_dimensions["C"].width = 40
 
     # ---- 후보 ----
-    wc = wb.create_sheet(SHEET_CANDS)
+    wc = replace_sheet(wb, SHEET_CANDS)
     wc.append(CAND_HEADERS)
     for row in cands:
         m, pr = row.market, row.profit
@@ -153,7 +161,7 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
     _format_candidates(wc, len(cands))
 
     # ---- 탈락·실패 ----
-    wr = wb.create_sheet(SHEET_REJECTS)
+    wr = replace_sheet(wb, SHEET_REJECTS)
     wr.append(REJECT_HEADERS)
     for row in rejects:
         pr = row.profit
@@ -174,7 +182,7 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
     for c in wr[1]: c.font = bold; c.fill = HDR_FILL
 
     # ---- 메타(숨김) ----
-    wm = wb.create_sheet(SHEET_META)
+    wm = replace_sheet(wb, SHEET_META)
     for k in ("run_id", "config_hash", "source_name", "executed_at", "as_of"):
         wm.append([k, meta[k]])
     wm.sheet_state = "hidden"
@@ -182,7 +190,6 @@ def write_workbook(path: str, rows: list[ResultRow], facts: dict, meta: dict) ->
     style_summary(ws)
     style_candidates(wc, {h: i for i, h in enumerate(CAND_HEADERS, 1)})
     style_rejects(wr)
-    wb.save(path)
 
 
 

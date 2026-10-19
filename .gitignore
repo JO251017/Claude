@@ -5,3 +5,6 @@ data/input/
 __pycache__/
 .pytest_cache/
 *.pyc
+관리.xlsx
+관리_샘플.xlsx
+dist/

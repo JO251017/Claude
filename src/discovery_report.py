@@ -6,10 +6,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment
 
 from src.discovery.keyword_finder import DiscoveryResult
-from src.xlsx_style import BOX, MUTED, NAVY, VERDICT, _fill, _font, _header
+from src.workbook import DISCOVERY, USE_HEADER, replace_sheet, selected_discovered
+from src.xlsx_style import BOX, INPUT, MUTED, NAVY, VERDICT, _fill, _font, _header
 
 HEADERS = ["키워드", "씨앗 키워드", "분야 코드", "월간 검색수(PC+모바일)", "PC", "모바일", "상품 수",
-           "경쟁강도(상품 수÷검색수)", "광고 경쟁정도", "상태"]
+           "경쟁강도(상품 수÷검색수)", "광고 경쟁정도", "상태", USE_HEADER]
 
 
 def conclusion(res: DiscoveryResult) -> str:
@@ -71,17 +72,30 @@ def write_discovery_xlsx(path: str, res: DiscoveryResult, meta: dict, csv_name: 
             a.font = _font(bold=True)
             b.font = _font(color=MUTED if a.value in ("run_id", "실행 시각", "읽는 법") else "222B36")
 
-    wr = wb.create_sheet("발굴 결과")
+    wr = fill_discovery_results(wb, res)
+    for sheet, orient in ((ws, "portrait"), (wr, "landscape")):
+        sheet.page_setup.orientation = orient
+        sheet.page_setup.fitToWidth = 1
+        sheet.page_setup.fitToHeight = 0
+        sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    wb.save(path)
+
+
+def fill_discovery_results(wb, res: DiscoveryResult, index: int | None = None):
+    """'발굴 결과' 시트를 새로 쓴다. 이미 O 표시한 키워드는 그대로 O로 남긴다."""
+    marked = {r["keyword"] for r in selected_discovered(wb)}
+    wr = replace_sheet(wb, DISCOVERY, index)
     wr.append(HEADERS)
     for r in res.rows:
         low = lambda v: "<10" if v is None and r.low_volume else v  # noqa: E731
         wr.append([r.keyword, ", ".join(r.seeds), r.category, r.monthly, low(r.pc), low(r.mobile), r.product_count,
-                   float(r.competition) if r.competition is not None else None, r.comp_idx, r.status])
+                   float(r.competition) if r.competition is not None else None, r.comp_idx, r.status,
+                   "O" if r.keyword in marked else None])
     _header(wr, 36)
     wr.sheet_view.showGridLines = False
     wr.freeze_panes = "B2"
     wr.auto_filter.ref = wr.dimensions
-    for col, w in zip("ABCDEFGHIJ", (24, 22, 12, 14, 10, 10, 12, 14, 12, 20)):
+    for col, w in zip("ABCDEFGHIJK", (24, 22, 12, 14, 10, 10, 12, 14, 12, 20, 14)):
         wr.column_dimensions[col].width = w
     for row in wr.iter_rows(min_row=2):
         for c in row:
@@ -94,9 +108,15 @@ def write_discovery_xlsx(path: str, res: DiscoveryResult, meta: dict, csv_name: 
         st = row[9]
         bg, fg = VERDICT["통과"] if st.value == "확인" else (VERDICT["보류"] if st.value != "제외(검색수 기준 미달)" else VERDICT["입력 오류"])
         st.fill, st.font = _fill(bg), _font(bold=True, color=fg)
-    for sheet, orient in ((ws, "portrait"), (wr, "landscape")):
-        sheet.page_setup.orientation = orient
-        sheet.page_setup.fitToWidth = 1
-        sheet.page_setup.fitToHeight = 0
-        sheet.sheet_properties.pageSetUpPr.fitToPage = True
-    wb.save(path)
+        use = row[10]
+        use.fill, use.font = _fill(INPUT), _font(bold=True)
+        use.alignment = Alignment(horizontal="center")
+    from openpyxl.worksheet.datavalidation import DataValidation
+    dv = DataValidation(type="list", formula1='"O"', allow_blank=True)
+    wr.add_data_validation(dv)
+    dv.add(f"K2:K{max(wr.max_row, 2)}")
+    wr.page_setup.orientation = "landscape"
+    wr.page_setup.fitToWidth = 1
+    wr.page_setup.fitToHeight = 0
+    wr.sheet_properties.pageSetUpPr.fitToPage = True
+    return wr
