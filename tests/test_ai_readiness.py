@@ -53,10 +53,3 @@ def test_config_key_required(sample_env):
         load_config(sample_env["cfg_path"])
     assert e.value.keys == ["ai_readiness.affects_verdict"]
 
-
-def test_service_exposes_ai_missing(sample_env):
-    from src import service
-    run_sample(sample_env)
-    s = service.get_run_summary("RUN-E2E", sample_env["cfg_path"])
-    by = {c["keyword"]: c for c in s["candidates"]}
-    assert by["가상 제습 박스"]["ai_missing"] == ["출고 소요일"] and by["가상 차량 방향제"]["ai_missing"] is None

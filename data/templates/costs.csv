@@ -1,0 +1,4 @@
+# [양식] 도매 원가. 한 키워드에 도매처가 여럿이면 여러 줄로 적습니다(도매처별로 따로 계산).
+# cost=도매 원가, shipping=도매 배송비, ship_fee_rule=고정/수량당, wholesale_date=원가 확인일(14일 넘으면 '최신성 초과')
+# [AI 노출 준비] spec_info=스펙을 글로 받을 수 있으면 Y, model_name=모델명·브랜드, dispatch_days=출고까지 일수, differentiator=차별점 한 줄
+keyword,product_name,cost,shipping,supplier,ship_fee_rule,wholesale_date,spec_info,model_name,dispatch_days,differentiator

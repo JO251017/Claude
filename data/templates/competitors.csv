@@ -1,0 +1,3 @@
+# [양식] 경쟁 판매자 시세. 키워드마다 여러 판매자를 적습니다(낮은 순 3개 평균을 시장 기준가로 씀).
+# price=상품가, shipping=고객이 내는 배송비(무료배송은 0), researched_at=조사일(YYYY-MM-DD, 7일 넘으면 '최신성 초과')
+keyword,seller,price,shipping,researched_at

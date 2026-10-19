@@ -48,3 +48,5 @@
 - 정정: 사용자 의도는 "스마트스토어 상품이 AI 쇼핑 에이전트에 잘 추천되게"였다. AI 노출 준비도 기준(spec_info, model_name, dispatch_days, differentiator) 추가. 근거는 docs/ai_trade_design.md 9장.
 - 가정: AI 노출 준비도는 기본으로 판정에 반영하지 않고 표시만 한다(공식 기준이 아니므로). `ai_readiness.affects_verdict: true`로 바꾸면 보류 처리.
 - 가정: costs.csv의 새 칸은 모두 선택이다. 없으면 "보완: …"으로 표시될 뿐 실행은 막지 않는다.
+- 결정(사용자): MCP 서버 삭제(`src/mcp_server.py`, `src/service.py`와 테스트). 설계 문서는 AI 노출 준비도 부분만 남겨 `docs/ai_exposure.md`로 정리.
+- 가정: 입력 파일 기본 경로를 `data/input/*.csv`로 둔다(`python -m src.cli run`만으로 실행). 빈 양식은 `data/templates/`.
