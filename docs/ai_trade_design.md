@@ -48,7 +48,7 @@
 ## 7. 진행 상황
 - [x] 2a: 서비스 계층(`src/service.py`) + MCP 읽기 도구(`evaluate_candidate`, `get_run_summary`). stdio 연결 확인, CLI 결과와 동일성 테스트 통과.
 - [x] 2b 범위 변경: AI 자동 승인·위임장 없음(사용자 결정). 승인은 사람만, AI용 승인 쓰기 도구는 만들지 않는다.
-- [ ] 2c: 추가 판정 기준 + GPT 어댑터 (최신 공식 규격 확인 후)
+- [x] 2c: AI 거래용 기계 판독 필드 + ChatGPT 연결(같은 MCP 서버를 HTTP로). 상세는 8장.
 
 ### MCP 서버 연결 (Claude)
 ```
@@ -60,3 +60,26 @@ python -m src.mcp_server        # stdio, 저장소 루트에서 실행
   "command": "python", "args": ["-m", "src.mcp_server"],
   "env": {"PROFIT_CONFIG": "config.yaml"}}}}
 ```
+
+## 8. 2c 결과 (사용자 위임: "알아서 만들어와")
+### ChatGPT 연결 방식 - 별도 어댑터 대신 같은 MCP 서버
+- OpenAI 공식 도움말·Apps SDK 문서(2026-10 확인)에 따르면 ChatGPT는 **원격 MCP 서버(공개 HTTPS + `/mcp`)**에 연결한다. 이전의 "플러그인" 방식 대신 이 방식을 쓴다.
+  - 출처: https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt , https://developers.openai.com/apps-sdk/quickstart
+  - 요금제별 허용 범위는 문서끼리 설명이 달라 **확인 필요**(개인 Pro는 읽기 도구만 가능하다는 설명 있음 - 이 서버는 읽기 도구뿐이라 해당 범위 안).
+- 그래서 GPT용 코드를 따로 만들지 않고 `python -m src.mcp_server --transport http`(기본 `http://127.0.0.1:8000/mcp`, 이 컴퓨터에서만 접속)로 같은 서버를 띄운다.
+- **외부 공개는 하지 않았다.** ChatGPT에 붙이려면 공개 HTTPS 주소가 필요한데, 인증 없이 열면 후보·원가 데이터가 누구에게나 보인다. 공개 전에 (1) ChatGPT의 Secure MCP Tunnel 또는 인증이 있는 터널, (2) 접속 인증 설정이 필요하다 - 사용자가 결정.
+
+### 추가한 AI 거래용 기준(기계 판독 필드)
+| 필드 | 의미 | 왜 필요한가 |
+|---|---|---|
+| `schema_version` | 응답 형식 버전 | 상대 에이전트가 형식 변화를 감지 |
+| `input_hash` + `config_hash` | 같은 입력·설정이면 같은 결과 | 에이전트 간 분쟁 시 판정 재현. 숫자 형식(8000/"8000"/8000.0) 차이는 같은 해시 |
+| `reason_codes` | 사유 코드(BELOW_TMIN, STALE 등) | 문구 대신 코드로 판단. 네이버 파생 사유는 `HIDDEN` |
+| `stale` | 최신성 초과 여부 | 오래된 시세·원가로 자동 거래 방지 |
+| `human_approved`, `run_decision` | 사람 승인 상태 | 승인은 사람만(사용자 결정). AI는 승인 여부만 읽음 |
+| 도구 `list_approved_candidates` | 사람이 승인한 후보만 | **AI 거래 상대의 실행 대상은 이 목록뿐** |
+- 판정 규칙(탈락 > 보류 > 통과)과 계산 코어는 바꾸지 않았다. 새 임계값도 만들지 않았다.
+
+### 만들지 않은 것과 이유
+- 거래 상대 신뢰 등급, 반품·분쟁 정책 판독: 판단에 쓸 실제 데이터(상대 에이전트 정보, 정책 원문)가 없어 기준을 지어내지 않았다. 데이터가 생기면 같은 방식(사유 코드 + 사전식 판정)으로 추가한다.
+- 승인 쓰기 도구, 주문·결제: 사용자 결정으로 제외.
