@@ -1,0 +1,42 @@
+# 모든 요율·기준값은 여기서만 정의한다 (코드 하드코딩 금지).
+fee_sales_pct: 3.003
+fee_payment_pct: 3.63
+ad_rate_pct: 5
+return_rate_pct: 3
+margin_min_pct: 15
+profit_min_won: 2000
+discount_rate_pct: 0
+fee_on_shipping: all        # all만 구현
+
+stress:
+  ad_rate_pct: 10
+  return_rate_pct: 5
+  fee_add_pp: 1
+
+# M1
+market_lowest_k: 3
+growth_min_base: 1.0
+growth_floor_pct: null      # null이면 하락 판정 없이 표시만
+seasonal_max_mean_ratio: 2.5
+spike_multiple: 3
+
+# 최신성(M2 4장)
+freshness:
+  researched_at_days: 7
+  wholesale_date_days: 14
+
+trend:
+  min_interval_sec: 0.2
+  retry_429_max: 3
+  retry_429_backoff_sec: [1, 2, 4]
+  retry_transient_max: 2
+  retry_transient_backoff_sec: [1, 2]
+
+hub:
+  api_terms_ack: false       # 이용약관 확인 후 true (docs/RUN_REAL_API.md)
+  required_env: [NAVER_HUB_CLIENT_ID, NAVER_HUB_CLIENT_SECRET]   # 이름만
+
+paths:
+  db_path: output/mvp.db
+  output_dir: output
+  log_dir: output/logs
