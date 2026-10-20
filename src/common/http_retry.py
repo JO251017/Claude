@@ -9,9 +9,10 @@ import urllib.request
 class HttpError(Exception):
     """HTTP 상태 오류. 응답 본문·헤더 원문은 보관하지 않고 상태코드와 Retry-After(초)만 둔다."""
 
-    def __init__(self, status: int, retry_after: float | None = None):
+    def __init__(self, status: int, retry_after: float | None = None, api_error: str = ""):
         self.status = status
         self.retry_after = retry_after
+        self.api_error = api_error
         super().__init__(f"HTTP {status}")
 
 
@@ -76,6 +77,18 @@ def _retry_after(headers) -> float | None:
         return None
 
 
+def _api_error(e) -> str:
+    """오류 응답에서 오류 코드·메시지 필드만 뽑아 짧게 돌려준다(키·헤더·그 밖의 본문은 버린다)."""
+    try:
+        d = json.loads(e.read())
+    except Exception:
+        return ""
+    if not isinstance(d, dict):
+        return ""
+    parts = [str(d[k])[:80] for k in ("errorCode", "errorMessage", "code", "title", "message") if d.get(k)]
+    return " / ".join(parts)[:200]
+
+
 def open_json(req: urllib.request.Request, timeout: float, urlopen=None):
     """요청 1회. HTTP 오류는 HttpError, 네트워크 오류·타임아웃은 TimeoutError로 올린다(재시도 규칙용).
     응답 본문·헤더는 오류 메시지에 담지 않는다. 성공 시 JSON을 파싱해 돌려준다(형식 오류는 ValueError)."""
@@ -84,7 +97,7 @@ def open_json(req: urllib.request.Request, timeout: float, urlopen=None):
         with opener(req, timeout=timeout) as resp:
             raw = resp.read()
     except urllib.error.HTTPError as e:
-        raise HttpError(e.code, retry_after=_retry_after(e.headers)) from None
+        raise HttpError(e.code, retry_after=_retry_after(e.headers), api_error=_api_error(e)) from None
     except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError):
         raise TimeoutError("네트워크 오류 또는 타임아웃") from None
     return json.loads(raw)

@@ -64,3 +64,17 @@ def test_format_hints_flag_swaps_without_values(monkeypatch):
     text = " | ".join(format_hints(CFG))
     assert "바뀌었을" in text and "공백" in text and "숫자" in text
     assert "a-much-longer-value" not in text and "AQAAAAxxxx" not in text
+
+
+def test_api_error_code_shown_without_keys(monkeypatch):
+    import io
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
+
+    def bad(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 401, "x", {}, io.BytesIO(
+            json.dumps({"errorCode": "024", "errorMessage": "Authentication failed"}).encode()))
+
+    out = run_check(CFG, urlopen=bad)
+    assert "024" in out[0].detail and "Authentication failed" in out[0].detail
+    assert not any(v in l.detail for l in out for v in ENV.values())

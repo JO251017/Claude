@@ -33,7 +33,8 @@ def _missing(names) -> list[str]:
 
 def _classify(e: Exception) -> str:
     if isinstance(e, HttpError):
-        return _HINTS.get(e.status, f"HTTP {e.status}")
+        base = _HINTS.get(e.status, f"HTTP {e.status}")
+        return f"{base} [네이버 응답: HTTP {e.status} {e.api_error}]" if e.api_error else base
     if isinstance(e, TimeoutError):
         return "네트워크 오류 또는 타임아웃(인터넷 연결 확인)"
     if isinstance(e, (FetchError, TrendFetchError)):
