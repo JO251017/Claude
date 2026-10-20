@@ -218,6 +218,9 @@ def main(argv=None) -> int:
         lines = run_check(cfg)
         for ln in lines:
             print(f"[{'정상' if ln.ok else '실패'}] {ln.name}: {ln.detail}")
+        from src.check import format_hints
+        for h in format_hints(cfg):
+            print("[입력 확인]", h)
         return 0 if all(ln.ok for ln in lines) else 2
 
     if args.cmd == "approve":

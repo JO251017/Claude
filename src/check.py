@@ -74,3 +74,26 @@ def run_check(cfg: Config, as_of: date | None = None, urlopen=None) -> list[Chec
         _probe("쇼핑 검색", env_open, shop),
         _probe("검색광고 키워드도구", tuple(cfg.disc_searchad_env[:3]), searchad),
     ]
+
+
+def format_hints(cfg: Config) -> list[str]:
+    """값 자체는 보이지 않고, 흔한 입력 실수(공백·자리 바뀜·길이)만 알려 준다."""
+    g = os.environ.get
+    out = []
+    for n in list(cfg.datalab_required_env[:2]) + list(cfg.disc_searchad_env[:3]):
+        v = g(n)
+        if v is None:
+            continue
+        if v != v.strip() or " " in v or '"' in v or "'" in v:
+            out.append(f"{n}: 공백이나 따옴표가 섞여 있습니다")
+    cid, sec = (g(n, "") for n in cfg.datalab_required_env[:2])
+    if cid and sec and len(cid) < len(sec):
+        out.append("NAVER_CLIENT_ID가 SECRET보다 짧습니다. 둘이 바뀌었을 수 있습니다(ID 약 20자, SECRET 약 10자)")
+    ak, sk, cu = (g(n, "") for n in cfg.disc_searchad_env[:3])
+    if ak and not ak.startswith("0100"):
+        out.append("NAVER_AD_API_KEY(엑세스라이선스)가 보통 '0100'으로 시작하는데 다릅니다. 비밀키와 바뀌었을 수 있습니다")
+    if sk and sk.startswith("0100"):
+        out.append("NAVER_AD_SECRET_KEY(비밀키)에 엑세스라이선스가 들어간 것 같습니다")
+    if cu and not cu.isdigit():
+        out.append("NAVER_AD_CUSTOMER_ID는 숫자만이어야 합니다")
+    return out

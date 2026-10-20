@@ -52,3 +52,15 @@ def test_401_and_no_secret_leak(monkeypatch, capsys):
     assert all(not l.ok and "키 값" in l.detail for l in out)
     text = " ".join(l.detail for l in out)
     assert not any(v in text for v in ENV.values())
+
+
+def test_format_hints_flag_swaps_without_values(monkeypatch):
+    from src.check import format_hints
+    monkeypatch.setenv("NAVER_CLIENT_ID", "short")
+    monkeypatch.setenv("NAVER_CLIENT_SECRET", "a-much-longer-value")
+    monkeypatch.setenv("NAVER_AD_API_KEY", "AQAAAAxxxx")
+    monkeypatch.setenv("NAVER_AD_SECRET_KEY", "0100xxxx ")
+    monkeypatch.setenv("NAVER_AD_CUSTOMER_ID", "12a")
+    text = " | ".join(format_hints(CFG))
+    assert "바뀌었을" in text and "공백" in text and "숫자" in text
+    assert "a-much-longer-value" not in text and "AQAAAAxxxx" not in text
