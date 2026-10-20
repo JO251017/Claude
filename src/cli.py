@@ -207,7 +207,8 @@ def main(argv=None) -> int:
         if has_wb and not args.force:
             notifier.notify(f"{args.workbook}이(가) 이미 있습니다. 덮어쓰려면 --force", "error", run_id)
             return 2
-        wbk.create_workbook(args.workbook, "data/sample" if args.sample else None)
+        starter = "data/starter" if os.path.isdir("data/starter") else None
+        wbk.create_workbook(args.workbook, "data/sample" if args.sample else starter)
         print(f"{args.workbook} 를 만들었습니다. 노란 탭에 입력한 뒤 실행하세요.")
         return 0
 
