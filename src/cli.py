@@ -3,6 +3,7 @@
   python -m src.cli discover        0단계 키워드 발굴
   python -m src.cli run             1단계 순이익 후보표
   python -m src.cli approve         승인 가져오기
+  python -m src.cli check           API 연결 점검(키 값은 출력 안 함)
 CSV 파일 경로(--keywords 등)를 주면 예전처럼 CSV로 동작한다."""
 import argparse
 import json
@@ -187,6 +188,7 @@ def main(argv=None) -> int:
     r.add_argument("--as-of", help="성장률 기준일 YYYY-MM-DD (기본 오늘)")
     d = sub.add_parser("discover", help="0단계 키워드 발굴")
     d.add_argument("--seeds")
+    sub.add_parser("check", help="공식 API 3종 연결 점검(각 1회 호출, 키 값은 출력 안 함)")
     a = sub.add_parser("approve", help="승인 가져오기")
     a.add_argument("action", nargs="?", choices=["import"], default="import")
     a.add_argument("xlsx", nargs="?")
@@ -208,6 +210,14 @@ def main(argv=None) -> int:
         wbk.create_workbook(args.workbook, "data/sample" if args.sample else None)
         print(f"{args.workbook} 를 만들었습니다. 노란 탭에 입력한 뒤 실행하세요.")
         return 0
+
+    if args.cmd == "check":
+        from src.check import run_check
+        load_env_file(".env")
+        lines = run_check(cfg)
+        for ln in lines:
+            print(f"[{'정상' if ln.ok else '실패'}] {ln.name}: {ln.detail}")
+        return 0 if all(ln.ok for ln in lines) else 2
 
     if args.cmd == "approve":
         path = args.xlsx or args.workbook
