@@ -4,6 +4,7 @@
 - This repository is a small, dependency-free browser app built from `index.html`, `style.css`, and `app.js`.
 - Keep changes focused and preserve the existing Korean-language interface.
 - Avoid adding a framework, package manager, build pipeline, or paid service for a small feature.
+- `budget/` is a separate dependency-free AI budget app (`node budget/server.js`); see `budget/README.md`. Run `node --check` on its JS files after edits, and never expose `GEMINI_API_KEY` to the client.
 
 ## Working safely
 - Read the relevant HTML, CSS, and JavaScript before changing behavior; keep existing browser storage data compatible.
