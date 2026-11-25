@@ -7,7 +7,7 @@
     "humanizer@humanizer": true,
     "last30days@last30days-skill": true,
     "ponytail@ponytail": true,
-    "caveman@caveman": true
+    "caveman@caveman": false
   },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
