@@ -2,13 +2,17 @@ const STORAGE_KEY = 'reminders';
 
 let reminders = loadReminders();
 
+// datetime-local expects local time; toISOString() would give UTC.
+function defaultDatetimeValue() {
+  const d = new Date();
+  d.setHours(d.getHours() + 1);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // Set default datetime to now + 1 hour
 const datetimeInput = document.getElementById('datetime');
-const now = new Date();
-now.setHours(now.getHours() + 1);
-now.setSeconds(0);
-now.setMilliseconds(0);
-datetimeInput.value = now.toISOString().slice(0, 16);
+datetimeInput.value = defaultDatetimeValue();
 
 document.getElementById('reminder-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -32,11 +36,7 @@ document.getElementById('reminder-form').addEventListener('submit', (e) => {
   e.target.reset();
 
   // Reset datetime to now + 1 hour
-  const next = new Date();
-  next.setHours(next.getHours() + 1);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
-  datetimeInput.value = next.toISOString().slice(0, 16);
+  datetimeInput.value = defaultDatetimeValue();
 });
 
 function deleteReminder(id) {
