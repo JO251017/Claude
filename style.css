@@ -1,15 +1,95 @@
+/* Single-column reminder tool; color tokens with light/dark themes. */
+:root {
+  --bg: #eef2f7;
+  --surface: #ffffff;
+  --surface-muted: #f6f8fb;
+  --fg: #243042;
+  --fg-muted: #5f6b7d;
+  --border: #d3dbe6;
+  --accent: #4f5fd6;
+  --accent-hover: #3f4ec2;
+  --on-accent: #ffffff;
+  --ok-bg: #dcf5e4;
+  --ok-fg: #1f6b3d;
+  --ok-line: #3fa66a;
+  --warn-bg: #fde2e2;
+  --warn-fg: #a8322f;
+  --warn-line: #e06363;
+  --done-bg: #e5e9f0;
+  --done-fg: #6a7484;
+  --banner-bg: #243042;
+  --banner-fg: #ffffff;
+  --shadow: 0 2px 8px rgba(20, 30, 50, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141922;
+    --surface: #1d2430;
+    --surface-muted: #232b38;
+    --fg: #e4e9f1;
+    --fg-muted: #9aa5b6;
+    --border: #344052;
+    --accent: #8592ff;
+    --accent-hover: #9ba6ff;
+    --on-accent: #0f1420;
+    --ok-bg: #1d3a2a;
+    --ok-fg: #8fdcaa;
+    --ok-line: #4fbf7c;
+    --warn-bg: #432326;
+    --warn-fg: #ffadaa;
+    --warn-line: #e57373;
+    --done-bg: #2a323f;
+    --done-fg: #9aa5b6;
+    --banner-bg: #e4e9f1;
+    --banner-fg: #141922;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #141922;
+  --surface: #1d2430;
+  --surface-muted: #232b38;
+  --fg: #e4e9f1;
+  --fg-muted: #9aa5b6;
+  --border: #344052;
+  --accent: #8592ff;
+  --accent-hover: #9ba6ff;
+  --on-accent: #0f1420;
+  --ok-bg: #1d3a2a;
+  --ok-fg: #8fdcaa;
+  --ok-line: #4fbf7c;
+  --warn-bg: #432326;
+  --warn-fg: #ffadaa;
+  --warn-line: #e57373;
+  --done-bg: #2a323f;
+  --done-fg: #9aa5b6;
+  --banner-bg: #e4e9f1;
+  --banner-fg: #141922;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f0f4f8;
-  color: #2d3748;
+  font-family: 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
   min-height: 100vh;
-  padding: 20px;
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .app {
@@ -17,29 +97,46 @@ body {
   margin: 0 auto;
 }
 
-header {
-  text-align: center;
-  margin-bottom: 32px;
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
-header h1 {
-  font-size: 2rem;
-  color: #4a5568;
+.app-header h1 {
+  font-size: 1.75rem;
+  color: var(--fg);
+}
+
+.notify-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.notify-status {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
 }
 
 section {
-  background: #fff;
+  background: var(--surface);
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow);
 }
 
 h2 {
   font-size: 1.1rem;
   margin-bottom: 16px;
-  color: #4a5568;
-  border-bottom: 2px solid #e2e8f0;
+  color: var(--fg);
+  border-bottom: 2px solid var(--border);
   padding-bottom: 8px;
 }
 
@@ -52,7 +149,7 @@ label {
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 6px;
-  color: #4a5568;
+  color: var(--fg-muted);
 }
 
 input[type="text"],
@@ -60,78 +157,111 @@ input[type="datetime-local"],
 textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #cbd5e0;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  font: inherit;
   font-size: 0.95rem;
+  color: var(--fg);
+  background: var(--surface-muted);
   transition: border-color 0.2s;
-  background: #f7fafc;
 }
 
 input:focus,
 textarea:focus {
   outline: none;
-  border-color: #667eea;
-  background: #fff;
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 textarea {
   resize: vertical;
 }
 
-button[type="submit"] {
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary {
   width: 100%;
   padding: 12px;
-  background: #667eea;
-  color: white;
+  background: var(--accent);
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
-  cursor: pointer;
   transition: background 0.2s;
   margin-top: 4px;
 }
 
-button[type="submit"]:hover {
-  background: #5a67d8;
+.btn-primary:hover {
+  background: var(--accent-hover);
 }
 
-.empty-msg {
-  color: #a0aec0;
+.btn-secondary {
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-secondary:hover {
+  background: var(--surface);
+}
+
+.empty-msg,
+.storage-warning {
+  color: var(--fg-muted);
   text-align: center;
   padding: 20px 0;
   font-size: 0.95rem;
+}
+
+.storage-warning {
+  padding: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--warn-fg);
 }
 
 .reminder-card {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 12px;
   padding: 14px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 10px;
   margin-bottom: 12px;
-  transition: box-shadow 0.2s;
-  background: #fafafa;
-}
-
-.reminder-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--surface-muted);
 }
 
 .reminder-card.overdue {
-  border-left: 4px solid #fc8181;
-  background: #fff5f5;
+  border-left: 4px solid var(--warn-line);
 }
 
 .reminder-card.upcoming {
-  border-left: 4px solid #68d391;
-  background: #f0fff4;
+  border-left: 4px solid var(--ok-line);
 }
 
 .reminder-card.done {
-  opacity: 0.5;
-  border-left: 4px solid #a0aec0;
+  opacity: 0.6;
+  border-left: 4px solid var(--done-fg);
+}
+
+.reminder-info {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .reminder-info .title {
@@ -142,16 +272,18 @@ button[type="submit"]:hover {
 
 .reminder-info .time {
   font-size: 0.8rem;
-  color: #718096;
+  color: var(--fg-muted);
   margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .reminder-info .note {
   font-size: 0.85rem;
-  color: #4a5568;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
 }
 
-.reminder-info .badge {
+.badge {
   display: inline-block;
   font-size: 0.7rem;
   padding: 2px 8px;
@@ -161,25 +293,24 @@ button[type="submit"]:hover {
 }
 
 .badge.overdue {
-  background: #fed7d7;
-  color: #c53030;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 
 .badge.upcoming {
-  background: #c6f6d5;
-  color: #276749;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 
 .badge.done {
-  background: #e2e8f0;
-  color: #718096;
+  background: var(--done-bg);
+  color: var(--done-fg);
 }
 
 .reminder-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-left: 12px;
   flex-shrink: 0;
 }
 
@@ -189,63 +320,54 @@ button[type="submit"]:hover {
   border: none;
   border-radius: 6px;
   font-size: 0.8rem;
-  cursor: pointer;
   font-weight: 600;
-  transition: background 0.2s;
 }
 
 .btn-done {
-  background: #c6f6d5;
-  color: #276749;
-}
-
-.btn-done:hover {
-  background: #9ae6b4;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 
 .btn-delete {
-  background: #fed7d7;
-  color: #c53030;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 
+.btn-done:hover,
 .btn-delete:hover {
-  background: #feb2b2;
+  filter: brightness(0.95);
 }
 
-/* Notification banner */
 .notification-banner {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
-  background: #2d3748;
-  color: white;
+  background: var(--banner-bg);
+  color: var(--banner-fg);
   padding: 14px 24px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow);
   z-index: 1000;
   font-size: 0.95rem;
   max-width: 90%;
 }
 
 .notification-banner button {
-  background: #667eea;
+  background: var(--accent);
   border: none;
-  color: white;
+  color: var(--on-accent);
   padding: 6px 14px;
   border-radius: 6px;
-  cursor: pointer;
   font-size: 0.85rem;
   flex-shrink: 0;
 }
 
-.notification-banner button:hover {
-  background: #5a67d8;
-}
-
-.hidden {
-  display: none !important;
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

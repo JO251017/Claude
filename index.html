@@ -2,18 +2,23 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
   <title>미리 알림</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app">
-    <header>
-      <h1>🔔 미리 알림</h1>
+    <header class="app-header">
+      <h1>미리 알림</h1>
+      <div class="notify-control">
+        <span id="notify-status" class="notify-status">브라우저 알림: 확인 중</span>
+        <button type="button" id="notify-enable" class="btn-secondary" hidden>알림 켜기</button>
+      </div>
     </header>
 
-    <section class="add-reminder">
-      <h2>알림 추가</h2>
+    <section class="add-reminder" aria-labelledby="add-heading">
+      <h2 id="add-heading">알림 추가</h2>
       <form id="reminder-form">
         <div class="form-group">
           <label for="title">제목</label>
@@ -27,21 +32,24 @@
           <label for="note">메모 (선택)</label>
           <textarea id="note" placeholder="추가 내용을 입력하세요" rows="2"></textarea>
         </div>
-        <button type="submit">추가하기</button>
+        <button type="submit" class="btn-primary">추가하기</button>
       </form>
     </section>
 
-    <section class="reminder-list">
-      <h2>알림 목록</h2>
+    <section class="reminder-list" aria-labelledby="list-heading">
+      <h2 id="list-heading">알림 목록</h2>
+      <p class="storage-warning" id="storage-warning" hidden>
+        이 환경에서는 저장소를 쓸 수 없어 새로고침하면 목록이 사라집니다.
+      </p>
       <div id="reminders-container">
         <p class="empty-msg" id="empty-msg">등록된 알림이 없습니다.</p>
       </div>
     </section>
   </div>
 
-  <div id="notification-banner" class="notification-banner hidden">
+  <div id="notification-banner" class="notification-banner" role="alert" hidden>
     <span id="notification-text"></span>
-    <button onclick="dismissNotification()">닫기</button>
+    <button type="button" id="notification-dismiss">닫기</button>
   </div>
 
   <script src="app.js"></script>
