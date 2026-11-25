@@ -1,0 +1,84 @@
+name: Issue-First Policy
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  issues:
+    types: [labeled, unlabeled, edited, closed, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Optional PR number to reconcile (leave empty for all open PRs)
+        required: false
+        type: string
+      issue_number:
+        description: Optional issue number to sync receipt and reconcile linked PRs
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate-pr:
+    # Distinct from the commit status context `issue-first / approved-issue`
+    # so observation-mode green job runs never collide with failure statuses.
+    name: issue-first / runner
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Evaluate PR eligibility against approved issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 tools/ci/issue_first.py --pr "$PR_NUMBER" --publish-status
+
+  issue-receipt:
+    name: issue-first / receipt
+    if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Sync approval receipt and reconcile open PRs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+          INPUT_PR: ${{ github.event.inputs.pr_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: |
+          if [ -n "$ISSUE_NUMBER" ]; then
+            SKIP_FLAG=""
+            if [ "$EVENT_NAME" = "issues" ] && [ "$EVENT_ACTION" != "labeled" ]; then
+              SKIP_FLAG="--skip-receipt-mint"
+            fi
+            python3 tools/ci/issue_first.py --issue "$ISSUE_NUMBER" --reconcile-prs --publish-status $SKIP_FLAG
+          elif [ -n "$INPUT_PR" ]; then
+            python3 tools/ci/issue_first.py --pr "$INPUT_PR" --publish-status
+          else
+            python3 tools/ci/issue_first.py --publish-status
+          fi

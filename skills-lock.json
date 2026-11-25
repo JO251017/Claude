@@ -1,11 +1,25 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
+    "book-to-skill": {
+      "source": "virgiliojr94/book-to-skill",
+      "commit": "79b3fa66d249635453f8e9bc517fe033ac9d5a91",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "8c2f83c19bb772ae3cdfdb0447823fe2529d591a28d0e74cebdcdcbc8abe1033"
+    },
     "design-taste-frontend": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/taste-skill/SKILL.md",
-      "computedHash": "6d838b246d0e35d0b53f4f23f98ba7a1dd561937e64f7d0c7553b0928e376c3e"
+      "computedHash": ""
+    },
+    "scrapling-official": {
+      "source": "D4Vinci/Scrapling",
+      "commit": "938867232230fb7b164fa97211497c204fa2e167",
+      "sourceType": "github",
+      "skillPath": "agent-skill/Scrapling-Skill/SKILL.md",
+      "computedHash": "ed11cfd7acb12eaf31a2335dfc19555697cffe6fcd7f021b20da31c699c14213"
     }
   }
 }
