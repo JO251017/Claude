@@ -2,12 +2,37 @@ const STORAGE_KEY = 'reminders';
 
 let reminders = loadReminders();
 
+const REPEAT_LABELS = { daily: '매일', weekly: '매주', monthly: '매월' };
+
 // datetime-local expects local time; toISOString() would give UTC.
+function toLocalInputValue(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function defaultDatetimeValue() {
   const d = new Date();
   d.setHours(d.getHours() + 1);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toLocalInputValue(d);
+}
+
+// Next occurrence: at least one step ahead, and after now (skips missed ones).
+// Monthly keeps the original day (31 → 30/28 → 31).
+function nextOccurrence(r) {
+  const d = new Date(r.datetime);
+  const now = new Date();
+  const day = r.repeatDay || d.getDate();
+  do {
+    if (r.repeat === 'daily') d.setDate(d.getDate() + 1);
+    else if (r.repeat === 'weekly') d.setDate(d.getDate() + 7);
+    else {
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(day, lastDay));
+    }
+  } while (d <= now);
+  return toLocalInputValue(d);
 }
 
 // Set default datetime to now + 1 hour
@@ -19,6 +44,7 @@ document.getElementById('reminder-form').addEventListener('submit', (e) => {
   const title = document.getElementById('title').value.trim();
   const datetime = document.getElementById('datetime').value;
   const note = document.getElementById('note').value.trim();
+  const repeat = document.getElementById('repeat').value;
 
   if (!title || !datetime) return;
 
@@ -29,6 +55,10 @@ document.getElementById('reminder-form').addEventListener('submit', (e) => {
     note,
     done: false,
   };
+  if (REPEAT_LABELS[repeat]) {
+    reminder.repeat = repeat;
+    if (repeat === 'monthly') reminder.repeatDay = new Date(datetime).getDate();
+  }
 
   reminders.push(reminder);
   saveReminders();
@@ -48,7 +78,13 @@ function deleteReminder(id) {
 function toggleDone(id) {
   const r = reminders.find((r) => r.id === id);
   if (r) {
-    r.done = !r.done;
+    if (REPEAT_LABELS[r.repeat] && !r.done) {
+      // Repeating: move to the next future occurrence instead of finishing.
+      r.datetime = nextOccurrence(r);
+      r.notified = false;
+    } else {
+      r.done = !r.done;
+    }
     saveReminders();
     renderReminders();
   }
@@ -86,7 +122,7 @@ function renderReminders() {
       <div class="reminder-info">
         <span class="badge ${status}">${badgeLabels[status]}</span>
         <div class="title">${escapeHtml(r.title)}</div>
-        <div class="time">${formatDatetime(r.datetime)}</div>
+        <div class="time">${formatDatetime(r.datetime)}${REPEAT_LABELS[r.repeat] ? ` · <span class="repeat">${REPEAT_LABELS[r.repeat]}</span>` : ''}</div>
         ${r.note ? `<div class="note">${escapeHtml(r.note)}</div>` : ''}
       </div>
       <div class="reminder-actions">
