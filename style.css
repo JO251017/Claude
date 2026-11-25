@@ -71,6 +71,7 @@ label {
 
 input[type="text"],
 input[type="datetime-local"],
+select,
 textarea {
   width: 100%;
   padding: 10px 12px;
@@ -87,6 +88,7 @@ textarea {
 }
 
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
