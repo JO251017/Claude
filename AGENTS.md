@@ -15,7 +15,8 @@
 ## Lightweight checks
 - Run `node --check app.js` after JavaScript edits.
 - For UI changes, open `index.html` in a browser and check adding, completing, deleting, sorting, and reloading reminders.
-- There is no configured automated test suite or build command at present. Do not claim checks that were not run.
+- `node scripts/smoke.js [screenshot-dir]` runs a Playwright browser smoke test (dev-only; needs Playwright, preinstalled in cloud sessions). It covers default time, escaping, delete, repeat, legacy data, sorting, focus and mobile layout.
+- There is no build command or CI. Do not claim checks that were not run.
 
 ## Tool routing (installed plugins and skills)
 The user will not remember tool names. Map plain requests to the tool below. When a request matches a row, say in one line which tool you will use (e.g. "unslop으로 점검할게요") and proceed; if the match is only likely, offer it in one line instead. Prefer these over other installed skills with similar descriptions.
@@ -41,4 +42,5 @@ Always-on plugins (no need to invoke): superpowers (ask and plan before building
 - Act on clear requests end to end: edit, run the checks above, commit, and report the result. Ask one question only when the answer would change the outcome.
 - Before multi-file or behavior-changing work, show a short plan; for a one-line fix, just do it.
 - Use subagents in parallel for independent research or searches across many files; keep edits in the main session.
+- For feature or fix requests, follow the `ship` skill. Before reporting a change done, run the `code-reviewer` and `qa-browser` subagents (in parallel) and act on real findings.
 - Suggest the next useful step in one line at the end (e.g. a tool from the table above), but do not start it unasked.
